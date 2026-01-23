@@ -1,7 +1,6 @@
 use wasm_bindgen::prelude::*;
 use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
-use crate::cube::{CubeMove, Quaternion};
+use crate::cube::Quaternion;
 
 #[wasm_bindgen]
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
@@ -15,7 +14,7 @@ pub struct Solve {
     pub id: String,
     pub time: u32,
     pub moves: Vec<String>,
-    pub date: u64,
+    pub date: i64,
     pub is_valid: bool,
 }
 
@@ -25,6 +24,19 @@ pub struct Session {
     pub name: String,
     pub session_type: SessionType,
     pub solves: Vec<Solve>,
+    pub first_solve_at: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "type", content = "data")]
+pub enum CoreAction {
+    SaveSolve(Solve),
+    DemoteSession(String), // Session ID
+    NotifyReady,
+    Pickup,
+    Putdown,
+    Move(String), // Move notation
+    Error(String),
 }
 
 #[wasm_bindgen]
@@ -33,6 +45,7 @@ pub struct ScrambleValidator {
     current_index: usize,
     last_move_time: f64,
     is_invalid: bool,
+    mistakes: Vec<String>,
 }
 
 #[wasm_bindgen]
@@ -44,16 +57,30 @@ impl ScrambleValidator {
             current_index: 0,
             last_move_time: 0.0,
             is_invalid: false,
+            mistakes: Vec::new(),
+        }
+    }
+
+    fn get_inverse(m: &str) -> String {
+        if m.ends_with("'") {
+            m[..m.len()-1].to_string()
+        } else if m.ends_with("2") {
+            m.to_string()
+        } else {
+            format!("{}'", m)
         }
     }
 
     pub fn handle_move(&mut self, move_str: &str, timestamp: f64) -> bool {
-        if self.is_invalid || self.current_index >= self.scramble.len() {
+        if self.is_invalid {
             return false;
         }
 
-        if move_str == self.scramble[self.current_index] {
-            if self.last_move_time > 0.0 && timestamp - self.last_move_time > 2.0 {
+        // 1. Check if it's the expected move and we have no pending mistakes
+        if self.mistakes.is_empty() && self.current_index < self.scramble.len() && move_str == self.scramble[self.current_index] {
+            // Check speed - only if not the first move
+            if self.last_move_time > 0.0 && timestamp - self.last_move_time > 5.0 {
+                // User was too slow during scramble (relaxed to 5s for now)
                 self.is_invalid = true;
                 return false;
             }
@@ -61,18 +88,42 @@ impl ScrambleValidator {
             self.last_move_time = timestamp;
             return true;
         }
-        false
+
+        // 2. Check if it's an undo of a mistake
+        if !self.mistakes.is_empty() {
+            if move_str == Self::get_inverse(&self.mistakes.last().unwrap()) {
+                self.mistakes.pop();
+                return true;
+            }
+        }
+
+        // 3. Check if it's an undo of the previous correct move
+        if self.mistakes.is_empty() && self.current_index > 0 {
+            if move_str == Self::get_inverse(&self.scramble[self.current_index - 1]) {
+                self.current_index -= 1;
+                return true;
+            }
+        }
+
+        // 4. Otherwise, it's a mistake
+        self.mistakes.push(move_str.to_string());
+        
+        // If too many mistakes (tolerance = 1), mark invalid
+        if self.mistakes.len() > 1 {
+            self.is_invalid = true;
+        }
+
+        true // Still processing, but might be invalid
     }
 
     pub fn is_ready(&self) -> bool {
-        self.current_index >= self.scramble.len() && !self.is_invalid
+        self.current_index >= self.scramble.len() && !self.is_invalid && self.mistakes.is_empty()
     }
 }
 
 #[wasm_bindgen]
 pub struct SessionManager {
-    sessions: HashMap<String, Session>,
-    active_session_id: Option<String>,
+    active_session: Option<Session>,
     scramble_validator: Option<ScrambleValidator>,
     
     // Motion fields
@@ -86,12 +137,48 @@ impl SessionManager {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         Self {
-            sessions: HashMap::new(),
-            active_session_id: None,
+            active_session: None,
             scramble_validator: None,
             last_orientation: None,
             is_stable: true,
             stable_since: 0.0,
+        }
+    }
+
+    pub fn set_active_session(&mut self, session_json: &str) {
+        if let Ok(session) = serde_json::from_str(session_json) {
+            self.active_session = Some(session);
+        }
+    }
+
+    pub fn add_solve(&mut self, solve_json: &str) -> String {
+        let solve: Solve = match serde_json::from_str(solve_json) {
+            Ok(s) => s,
+            Err(e) => return serde_json::to_string(&CoreAction::Error(e.to_string())).unwrap(),
+        };
+
+        if let Some(session) = &mut self.active_session {
+            // WCA Integrity: 1h limit
+            if let SessionType::WCA = session.session_type {
+                if let Some(first_at) = session.first_solve_at {
+                    let one_hour_ms = 3600 * 1000;
+                    if solve.date > first_at + one_hour_ms {
+                        // Demote session
+                        return serde_json::to_string(&CoreAction::DemoteSession(session.id.clone())).unwrap();
+                    }
+                } else {
+                    // This is the first solve
+                    session.first_solve_at = Some(solve.date);
+                }
+
+                if session.solves.len() >= 5 {
+                    return serde_json::to_string(&CoreAction::Error("WCA Session full".into())).unwrap();
+                }
+            }
+
+            serde_json::to_string(&CoreAction::SaveSolve(solve)).unwrap()
+        } else {
+            serde_json::to_string(&CoreAction::Error("No active session".into())).unwrap()
         }
     }
 
@@ -104,14 +191,14 @@ impl SessionManager {
 
             if moving && self.is_stable {
                 self.is_stable = false;
-                return "{\"type\":\"pickup\"}".into();
+                return serde_json::to_string(&CoreAction::Pickup).unwrap_or_default();
             } else if !moving && !self.is_stable {
                 if self.stable_since == 0.0 {
                     self.stable_since = timestamp;
                 } else if timestamp - self.stable_since > 500.0 { 
                     self.is_stable = true;
                     self.stable_since = 0.0;
-                    return "{\"type\":\"putdown\"}".into();
+                    return serde_json::to_string(&CoreAction::Putdown).unwrap_or_default();
                 }
             } else if moving {
                 self.stable_since = 0.0;
@@ -121,61 +208,24 @@ impl SessionManager {
         "".into()
     }
 
-    pub fn create_session(&mut self, id: String, name: String, session_type: SessionType) {
+    pub fn create_session(&mut self, id: String, name: String, session_type: SessionType) -> String {
         let session = Session {
             id: id.clone(),
             name,
             session_type,
             solves: Vec::new(),
+            first_solve_at: None,
         };
-        self.sessions.insert(id.clone(), session);
-        self.active_session_id = Some(id);
-    }
-
-    pub fn add_solve(&mut self, solve_json: &str) -> Result<(), String> {
-        let solve: Solve = serde_json::from_str(solve_json).map_err(|e| e.to_string())?;
-        if let Some(active_id) = &self.active_session_id {
-            if let Some(session) = self.sessions.get_mut(active_id) {
-                if let SessionType::WCA = session.session_type {
-                    if session.solves.len() >= 5 {
-                        return Err("WCA Session limited to 5 solves".into());
-                    }
-                }
-                session.solves.push(solve);
-                return Ok(());
-            }
-        }
-        Err("No active session".into())
+        self.active_session = Some(session.clone());
+        serde_json::to_string(&session).unwrap_or_default()
     }
 
     pub fn start_scramble(&mut self, scramble: &str) {
         self.scramble_validator = Some(ScrambleValidator::new(scramble));
     }
 
-    pub fn switch_session(&mut self, id: String) {
-        if self.sessions.contains_key(&id) {
-            self.active_session_id = Some(id);
-        }
-    }
-
-    pub fn get_sessions_json(&self) -> String {
-        let list: Vec<&Session> = self.sessions.values().collect();
-        serde_json::to_string(&list).unwrap_or_default()
-    }
-
-    pub fn scramble_validator(&mut self) -> Option<ScrambleValidator> {
-        // This is tricky in wasm_bindgen (ownership). 
-        // Better to expose methods ON SessionManager that delegate to validator.
-        None 
-    }
-
     pub fn get_active_session_json(&self) -> String {
-        if let Some(id) = &self.active_session_id {
-            if let Some(session) = self.sessions.get(id) {
-                return serde_json::to_string(session).unwrap_or_default();
-            }
-        }
-        "".into()
+        serde_json::to_string(&self.active_session).unwrap_or_default()
     }
 
     pub fn handle_scramble_move(&mut self, move_str: &str, timestamp: f64) -> bool {
@@ -187,6 +237,10 @@ impl SessionManager {
 
     pub fn is_scramble_ready(&self) -> bool {
         self.scramble_validator.as_ref().map(|v| v.is_ready()).unwrap_or(false)
+    }
+
+    pub fn is_scramble_invalid(&self) -> bool {
+        self.scramble_validator.as_ref().map(|v| v.is_invalid).unwrap_or(false)
     }
 
     pub fn get_scramble_index(&self) -> usize {

@@ -10,7 +10,7 @@ pub fn greet(name: &str) -> String {
 
 use crate::cube::moyu::MoyuProtocol;
 use crate::cube::CubeProtocol;
-use crate::session::SessionManager;
+use crate::session::{SessionManager, CoreAction};
 
 #[wasm_bindgen]
 pub fn handle_ble_packet(data: &[u8], session: &mut SessionManager) -> String {
@@ -22,18 +22,15 @@ pub fn handle_ble_packet(data: &[u8], session: &mut SessionManager) -> String {
 
     if decrypted.get(0) == Some(&0x01) {
         if let Ok(m) = protocol.decode_move(&decrypted) {
-            let face_names = ["U", "R", "F", "D", "L", "B"];
-            let amount_str = if m.amount == 1 { "" } else if m.amount == -1 { "'" } else { "2" };
-            let move_str = format!("{}{}", face_names[m.face as usize], amount_str);
+            let move_str = m.notation();
             
-            // Sync with scramble validator if present
-            // session.scramble_validator... (to be added)
+            // Sync with scramble validator
+            session.handle_scramble_move(&move_str, 0.0); // Timestamp logic can be refined
             
-            return format!("{{\"type\":\"move\",\"data\":{}}}", serde_json::to_string(&m).unwrap());
+            return serde_json::to_string(&CoreAction::Move(move_str)).unwrap_or_default();
         }
     } else if decrypted.get(0) == Some(&0x05) {
         if let Ok(Some(q)) = protocol.decode_orientation(&decrypted) {
-            // For now use a 0.0 timestamp or passing from JS
             return session.process_orientation(q.x, q.y, q.z, q.w, 0.0);
         }
     }

@@ -5,9 +5,11 @@ import { useSessionStore } from './session'
 export const useTimerStore = defineStore('timer', () => {
     const time = ref(0)
     const isRunning = ref(false)
+    const currentMoves = ref<string[]>([])
     const isHandheld = ref(false)
     const isSynced = ref(false)
     const useGyroTiming = ref(true)
+    const flowState = ref<'Idle' | 'Scrambling' | 'Solving' | 'Summary'>('Idle')
     const lastReceivedMove = ref<{ face: number; amount: number } | null>(null)
 
     const sessionStore = useSessionStore()
@@ -28,18 +30,16 @@ export const useTimerStore = defineStore('timer', () => {
                 console.log('[Timer] Putdown detected - stopping solve')
             }
         } else if (type === 'move') {
-            if (!isRunning.value) {
-                startTimer()
+            if (flowState.value === 'Idle' || flowState.value === 'Summary') {
+                flowState.value = 'Scrambling'
+            } else if (flowState.value === 'Scrambling') {
+                // If the scramble is ready, any move starts the timer
+                // This will be triggered by handleScrambleComplete usually
+                // but let's allow it here if it's the start of a solve
             }
-            if (data) {
-                try {
-                    const m = JSON.parse(data)
-                    const faceNames = ['U', 'R', 'F', 'D', 'L', 'B']
-                    const amountStr = m.amount === 1 ? '' : m.amount === -1 ? "'" : '2'
-                    currentMoves.value.push(`${faceNames[m.face]}${amountStr}`)
-                } catch (e) {
-                    console.error('Failed to parse move data', e)
-                }
+
+            if (isRunning.value) {
+                if (data) currentMoves.value.push(data)
             }
         } else if (type === 'sync') {
             isSynced.value = true
@@ -47,16 +47,40 @@ export const useTimerStore = defineStore('timer', () => {
         }
     }
 
+    let startTime = 0
+    let timerId: number | null = null
+
+    function updateTime() {
+        if (isRunning.value) {
+            time.value = performance.now() - startTime
+            timerId = requestAnimationFrame(updateTime)
+        }
+    }
+
     function startTimer() {
         isRunning.value = true
+        flowState.value = 'Solving'
+        startTime = performance.now()
         time.value = 0
         currentMoves.value = []
+        updateTime()
     }
 
     function stopTimer() {
         isRunning.value = false
+        flowState.value = 'Summary'
+        if (timerId !== null) {
+            cancelAnimationFrame(timerId)
+            timerId = null
+        }
         sessionStore.addSolveToActive(time.value, [...currentMoves.value])
     }
 
-    return { time, isRunning, isHandheld, isSynced, useGyroTiming, currentMoves, lastReceivedMove, formattedTime, handleEvent, startTimer, stopTimer }
+    function reset() {
+        flowState.value = 'Idle'
+        time.value = 0
+        currentMoves.value = []
+    }
+
+    return { time, isRunning, isHandheld, isSynced, useGyroTiming, currentMoves, lastReceivedMove, flowState, formattedTime, handleEvent, startTimer, stopTimer, reset }
 })

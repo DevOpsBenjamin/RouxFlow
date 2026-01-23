@@ -1,47 +1,61 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
-import { sessionManager, ensureWasm } from '../services/cube/bridge'
+import { sessionManager, ensureWasm, CubeBridge } from '../services/cube/bridge'
 
 export type SessionType = 'Free' | 'WCA'
 
 export const useSessionStore = defineStore('session', () => {
-    const rawSessionsJson = ref('[]')
-    const rawActiveSessionJson = ref('')
-
-    const sessions = computed(() => {
-        try {
-            return JSON.parse(rawSessionsJson.value)
-        } catch (e) {
-            return []
-        }
-    })
+    const sessions = ref<any[]>([])
+    const activeSessionId = ref<string | null>(null)
 
     const activeSession = computed(() => {
-        if (!rawActiveSessionJson.value) return null
-        try {
-            return JSON.parse(rawActiveSessionJson.value)
-        } catch (e) {
-            return null
-        }
+        return sessions.value.find(s => s.id === activeSessionId.value) || null
     })
 
-    const activeSessionId = computed(() => activeSession.value?.id || null)
+    async function loadSessions() {
+        const data = await CubeBridge.getSessions()
+        sessions.value = data
+        if (data.length > 0 && !activeSessionId.value) {
+            activeSessionId.value = data[0].id
+            updateBridgeContext()
+        }
+    }
+
+    onMounted(() => {
+        loadSessions()
+    })
+
+    function updateBridgeContext() {
+        (window as any).activeSessionId = activeSessionId.value
+    }
 
     async function createSession(name: string, type: SessionType) {
         await ensureWasm()
         if (!sessionManager) return
 
         const id = uuidv4()
-        sessionManager.create_session(id, name || new Date().toLocaleDateString(), type as any)
-        updateLocalState()
+        const sessionJson = sessionManager.create_session(id, name || new Date().toLocaleDateString(), type as any)
+        const session = JSON.parse(sessionJson)
+
+        // Save via bridge
+        await CubeBridge.createSession(session)
+
+        await loadSessions()
+        activeSessionId.value = id
+        updateBridgeContext()
     }
 
     async function switchSession(id: string) {
         await ensureWasm()
         if (!sessionManager) return
-        sessionManager.switch_session(id)
-        updateLocalState()
+
+        const session = sessions.value.find(s => s.id === id)
+        if (session) {
+            sessionManager.set_active_session(JSON.stringify(session))
+            activeSessionId.value = id
+            updateBridgeContext()
+        }
     }
 
     async function addSolveToActive(time: number, moves: string[]) {
@@ -56,19 +70,20 @@ export const useSessionStore = defineStore('session', () => {
             is_valid: true
         }
 
-        try {
-            sessionManager.add_solve(JSON.stringify(solve))
-            updateLocalState()
-        } catch (e) {
-            console.error('WASM error:', e)
+        const actionJson = sessionManager.add_solve(JSON.stringify(solve))
+        const action = JSON.parse(actionJson)
+
+        // Process action via bridge (this handles database save)
+        await CubeBridge.handleCoreAction(action)
+
+        // Follow-up: if session was demoted, we need to refresh list
+        if (action.type === 'DemoteSession') {
+            await loadSessions()
+        } else if (action.type === 'SaveSolve') {
+            // Optimistic update or reload
+            await loadSessions()
         }
     }
 
-    function updateLocalState() {
-        if (!sessionManager) return
-        rawSessionsJson.value = sessionManager.get_sessions_json()
-        rawActiveSessionJson.value = sessionManager.get_active_session_json()
-    }
-
-    return { sessions, activeSession, activeSessionId, createSession, switchSession, addSolveToActive, updateLocalState }
+    return { sessions, activeSession, activeSessionId, createSession, switchSession, addSolveToActive, loadSessions }
 })

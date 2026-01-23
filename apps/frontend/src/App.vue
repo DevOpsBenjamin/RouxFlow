@@ -1,36 +1,44 @@
 <script setup lang="ts">
+import LandingView from './components/layout/LandingView.vue'
+import SessionView from './components/layout/SessionView.vue'
+import SolveAnalysis from './components/layout/SolveAnalysis.vue'
+import DeviceSelectionModal from './components/cube/DeviceSelectionModal.vue'
 import Navbar from './components/layout/Navbar.vue'
-import TimerDisplay from './components/timer/TimerDisplay.vue'
-import SplitStats from './components/session/SplitStats.vue'
-import MoveList from './components/session/MoveList.vue'
-import SyncStatus from './components/cube/SyncStatus.vue'
-import BluetoothManager from './components/cube/BluetoothManager.vue'
-import SessionPicker from './components/session/SessionPicker.vue'
-import ScrambleDisplay from './components/session/ScrambleDisplay.vue'
-import { useTimerStore } from './stores/timer'
+import { useUIStore } from './stores/ui'
 
-useTimerStore() // Initialize store
+const ui = useUIStore()
 </script>
 
 <template>
   <div class="min-h-screen bg-slate-950 text-slate-50 flex flex-col font-sans selection:bg-indigo-500/30">
-    <Navbar>
+    <DeviceSelectionModal />
+    <!-- Only show Navbar if on ActiveSession -->
+    <Navbar v-if="ui.currentState === 'ActiveSession'">
       <template #actions>
-        <SessionPicker />
-        <BluetoothManager />
+        <button 
+          @click="ui.setLanding()" 
+          class="text-sm text-slate-400 hover:text-white transition-colors"
+        >
+          Exit Session
+        </button>
       </template>
     </Navbar>
 
-    <main class="flex-1 flex flex-col items-center justify-center p-6 gap-8 text-center">
-      <TimerDisplay />
-      <SyncStatus />
-      <MoveList />
-      <SplitStats :phases="['FB', 'SB', 'CMLL', 'LSE']" />
+    <main class="flex-1 flex flex-col items-center justify-center overflow-x-hidden p-6">
+      <Transition 
+        enter-active-class="transition duration-500 ease-out"
+        enter-from-class="transform translate-y-4 opacity-0"
+        enter-to-class="transform translate-y-0 opacity-100"
+        leave-active-class="transition duration-300 ease-in"
+        leave-from-class="transform translate-y-0 opacity-100"
+        leave-to-class="transform translate-y-4 opacity-0"
+        mode="out-in"
+      >
+        <LandingView v-if="ui.currentState === 'Landing'" />
+        <SolveAnalysis v-else-if="ui.currentState === 'Analysis'" :solve-id="ui.selectedSolveId || undefined" />
+        <SessionView v-else />
+      </Transition>
     </main>
-
-    <ScrambleDisplay 
-      scramble="U' R2 U B2 D2 F2 L2 D' R2 F2 U L' F D2 B' D2 R' U B' L F'" 
-    />
   </div>
 </template>
 

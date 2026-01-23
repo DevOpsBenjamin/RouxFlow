@@ -31,7 +31,7 @@ function handleCreate() {
       <span class="text-indigo-400">📁</span>
       <span>{{ sessionStore.activeSession?.name || 'Sessions' }}</span>
       <span class="text-[10px] opacity-50 px-1.5 py-0.5 rounded-md border border-white/10">
-        {{ sessionStore.activeSession?.type }}
+        {{ sessionStore.activeSession?.session_type }}
       </span>
     </button>
 

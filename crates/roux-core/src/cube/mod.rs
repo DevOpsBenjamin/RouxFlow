@@ -14,6 +14,20 @@ pub struct CubeMove {
     pub amount: i8, // 1, -1, 2
 }
 
+impl CubeMove {
+    pub fn notation(&self) -> String {
+        let face_names = ["U", "R", "F", "D", "L", "B"];
+        let amount_str = if self.amount == 1 { "" } else if self.amount == -1 { "'" } else { "2" };
+        format!("{}{}", face_names[self.face as usize], amount_str)
+    }
+
+    pub fn inverse_notation(&self) -> String {
+        let face_names = ["U", "R", "F", "D", "L", "B"];
+        let amount_str = if self.amount == 1 { "'" } else if self.amount == -1 { "" } else { "2" };
+        format!("{}{}", face_names[self.face as usize], amount_str)
+    }
+}
+
 #[wasm_bindgen]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Quaternion {

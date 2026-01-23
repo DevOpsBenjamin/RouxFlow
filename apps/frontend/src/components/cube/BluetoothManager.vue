@@ -5,29 +5,11 @@ import { CubeBridge } from '../../services/cube/bridge'
 const isConnecting = ref(false)
 const deviceName = ref('')
 
-const GAN_SERVICE_UUID = '0000fe51-0000-1000-8000-00805f9b34fb'
-const GAN_CHARACTERISTIC_UUID = '0000fe52-0000-1000-8000-00805f9b34fb'
-
 async function connect() {
   try {
     isConnecting.value = true
-    const device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [GAN_SERVICE_UUID] }],
-      optionalServices: [GAN_SERVICE_UUID]
-    })
-
-    deviceName.value = device.name || 'Smart Cube'
-    const server = await device.gatt?.connect()
-    const service = await server?.getPrimaryService(GAN_SERVICE_UUID)
-    const characteristic = await service?.getCharacteristic(GAN_CHARACTERISTIC_UUID)
-
-    await characteristic?.startNotifications()
-    characteristic?.addEventListener('characteristicvaluechanged', (event: any) => {
-      const value = event.target.value
-      CubeBridge.processPacket(value)
-    })
-
-    console.log('Connected to', deviceName.value)
+    const name = await CubeBridge.connect()
+    deviceName.value = name
   } catch (error) {
     console.error('Bluetooth Error:', error)
   } finally {

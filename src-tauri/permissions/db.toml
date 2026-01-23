@@ -1,0 +1,11 @@
+[[permission]]
+identifier = "allow-native-commands"
+description = "Allows database and bluetooth commands"
+commands.allow = [
+    "db_save_solve",
+    "db_get_sessions",
+    "db_create_session",
+    "db_demote_session",
+    "ble_scan",
+    "ble_connect"
+]
