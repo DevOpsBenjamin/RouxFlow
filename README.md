@@ -16,10 +16,6 @@
 - **Tauri**: Lightweight desktop application wrapper.
 - **Web Bluetooth**: Seamless smart cube integration.
 
-## 📅 Roadmap
-
-See [ROADMAP.md](ROADMAP.md) for the detailed implementation plan and MVP milestones.
-
 ---
 
 *Built with 🦀 and 🧊 by DevOpsBen & Gemini.*

@@ -1,1 +1,35 @@
-/ROADMAP.md
+# Private planning
+ROADMAP.md
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+.env
+.env.*
+.vercel
+.output/
+.nuxt/
+
+# Rust
+target/
+**/*.rs.bk
+
+# WASM build artifacts
+**/wasm/*/
+!**/wasm/**/*.ts
+
+# Tauri
+src-tauri/target/
+src-tauri/binaries/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

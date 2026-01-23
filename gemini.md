@@ -7,10 +7,21 @@ This file serves as a persistent context memory for Gemini (AI Assistant) to ens
 
 ## 🛠️ Technical Preferences
 - **Package Manager**: **pnpm** (always use pnpm over npm/yarn).
-- **Rust Core**: Logic lives in `crates/roux-core`. 
-- **Efficiency First**: Use `cargo check` during development to avoid full compilation overhead where possible.
-- **Frontend**: Vue 3 + Tailwind + Pinia in `apps/frontend`.
-- **Desktop**: Tauri wrapper for native performance/BT access.
+- **Rust-First Architecture**: WASM/Rust is the source of truth. Move decryption, state tracking, and protocol decoding into `roux-core`.
+- **Bluetooth Abstraction**: Use Rust `Trait` definitions for different cube types (MoYu, GAN, GoCube).
+- **Protocol Specifics**:
+  - **Frequency**: ~50Hz (20ms updates).
+  - **Moves**: Discrete only (U, U', U2). No partial turn streaming.
+  - **IMU**: 6-axis (Gyro/Accel) at ~50Hz. Essential for 3D state and M-slice inference.
+  - **M-Slice Logic**:
+    - **With Gyro**: Correlation of `L/R` moves + `IMU X-axis rotation` within ~30ms. Most accurate.
+    - **Without Gyro**: Heuristic-only. `L/R` moves within ~15ms window are treated as `M`.
+  - **Session Timing (Optional Gyro)**:
+    - **Pick-up detection**: Trigger when IMU delta exceeds a threshold (start inspection -> start pick-up timer).
+    - **Put-down detection**: Trigger when IMU delta stays below a threshold for >X ms (stop put-down timer).
+- **WASM-First Architecture**: 100% of business logic (Timing, Roux Phases, Session Rules, Scramble Validation) MUST live in Rust/WASM.
+- **Minimal TypeScript**: Frontend stores and components are thin presentation layers. Move processing into `roux-core`.
+- **Atomic State**: All state transitions are calculated in Rust. TS only syncs the resulting UI model.
 - **WASM**: Core logic is shared with the web via WASM.
 
 ## 🧠 Brain/Context
