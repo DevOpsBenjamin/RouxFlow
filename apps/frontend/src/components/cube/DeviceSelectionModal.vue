@@ -10,6 +10,8 @@ async function selectDevice(device: BluetoothDevice) {
   bt.isConnecting = true
   try {
     await CubeBridge.finalConnect(device)
+    bt.isConnected = true
+    bt.connectedDeviceName = device.name
     bt.showPicker = false
     ui.setActiveSession()
   } catch (e: any) {

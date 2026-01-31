@@ -35,6 +35,26 @@ fn db_demote_session(state: State<'_, DbState>, id: String) -> Result<(), String
     db::demote_session(&conn, &id).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn db_save_cube(state: State<'_, DbState>, cube_json: String) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    let cube: db::Cube = serde_json::from_str(&cube_json).map_err(|e| e.to_string())?;
+    db::save_cube(&conn, &cube).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn db_get_cubes(state: State<'_, DbState>, user_id: Option<String>) -> Result<String, String> {
+    let conn = state.0.lock().unwrap();
+    let cubes = db::get_cubes(&conn, user_id.as_deref()).map_err(|e| e.to_string())?;
+    serde_json::to_string(&cubes).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn db_delete_cube(state: State<'_, DbState>, id: String) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    db::delete_cube(&conn, &id).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -84,7 +104,10 @@ pub fn run() {
             ble_scan,
             ble_connect,
             ble_list_devices,
-            ble_check_available
+            ble_check_available,
+            db_save_cube,
+            db_get_cubes,
+            db_delete_cube
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

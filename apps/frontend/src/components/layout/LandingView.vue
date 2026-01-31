@@ -18,15 +18,11 @@ async function continueAsGuest() {
 }
 
 async function loginWithGoogle() {
-  console.log('loginWithGoogle clicked')
   isLoading.value = true
   error.value = ''
   try {
-    console.log('Calling auth.signInWithGoogle...')
     await auth.signInWithGoogle()
-    console.log('signInWithGoogle completed')
   } catch (e: any) {
-    console.error('Google login error:', e)
     error.value = e.message || 'Failed to sign in with Google'
   } finally {
     isLoading.value = false
@@ -193,10 +189,20 @@ async function handleEmailAuth() {
 
     <!-- Footer -->
     <footer class="text-center mt-auto pt-8 w-full max-w-lg">
-      <p class="text-xs text-slate-600">
+      <p class="text-[10px] text-slate-600 uppercase tracking-widest font-bold">
         By continuing, you agree to our 
         <a href="#" class="text-indigo-400 hover:underline">Terms of Service</a>
       </p>
     </footer>
   </div>
 </template>
+
+<style scoped>
+.animate-in {
+  animation: fadeIn 0.8s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+</style>

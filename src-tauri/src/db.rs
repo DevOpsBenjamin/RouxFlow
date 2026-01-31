@@ -30,6 +30,18 @@ pub fn init_db<P: AsRef<std::path::Path>>(path: P) -> Result<Connection> {
         [],
     )?;
 
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS cubes (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            name TEXT NOT NULL,
+            device_type TEXT NOT NULL,
+            mac_address TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        )",
+        [],
+    )?;
+
     Ok(conn)
 }
 
@@ -105,5 +117,58 @@ pub fn demote_session(conn: &Connection, id: &str) -> Result<()> {
         "UPDATE sessions SET session_type = 'Free' WHERE id = ?",
         params![id],
     )?;
+    Ok(())
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct Cube {
+    pub id: String,
+    pub user_id: Option<String>,
+    pub name: String,
+    pub device_type: String,
+    pub mac_address: String,
+    pub created_at: i64,
+}
+
+pub fn save_cube(conn: &Connection, cube: &Cube) -> Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO cubes (id, user_id, name, device_type, mac_address, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![cube.id, cube.user_id, cube.name, cube.device_type, cube.mac_address, cube.created_at],
+    )?;
+    Ok(())
+}
+
+pub fn get_cubes(conn: &Connection, user_id: Option<&str>) -> Result<Vec<Cube>> {
+    let mut stmt = match user_id {
+        Some(_) => conn.prepare("SELECT id, user_id, name, device_type, mac_address, created_at FROM cubes WHERE user_id = ?")?,
+        None => conn.prepare("SELECT id, user_id, name, device_type, mac_address, created_at FROM cubes WHERE user_id IS NULL")?,
+    };
+
+    let mapper = |row: &rusqlite::Row| {
+        Ok(Cube {
+            id: row.get(0)?,
+            user_id: row.get(1)?,
+            name: row.get(2)?,
+            device_type: row.get(3)?,
+            mac_address: row.get(4)?,
+            created_at: row.get(5)?,
+        })
+    };
+
+    let cube_iter = match user_id {
+        Some(uid) => stmt.query_map(params![uid], mapper)?,
+        None => stmt.query_map([], mapper)?,
+    };
+
+    let mut cubes = Vec::new();
+    for cube in cube_iter {
+        cubes.push(cube?);
+    }
+    Ok(cubes)
+}
+
+pub fn delete_cube(conn: &Connection, id: &str) -> Result<()> {
+    conn.execute("DELETE FROM cubes WHERE id = ?", params![id])?;
     Ok(())
 }
