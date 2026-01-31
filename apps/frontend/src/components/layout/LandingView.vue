@@ -1,73 +1,202 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { CubeBridge } from '../../services/cube/bridge'
 import { useUIStore } from '../../stores/ui'
+import { useAuthStore } from '../../stores/auth'
 
 const ui = useUIStore()
-const isConnecting = ref(false)
-const error = ref('')
+const auth = useAuthStore()
 
-async function connect() {
-  isConnecting.value = true
+const isLoading = ref(false)
+const error = ref('')
+const showEmailForm = ref(false)
+const isSignUp = ref(false)
+const email = ref('')
+const password = ref('')
+
+async function continueAsGuest() {
+  ui.setActiveSession()
+}
+
+async function loginWithGoogle() {
+  console.log('loginWithGoogle clicked')
+  isLoading.value = true
   error.value = ''
   try {
-    await CubeBridge.connect()
+    console.log('Calling auth.signInWithGoogle...')
+    await auth.signInWithGoogle()
+    console.log('signInWithGoogle completed')
   } catch (e: any) {
-    error.value = e.message || 'Failed to connect'
+    console.error('Google login error:', e)
+    error.value = e.message || 'Failed to sign in with Google'
   } finally {
-    isConnecting.value = false
+    isLoading.value = false
+  }
+}
+
+async function loginWithDiscord() {
+  isLoading.value = true
+  error.value = ''
+  try {
+    await auth.signInWithDiscord()
+  } catch (e: any) {
+    error.value = e.message || 'Failed to sign in with Discord'
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function handleEmailAuth() {
+  isLoading.value = true
+  error.value = ''
+  try {
+    if (isSignUp.value) {
+      await auth.signUpWithEmail(email.value, password.value)
+      alert('Check your email to confirm your account!')
+    } else {
+      await auth.signInWithEmail(email.value, password.value)
+      ui.setActiveSession()
+    }
+  } catch (e: any) {
+    error.value = e.message || 'Authentication failed'
+  } finally {
+    isLoading.value = false
   }
 }
 </script>
 
 <template>
-  <div class="w-[100vw] h-[100vh] flex flex-col items-center justify-center gap-[5vh] p-[5vmin] overflow-hidden">
+  <div class="w-full min-h-screen flex flex-col items-center justify-center gap-8 p-8 overflow-hidden bg-gradient-to-b from-slate-950 to-slate-900">
     <!-- Hero Section -->
-    <header class="text-center space-y-[2vh]">
-      <h1 class="text-[12vmin] font-black tracking-tighter bg-gradient-to-br from-white to-slate-500 bg-clip-text text-transparent italic leading-none">
+    <header class="text-center space-y-4">
+      <h1 class="text-6xl md:text-8xl font-black tracking-tighter bg-gradient-to-br from-white via-indigo-200 to-indigo-500 bg-clip-text text-transparent italic leading-none">
         ROUXFLOW
       </h1>
-      <p class="text-[3vmin] text-slate-400 font-medium max-w-[60vw] mx-auto">
-        High-performance Roux method engine designed exclusively for Bluetooth smart cubes.
+      <p class="text-lg md:text-xl text-slate-400 font-medium max-w-lg mx-auto">
+        Train smarter with phase-by-phase analysis for the Roux method.
       </p>
     </header>
 
-    <!-- Main Actions -->
-    <div class="flex flex-col md:flex-row gap-[3vmin] w-full max-w-[80vw] justify-center">
-      <button 
-        @click="connect"
-        :disabled="isConnecting"
-        class="group relative overflow-hidden rounded-[4vmin] bg-indigo-600 p-px font-semibold text-white transition-all hover:scale-[1.05] active:scale-95 disabled:opacity-50 w-full md:w-[35vw]"
-      >
-        <div class="relative flex items-center justify-center gap-[2vmin] rounded-[3.8vmin] bg-indigo-600 px-[4vw] py-[3vh] transition-all group-hover:bg-indigo-500">
-          <span v-if="isConnecting" class="animate-spin text-[5vmin]">⏳</span>
-          <span v-else class="text-[5vmin]">⚡</span>
-          <span class="text-[4vmin]">{{ isConnecting ? 'Connecting...' : 'Connect' }}</span>
-        </div>
-      </button>
-
-      <button 
-        @click="ui.setActiveSession()"
-        class="flex items-center justify-center gap-[2vmin] py-[3vh] px-[4vw] rounded-[4vmin] border border-slate-800 bg-slate-900/50 text-slate-300 transition-all hover:bg-slate-800 hover:text-white w-full md:w-[35vw]"
-      >
-        <span class="text-[5vmin]">📊</span>
-        <span class="text-[4vmin]">History</span>
-      </button>
-    </div>
-
-    <!-- Friendly Warning -->
-    <footer class="text-center space-y-[1vh] mt-auto pb-[5vh] border-t border-slate-900/50 w-full pt-[4vh]">
-      <p class="text-[1.5vmin] text-slate-500 uppercase tracking-[0.2em] font-bold">Disclaimer</p>
-      <p class="text-[1.8vmin] text-slate-400 max-w-[70vw] mx-auto leading-relaxed">
-        This app utilizes real-time move data for phase analysis. 
-        If you're looking for a manual timer, use 
-        <a href="https://cubeast.com" target="_blank" class="text-indigo-400 underline decoration-indigo-400/30 underline-offset-4">Cubeast</a> 
-        or <a href="https://cstimer.net" target="_blank" class="text-indigo-400 underline decoration-indigo-400/30 underline-offset-4">csTimer</a>.
-      </p>
-    </footer>
-
-    <div v-if="error" class="fixed top-[5vh] text-red-400 bg-red-400/10 px-[2vw] py-[1vh] rounded-[1vmin] border border-red-400/20 text-[2vmin]">
+    <!-- Error Message -->
+    <div v-if="error" class="text-red-400 bg-red-400/10 px-4 py-2 rounded-lg border border-red-400/20 text-sm">
       {{ error }}
     </div>
+
+    <!-- Auth Actions -->
+    <div class="flex flex-col gap-3 w-full max-w-sm">
+      
+      <!-- Email Form (hidden by default) -->
+      <form v-if="showEmailForm" @submit.prevent="handleEmailAuth" class="flex flex-col gap-3">
+        <input 
+          v-model="email"
+          type="email" 
+          placeholder="Email"
+          required
+          class="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+        />
+        <input 
+          v-model="password"
+          type="password" 
+          placeholder="Password"
+          required
+          minlength="6"
+          class="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+        />
+        <button 
+          type="submit"
+          :disabled="isLoading"
+          class="w-full py-3 px-4 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-500 disabled:opacity-50 transition-all"
+        >
+          {{ isLoading ? 'Loading...' : (isSignUp ? 'Create Account' : 'Sign In') }}
+        </button>
+        <button 
+          type="button"
+          @click="isSignUp = !isSignUp"
+          class="text-sm text-slate-400 hover:text-white"
+        >
+          {{ isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up" }}
+        </button>
+        <button 
+          type="button"
+          @click="showEmailForm = false"
+          class="text-sm text-slate-500 hover:text-slate-300"
+        >
+          ← Back
+        </button>
+      </form>
+
+      <!-- Main Buttons (shown by default) -->
+      <template v-else>
+        <!-- Google Login Button -->
+        <button 
+          @click="loginWithGoogle"
+          :disabled="isLoading"
+          class="group relative overflow-hidden rounded-xl bg-white font-medium text-slate-800 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 w-full"
+        >
+          <div class="flex items-center justify-center gap-3 px-6 py-3.5">
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            <span>Continue with Google</span>
+          </div>
+        </button>
+
+        <!-- Discord Login Button -->
+        <button 
+          @click="loginWithDiscord"
+          :disabled="isLoading"
+          class="group relative overflow-hidden rounded-xl bg-[#5865F2] font-medium text-white transition-all hover:scale-[1.02] hover:bg-[#4752C4] active:scale-95 disabled:opacity-50 w-full"
+        >
+          <div class="flex items-center justify-center gap-3 px-6 py-3.5">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+            </svg>
+            <span>Continue with Discord</span>
+          </div>
+        </button>
+
+        <!-- Email Button -->
+        <button 
+          @click="showEmailForm = true; isSignUp = true"
+          class="group relative overflow-hidden rounded-xl border border-slate-600 bg-slate-800/50 font-medium text-slate-200 transition-all hover:scale-[1.02] hover:border-slate-500 hover:bg-slate-800 active:scale-95 w-full"
+        >
+          <div class="flex items-center justify-center gap-3 px-6 py-3.5">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="4" width="20" height="16" rx="2"/>
+              <path d="M22 6L12 13L2 6"/>
+            </svg>
+            <span>Sign up with Email</span>
+          </div>
+        </button>
+
+        <!-- Divider -->
+        <div class="flex items-center gap-4 my-2">
+          <div class="flex-1 h-px bg-slate-800"></div>
+          <span class="text-slate-500 text-sm">or</span>
+          <div class="flex-1 h-px bg-slate-800"></div>
+        </div>
+
+        <!-- Guest Button -->
+        <button 
+          @click="continueAsGuest"
+          class="group relative overflow-hidden rounded-xl border border-slate-700/50 bg-transparent font-medium text-slate-400 transition-all hover:scale-[1.02] hover:border-slate-600 hover:text-slate-200 active:scale-95 w-full"
+        >
+          <div class="flex items-center justify-center gap-3 px-6 py-3.5">
+            <span class="text-lg">🧊</span>
+            <span>Continue as Guest</span>
+          </div>
+        </button>
+      </template>
+    </div>
+
+    <!-- Footer -->
+    <footer class="text-center mt-auto pt-8 w-full max-w-lg">
+      <p class="text-xs text-slate-600">
+        By continuing, you agree to our 
+        <a href="#" class="text-indigo-400 hover:underline">Terms of Service</a>
+      </p>
+    </footer>
   </div>
 </template>

@@ -96,10 +96,12 @@ export class CubeBridge {
         if (isTauri) {
             console.log('[Bridge] Starting Tauri Native Scan')
             try {
+                bt.startScan()
+
                 // First check if Bluetooth adapter is available
+                // We do this AFTER starting scan UI so the error can be shown in the modal
                 await invoke('ble_check_available')
 
-                bt.startScan()
                 await invoke('ble_scan')
 
                 // Timeout after 10 seconds of scanning
@@ -131,7 +133,8 @@ export class CubeBridge {
 
                 return 'Scanning...'
             } catch (e: any) {
-                bt.setError(e.message || 'Bluetooth initialization failed')
+                const errorMessage = typeof e === 'string' ? e : (e.message || 'Bluetooth initialization failed')
+                bt.setError(errorMessage)
                 throw e
             }
         } else {

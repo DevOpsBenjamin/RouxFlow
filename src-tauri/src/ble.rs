@@ -22,11 +22,23 @@ pub async fn init_ble() -> Result<Adapter, Box<dyn Error>> {
 pub async fn ble_check_available<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<bool, String> {
-    // Check if BleState was successfully initialized
-    // We use TauriManager trait for try_state
-    match TauriManager::try_state::<BleState>(&app) {
-        Some(_) => Ok(true),
-        None => Err("Bluetooth is not available. Please ensure Bluetooth is enabled on your device.".into())
+    // Check if BleState is already initialized
+    if let Some(_) = TauriManager::try_state::<BleState>(&app) {
+        return Ok(true);
+    }
+
+    // Attempt to initialize if missing
+    match init_ble().await {
+        Ok(adapter) => {
+            app.manage(BleState {
+                adapter,
+                connected_peripheral: Arc::new(Mutex::new(None)),
+            });
+            Ok(true)
+        },
+        Err(_) => {
+            Err("Bluetooth unavailable. Please enable Bluetooth and try again.".into())
+        }
     }
 }
 

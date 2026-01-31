@@ -38,6 +38,7 @@ fn db_demote_session(state: State<'_, DbState>, id: String) -> Result<(), String
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             // DB Init
             let app_data_dir = app.path().app_data_dir().expect("failed to get app data dir");
