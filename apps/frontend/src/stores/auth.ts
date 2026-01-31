@@ -90,7 +90,7 @@ export const useAuthStore = defineStore('auth', () => {
             provider: 'google',
             options: {
                 redirectTo: redirectUrl,
-                skipBrowserRedirect: isTauri // Don't redirect in webview
+                skipBrowserRedirect: isTauri
             }
         })
         if (error) {
@@ -100,12 +100,11 @@ export const useAuthStore = defineStore('auth', () => {
 
         console.log('Supabase OAuth response data:', data)
 
-        // Open in system browser for security
-        if (data?.url) {
-            console.log('URL found, calling openInBrowser:', data.url)
+        // IMPORTANT: Only manually open in browser if we are in Tauri
+        // On Web, Supabase handles the redirect automatically when skipBrowserRedirect is false
+        if (isTauri && data?.url) {
+            console.log('Tauri environment detected, opening system browser:', data.url)
             await openInBrowser(data.url)
-        } else {
-            console.warn('No URL returned from Supabase OAuth')
         }
     }
 
@@ -123,7 +122,7 @@ export const useAuthStore = defineStore('auth', () => {
         })
         if (error) throw error
 
-        if (data?.url) {
+        if (isTauri && data?.url) {
             await openInBrowser(data.url)
         }
     }
