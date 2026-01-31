@@ -3,11 +3,6 @@ name: Frontend CI
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'apps/frontend/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
   pull_request:
     branches: [ main ]
     paths:
