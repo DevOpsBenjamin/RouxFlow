@@ -53,6 +53,5 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # IMPORTANT: This must match the Project Name you created manually in the Cloudflare Dashboard
           projectName: rouxflow
           directory: apps/frontend/dist
