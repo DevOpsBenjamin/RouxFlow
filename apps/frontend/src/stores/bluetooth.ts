@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
+import { CubeBridge } from '../services/cube/bridge'
 
 export interface SavedCube {
     id: string
@@ -50,8 +50,7 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
     // DB Operations
     async function loadSavedCubes(userId: string | null = null) {
         try {
-            const res = await invoke<string>('db_get_cubes', { userId })
-            savedCubes.value = JSON.parse(res)
+            savedCubes.value = await CubeBridge.getCubes(userId)
         } catch (e) {
             console.error('Failed to load saved cubes:', e)
         }
@@ -63,7 +62,7 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
             created_at: Date.now()
         }
         try {
-            await invoke('db_save_cube', { cubeJson: JSON.stringify(newCube) })
+            await CubeBridge.saveCube(newCube)
             await loadSavedCubes(cube.user_id)
         } catch (e) {
             console.error('Failed to save cube:', e)
@@ -73,10 +72,19 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
 
     async function deleteCube(id: string, userId: string | null = null) {
         try {
-            await invoke('db_delete_cube', { id })
+            await CubeBridge.deleteCube(id, userId)
             await loadSavedCubes(userId)
         } catch (e) {
             console.error('Failed to delete cube:', e)
+        }
+    }
+
+    async function sync(userId: string) {
+        try {
+            await CubeBridge.syncCubes(userId)
+            await loadSavedCubes(userId)
+        } catch (e) {
+            console.error('Failed to sync cubes:', e)
         }
     }
 
@@ -101,6 +109,7 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
         loadSavedCubes,
         saveCube,
         deleteCube,
-        disconnect
+        disconnect,
+        sync
     }
 })

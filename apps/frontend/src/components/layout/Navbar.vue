@@ -3,6 +3,7 @@ import { onMounted } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import { useUIStore } from '../../stores/ui'
 import { useBluetoothStore } from '../../stores/bluetooth'
+import { isTauri } from '../../services/cube/bridge'
 
 const auth = useAuthStore()
 const ui = useUIStore()
@@ -63,7 +64,16 @@ onMounted(() => {
         <!-- Dropdown Content -->
         <div class="absolute right-0 mt-2 w-72 origin-top-right rounded-2xl bg-slate-900 border border-white/10 shadow-2xl opacity-0 invisible group-hover/bt:opacity-100 group-hover/bt:visible transition-all p-4 space-y-4 z-[100]">
           <div class="flex items-center justify-between border-b border-white/5 pb-3">
-             <span class="text-xs font-black uppercase tracking-wider text-slate-500">Your Cubes</span>
+             <div class="flex flex-col">
+               <span class="text-xs font-black uppercase tracking-wider text-slate-500">Your Cubes</span>
+               <button 
+                 v-if="isTauri && auth.isAuthenticated" 
+                 @click="bt.sync(auth.user!.id)"
+                 class="text-[9px] text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
+               >
+                 <span>☁️</span> Sync to Cloud
+               </button>
+             </div>
              <button @click="bt.startScan()" class="text-[10px] bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded-md font-bold transition-colors">+ New</button>
           </div>
 

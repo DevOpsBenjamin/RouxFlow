@@ -55,6 +55,51 @@ fn db_delete_cube(state: State<'_, DbState>, id: String) -> Result<(), String> {
     db::delete_cube(&conn, &id).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn db_sync_cubes(state: State<'_, DbState>, user_id: String, url: String, key: String) -> Result<(), String> {
+    let storage = roux_core::storage::CloudStorage::new(url, key);
+    
+    // 1. Get local cubes
+    let local_cubes = {
+        let conn = state.0.lock().unwrap();
+        db::get_cubes(&conn, Some(&user_id)).map_err(|e| e.to_string())?
+    };
+
+    // 2. Push local to cloud
+    for cube in &local_cubes {
+        let core_cube = roux_core::storage::Cube {
+            id: cube.id.clone(),
+            user_id: cube.user_id.clone(),
+            name: cube.name.clone(),
+            device_type: cube.device_type.clone(),
+            mac_address: cube.mac_address.clone(),
+            created_at: cube.created_at,
+        };
+        storage.save_cube(&core_cube).await.map_err(|e| e.to_string())?;
+    }
+
+    // 3. Pull from cloud
+    let remote_cubes = storage.get_cubes(&user_id).await.map_err(|e| e.to_string())?;
+
+    // 4. Save to local
+    {
+        let conn = state.0.lock().unwrap();
+        for remote in remote_cubes {
+            let local_cube = db::Cube {
+                id: remote.id.clone(),
+                user_id: remote.user_id.clone(),
+                name: remote.name.clone(),
+                device_type: remote.device_type.clone(),
+                mac_address: remote.mac_address.clone(),
+                created_at: remote.created_at,
+            };
+            db::save_cube(&conn, &local_cube).map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -107,7 +152,8 @@ pub fn run() {
             ble_check_available,
             db_save_cube,
             db_get_cubes,
-            db_delete_cube
+            db_delete_cube,
+            db_sync_cubes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

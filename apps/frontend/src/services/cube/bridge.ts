@@ -1,13 +1,22 @@
-import init, { handle_ble_packet, SessionManager } from '../../wasm/roux-core/roux_core'
+import init, { handle_ble_packet, SessionManager, CloudStorage } from '../../wasm/roux-core/roux_core'
 import { useTimerStore } from '../../stores/timer'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import type { SavedCube } from '../../stores/bluetooth'
 
 let wasmInitialized = false
 export let sessionManager: SessionManager | null = null
+export let cloudStorage: CloudStorage | null = null
 
 // Platform detection
 export const isTauri = !!(window as any).__TAURI_INTERNALS__
+
+async function getSupabaseConfig() {
+    return {
+        url: import.meta.env.VITE_SUPABASE_URL,
+        key: import.meta.env.VITE_SUPABASE_ANON_KEY
+    }
+}
 
 export async function ensureWasm() {
     if (!wasmInitialized) {
@@ -180,6 +189,85 @@ export class CubeBridge {
     static async createSession(session: any) {
         if (isTauri) {
             await invoke('db_create_session', { sessionJson: JSON.stringify(session) })
+        }
+    }
+
+    // Cube data management
+    static async getCubes(userId: string | null = null): Promise<SavedCube[]> {
+        if (isTauri) {
+            try {
+                const res = await invoke<string>('db_get_cubes', { userId })
+                return JSON.parse(res)
+            } catch (e) {
+                console.error('[Bridge] Failed to get cubes from SQLite', e)
+                return []
+            }
+        } else {
+            if (!userId) return []
+            await ensureWasm()
+            const config = await getSupabaseConfig()
+            if (!cloudStorage) cloudStorage = new CloudStorage(config.url, config.key)
+
+            try {
+                const json = await cloudStorage.get_cubes_json(userId)
+                return JSON.parse(json) as SavedCube[]
+            } catch (e) {
+                console.error('[Bridge] WASM Cube Fetch failed', e)
+                return []
+            }
+        }
+    }
+
+    static async saveCube(cube: SavedCube) {
+        if (isTauri) {
+            await invoke('db_save_cube', { cubeJson: JSON.stringify(cube) })
+        } else if (cube.user_id) {
+            await ensureWasm()
+            const config = await getSupabaseConfig()
+            if (!cloudStorage) cloudStorage = new CloudStorage(config.url, config.key)
+
+            try {
+                await cloudStorage.save_cube_json(JSON.stringify(cube))
+            } catch (e) {
+                console.error('[Bridge] WASM Cube Save failed', e)
+                throw e
+            }
+        }
+    }
+
+    static async deleteCube(id: string, userId: string | null = null) {
+        if (isTauri) {
+            await invoke('db_delete_cube', { id })
+        } else if (userId) {
+            await ensureWasm()
+            const config = await getSupabaseConfig()
+            if (!cloudStorage) cloudStorage = new CloudStorage(config.url, config.key)
+
+            try {
+                await cloudStorage.delete_cube_json(id, userId)
+            } catch (e) {
+                console.error('[Bridge] WASM Cube Delete failed', e)
+                throw e
+            }
+        }
+    }
+
+    static async syncCubes(userId: string) {
+        if (isTauri) {
+            console.log('[Bridge] Starting Native Cube Sync...')
+            const config = await getSupabaseConfig()
+            try {
+                await invoke('db_sync_cubes', {
+                    userId,
+                    url: config.url,
+                    key: config.key
+                })
+                console.log('[Bridge] Native Sync Finished!')
+            } catch (e) {
+                console.error('[Bridge] Native Sync failed', e)
+            }
+        } else {
+            console.log('[Bridge] Sync not needed on Web (Cloud direct)')
         }
     }
 }

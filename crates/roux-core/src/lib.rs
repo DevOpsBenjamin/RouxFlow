@@ -2,6 +2,7 @@ use wasm_bindgen::prelude::*;
 
 pub mod cube;
 pub mod session;
+pub mod storage;
 
 #[wasm_bindgen]
 pub fn greet(name: &str) -> String {

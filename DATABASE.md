@@ -142,6 +142,47 @@ CREATE POLICY "Rate limit" ON solves FOR INSERT WITH CHECK (
 
 ---
 
+### `cubes` (Bluetooth Devices)
+
+| Colonne | SQLite | Supabase | Description |
+|---------|--------|----------|-------------|
+| `id` | TEXT PK | UUID PK | ID Unique (ou MAC) |
+| `user_id` | TEXT | UUID FK | Propriétaire |
+| `name` | TEXT | TEXT | Nom donné au cube |
+| `device_type`| TEXT | TEXT | ex: 'moyu_ai', 'gan_v3' |
+| `mac_address`| TEXT | TEXT | Adresse physique |
+| `created_at` | INTEGER | TIMESTAMPTZ | Date d'ajout |
+| `synced_at`  | INTEGER | — | Local only |
+
+```sql
+-- SQLite
+CREATE TABLE cubes (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  name TEXT NOT NULL,
+  device_type TEXT NOT NULL,
+  mac_address TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  synced_at INTEGER
+);
+
+-- Supabase
+CREATE TABLE cubes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  device_type TEXT NOT NULL,
+  mac_address TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS
+ALTER TABLE cubes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Own data" ON cubes FOR ALL USING (auth.uid() = user_id);
+```
+
+---
+
 ### `leaderboard` (Supabase - vue matérialisée)
 
 ```sql
