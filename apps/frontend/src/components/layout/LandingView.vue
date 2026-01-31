@@ -65,7 +65,7 @@ async function handleEmailAuth() {
 </script>
 
 <template>
-  <div class="w-full min-h-screen flex flex-col items-center justify-center gap-8 p-8 overflow-hidden bg-gradient-to-b from-slate-950 to-slate-900">
+  <div class="w-full min-h-[100dvh] flex flex-col items-center justify-start md:justify-center gap-8 p-8 overflow-x-hidden bg-gradient-to-b from-slate-950 to-slate-900">
     <!-- Hero Section -->
     <header class="text-center space-y-4">
       <h1 class="text-6xl md:text-8xl font-black tracking-tighter bg-gradient-to-br from-white via-indigo-200 to-indigo-500 bg-clip-text text-transparent italic leading-none">

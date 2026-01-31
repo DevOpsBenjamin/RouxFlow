@@ -22,7 +22,7 @@ watch(() => auth.isAuthenticated, (isLogged) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-950 text-slate-50 flex flex-col font-sans selection:bg-indigo-500/30">
+  <div class="min-h-[100dvh] bg-slate-950 text-slate-50 flex flex-col font-sans selection:bg-indigo-500/30">
     <DeviceSelectionModal />
     
     <!-- Show Navbar if NOT on Landing -->
@@ -32,7 +32,7 @@ watch(() => auth.isAuthenticated, (isLogged) => {
       </template>
     </Navbar>
 
-    <main class="flex-1 flex flex-col items-center justify-center overflow-x-hidden p-6">
+    <main class="flex-1 flex flex-col items-center justify-start overflow-x-hidden p-6 md:p-12">
       <Transition 
         enter-active-class="transition duration-500 ease-out"
         enter-from-class="transform translate-y-4 opacity-0"

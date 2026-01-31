@@ -11,7 +11,7 @@ function startTraining() {
 </script>
 
 <template>
-  <div class="w-full max-w-4xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
+  <div class="w-full max-w-4xl mx-auto space-y-8 md:space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
     <!-- Welcome Header -->
     <div class="text-center space-y-4">
       <h2 class="text-4xl md:text-5xl font-black tracking-tight text-white">
