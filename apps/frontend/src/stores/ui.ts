@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-export type AppState = 'Landing' | 'Connecting' | 'ActiveSession' | 'Analysis'
+export type AppState = 'Landing' | 'Home' | 'Connecting' | 'ActiveSession' | 'Analysis' | 'Profile'
 
 export const useUIStore = defineStore('ui', () => {
     const currentState = ref<AppState>('Landing')
@@ -9,6 +9,10 @@ export const useUIStore = defineStore('ui', () => {
 
     function setLanding() {
         currentState.value = 'Landing'
+    }
+
+    function setHome() {
+        currentState.value = 'Home'
     }
 
     function startConnecting() {
@@ -24,12 +28,18 @@ export const useUIStore = defineStore('ui', () => {
         currentState.value = 'Analysis'
     }
 
+    function openProfile() {
+        currentState.value = 'Profile'
+    }
+
     return {
         currentState,
         selectedSolveId,
         setLanding,
+        setHome,
         startConnecting,
         setActiveSession,
-        openAnalysis
+        openAnalysis,
+        openProfile
     }
 })

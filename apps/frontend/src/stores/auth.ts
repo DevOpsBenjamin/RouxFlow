@@ -10,12 +10,39 @@ export const useAuthStore = defineStore('auth', () => {
 
     const isAuthenticated = computed(() => !!user.value)
     const isGuest = computed(() => !user.value)
+    const displayName = computed(() => {
+        if (!user.value) return 'Guest'
+        return user.value.user_metadata?.display_name || user.value.user_metadata?.full_name || user.value.email || 'User'
+    })
 
     // Initialize auth state
     async function init() {
         loading.value = true
 
         try {
+            // Handle initial deep link if app was opened with one
+            if (window.__TAURI__) {
+                const { onOpenUrl } = await import('@tauri-apps/plugin-deep-link')
+                await onOpenUrl((urls) => {
+                    console.log('Received deep link urls:', urls)
+                    const firstUrl = urls[0]
+                    if (firstUrl) {
+                        handleDeepLink(firstUrl)
+                    }
+                })
+
+                // Also listen for links sent from a second instance (single-instance plugin)
+                const { listen } = await import('@tauri-apps/api/event')
+                await listen<string[]>('deep-link://new-url', (event) => {
+                    console.log('Received deep link from second instance:', event.payload)
+                    if (event.payload && event.payload.length > 0) {
+                        // On Windows, event.payload[0] is often the exe path, [1] is the URL
+                        const url = event.payload.find(arg => arg.startsWith('rouxflow://'))
+                        if (url) handleDeepLink(url)
+                    }
+                })
+            }
+
             // Get current session
             const { data: { session: currentSession } } = await supabase.auth.getSession()
             session.value = currentSession
@@ -33,13 +60,37 @@ export const useAuthStore = defineStore('auth', () => {
         loading.value = false
     }
 
+    async function handleDeepLink(url: string) {
+        if (!url.startsWith('rouxflow://')) return
+
+        console.log('Handling RouxFlow deep link:', url)
+        const urlObj = new URL(url.replace('rouxflow://', 'http://localhost/'))
+        const hash = urlObj.hash.substring(1) // remove #
+
+        if (hash) {
+            const { data, error } = await supabase.auth.setSession({
+                access_token: new URLSearchParams(hash).get('access_token') || '',
+                refresh_token: new URLSearchParams(hash).get('refresh_token') || '',
+            })
+            if (error) console.error('Error setting session from deep link:', error)
+            else {
+                console.log('Session set successfully from deep link')
+                user.value = data.user
+                session.value = data.session
+            }
+        }
+    }
+
     async function signInWithGoogle() {
         console.log('auth.signInWithGoogle called')
+        const isTauri = !!(window as any).__TAURI_INTERNALS__ || !!(window as any).__TAURI__
+        const redirectUrl = isTauri ? 'rouxflow://auth-callback' : window.location.origin
+
         const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: window.location.origin,
-                skipBrowserRedirect: true // Don't redirect in webview
+                redirectTo: redirectUrl,
+                skipBrowserRedirect: isTauri // Don't redirect in webview
             }
         })
         if (error) {
@@ -59,11 +110,15 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     async function signInWithDiscord() {
+        console.log('auth.signInWithDiscord called')
+        const isTauri = !!(window as any).__TAURI_INTERNALS__ || !!(window as any).__TAURI__
+        const redirectUrl = isTauri ? 'rouxflow://auth-callback' : window.location.origin
+
         const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'discord',
             options: {
-                redirectTo: window.location.origin,
-                skipBrowserRedirect: true
+                redirectTo: redirectUrl,
+                skipBrowserRedirect: isTauri
             }
         })
         if (error) throw error
@@ -119,17 +174,28 @@ export const useAuthStore = defineStore('auth', () => {
         session.value = null
     }
 
+    async function updateDisplayName(name: string) {
+        if (!user.value) return
+        const { data, error } = await supabase.auth.updateUser({
+            data: { display_name: name }
+        })
+        if (error) throw error
+        user.value = data.user
+    }
+
     return {
         user,
         session,
         loading,
         isAuthenticated,
         isGuest,
+        displayName,
         init,
         signInWithGoogle,
         signInWithDiscord,
         signInWithEmail,
         signUpWithEmail,
-        signOut
+        signOut,
+        updateDisplayName
     }
 })

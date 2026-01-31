@@ -4,7 +4,7 @@ mod ble;
 use db::{DbState, init_db};
 use ble::{BleState, init_ble, ble_scan, ble_connect, ble_list_devices, ble_check_available};
 use roux_core::session::{Session, Solve};
-use tauri::{Manager, State};
+use tauri::{Manager, State, Emitter};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -39,7 +39,22 @@ fn db_demote_session(state: State<'_, DbState>, id: String) -> Result<(), String
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            let _ = app.emit("deep-link://new-url", args);
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
+            // Deep Link registration (Windows)
+            #[cfg(target_os = "windows")]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(e) = app.deep_link().register("rouxflow") {
+                    println!("Failed to register deep link: {}", e);
+                } else {
+                    println!("Deep link 'rouxflow' registered successfully");
+                }
+            }
+
             // DB Init
             let app_data_dir = app.path().app_data_dir().expect("failed to get app data dir");
             std::fs::create_dir_all(&app_data_dir).expect("failed to create app data dir");

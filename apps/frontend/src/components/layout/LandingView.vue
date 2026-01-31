@@ -14,7 +14,7 @@ const email = ref('')
 const password = ref('')
 
 async function continueAsGuest() {
-  ui.setActiveSession()
+  ui.setHome()
 }
 
 async function loginWithGoogle() {
@@ -54,7 +54,7 @@ async function handleEmailAuth() {
       alert('Check your email to confirm your account!')
     } else {
       await auth.signInWithEmail(email.value, password.value)
-      ui.setActiveSession()
+      ui.setHome()
     }
   } catch (e: any) {
     error.value = e.message || 'Authentication failed'

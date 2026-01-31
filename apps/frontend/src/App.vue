@@ -1,26 +1,34 @@
 <script setup lang="ts">
 import LandingView from './components/layout/LandingView.vue'
+import HomeView from './components/layout/HomeView.vue'
 import SessionView from './components/layout/SessionView.vue'
 import SolveAnalysis from './components/layout/SolveAnalysis.vue'
+import ProfileView from './components/layout/ProfileView.vue'
 import DeviceSelectionModal from './components/cube/DeviceSelectionModal.vue'
 import Navbar from './components/layout/Navbar.vue'
 import { useUIStore } from './stores/ui'
+import { useAuthStore } from './stores/auth'
 
 const ui = useUIStore()
+const auth = useAuthStore()
+
+// Auto-navigate to home after login or deep link success
+import { watch } from 'vue'
+watch(() => auth.isAuthenticated, (isLogged) => {
+  if (isLogged && ui.currentState === 'Landing') {
+    ui.setHome()
+  }
+})
 </script>
 
 <template>
   <div class="min-h-screen bg-slate-950 text-slate-50 flex flex-col font-sans selection:bg-indigo-500/30">
     <DeviceSelectionModal />
-    <!-- Only show Navbar if on ActiveSession -->
-    <Navbar v-if="ui.currentState === 'ActiveSession'">
+    
+    <!-- Show Navbar if NOT on Landing -->
+    <Navbar v-if="ui.currentState !== 'Landing'">
       <template #actions>
-        <button 
-          @click="ui.setLanding()" 
-          class="text-sm text-slate-400 hover:text-white transition-colors"
-        >
-          Exit Session
-        </button>
+        <!-- Custom actions can go here if needed -->
       </template>
     </Navbar>
 
@@ -35,6 +43,8 @@ const ui = useUIStore()
         mode="out-in"
       >
         <LandingView v-if="ui.currentState === 'Landing'" />
+        <HomeView v-else-if="ui.currentState === 'Home'" />
+        <ProfileView v-else-if="ui.currentState === 'Profile'" />
         <SolveAnalysis v-else-if="ui.currentState === 'Analysis'" :solve-id="ui.selectedSolveId || undefined" />
         <SessionView v-else />
       </Transition>
