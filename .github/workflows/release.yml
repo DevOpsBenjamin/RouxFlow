@@ -8,6 +8,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# Required for creating GitHub releases
+permissions:
+  contents: write
+
 jobs:
   # Build Web Frontend and Deploy to Cloudflare
   deploy-web:
