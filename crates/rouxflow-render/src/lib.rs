@@ -44,7 +44,7 @@ impl RouxRenderer {
 
         let mut camera = Camera::new_perspective(
             window.viewport(),
-            vec3(4.0, 4.0, 4.0),
+            vec3(2.5, 2.5, 5.0), // Closer/more front-facing view
             vec3(0.0, 0.0, 0.0),
             vec3(0.0, 1.0, 0.0),
             degrees(45.0),
@@ -59,7 +59,7 @@ impl RouxRenderer {
             ColorMaterial::new(
                 &context,
                 &CpuMaterial {
-                    albedo: Srgba::new(200, 50, 50, 255),
+                    albedo: Srgba::new(255, 80, 80, 255), // Brighter red
                     ..Default::default()
                 },
             ),

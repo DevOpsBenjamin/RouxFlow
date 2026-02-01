@@ -2,31 +2,30 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const isLoaded = ref(false)
 let renderer: any = null
 
 onMounted(async () => {
   if (!canvasRef.value) return
 
-  try {
-    // Dynamic import of the WASM module
-    const wasm = await import('../../wasm/rouxflow-render/rouxflow_render.js')
-    await wasm.default() // Initialize WASM memory if needed (standard for wasm-pack)
+  // Dynamic import of the WASM module
+  const wasm = await import('../../wasm/rouxflow-render/rouxflow_render.js')
+  await wasm.default() // Initialize WASM memory if needed (standard for wasm-pack)
 
-    // Initialize the renderer on our canvas
-    // We use a unique ID for the canvas to be safe
-    const canvasId = canvasRef.value.id
-    renderer = new wasm.RouxRenderer(canvasId)
-    
-    console.log('RouxRenderer initialized via WASM')
-  } catch (e) {
-    console.error('Failed to initialize 3D renderer:', e)
-  }
+  // Initialize the renderer on our canvas
+  // We use a unique ID for the canvas to be safe
+  const canvasId = canvasRef.value.id
+  /* ... */
+  renderer = new wasm.RouxRenderer(canvasId)
+  isLoaded.value = true
 })
 
 onUnmounted(() => {
   if (renderer) {
     // Ideally we would free memory here, but WASM struct is dummy for now
-    // renderer.free() // wasm-bindgen generates this automatically
+    try {
+        renderer.free() 
+    } catch (e) { console.warn("Error freeing renderer", e) }
     renderer = null
   }
 })
@@ -42,7 +41,7 @@ onUnmounted(() => {
     ></canvas>
     
     <!-- Loading overlay if needed -->
-    <div v-if="!renderer" class="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
+    <div v-if="!isLoaded" class="absolute inset-0 flex items-center justify-center bg-black/50 text-white transform transition-opacity duration-500">
       Loading 3D Engine...
     </div>
   </div>
