@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { ref, computed, onMounted } from 'vue'
-import { v4 as uuidv4 } from 'uuid'
 import { sessionManager, ensureWasm, CubeBridge } from '../services/cube/bridge'
 
 export type SessionType = 'Free' | 'WCA'
@@ -34,15 +33,14 @@ export const useSessionStore = defineStore('session', () => {
         await ensureWasm()
         if (!sessionManager) return
 
-        const id = uuidv4()
-        const sessionJson = sessionManager.create_session(id, name || new Date().toLocaleDateString(), type as any)
+        const sessionJson = sessionManager.create_session(name || new Date().toLocaleDateString(), type as any)
         const session = JSON.parse(sessionJson)
 
         // Save via bridge
         await CubeBridge.createSession(session)
 
         await loadSessions()
-        activeSessionId.value = id
+        activeSessionId.value = session.id
         updateBridgeContext()
     }
 
@@ -62,27 +60,11 @@ export const useSessionStore = defineStore('session', () => {
         await ensureWasm()
         if (!sessionManager) return
 
-        const solve = {
-            id: uuidv4(),
-            time,
-            moves,
-            date: Date.now(),
-            is_valid: true
-        }
-
-        const actionJson = sessionManager.add_solve(JSON.stringify(solve))
+        const actionJson = sessionManager.record_solve(time, JSON.stringify(moves))
         const action = JSON.parse(actionJson)
 
         // Process action via bridge (this handles database save)
         await CubeBridge.handleCoreAction(action)
-
-        // Follow-up: if session was demoted, we need to refresh list
-        if (action.type === 'DemoteSession') {
-            await loadSessions()
-        } else if (action.type === 'SaveSolve') {
-            // Optimistic update or reload
-            await loadSessions()
-        }
     }
 
     return { sessions, activeSession, activeSessionId, createSession, switchSession, addSolveToActive, loadSessions }

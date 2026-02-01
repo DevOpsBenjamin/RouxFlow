@@ -34,7 +34,10 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "copyright": "© 2026 RouxFlow Team",
+    "shortDescription": "Smart Bluetooth Rubik's Cube Trainer",
+    "longDescription": "RouxFlow is a modern speedcubing trainer designed specifically for the Roux method. Connect your Bluetooth smart cube and get real-time phase analysis, scramble validation, and detailed solve statistics."
   },
   "plugins": {
     "deep-link": {

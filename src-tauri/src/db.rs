@@ -63,7 +63,7 @@ pub fn save_solve(conn: &Connection, session_id: &str, solve: &Solve) -> Result<
 
 pub fn get_sessions(conn: &Connection) -> Result<Vec<Session>> {
     let mut stmt = conn.prepare("SELECT id, name, session_type, first_solve_at FROM sessions")?;
-    let session_iter = stmt.query_map([], |row| {
+    let session_iter = stmt.query_map([], |row: &rusqlite::Row| {
         let type_str: String = row.get(2)?;
         let session_type = if type_str == "WCA" { SessionType::WCA } else { SessionType::Free };
         
@@ -81,7 +81,7 @@ pub fn get_sessions(conn: &Connection) -> Result<Vec<Session>> {
         let mut s = session?;
         // Load solves for each session (simplified for now)
         let mut solve_stmt = conn.prepare("SELECT id, time, moves, date, is_valid FROM solves WHERE session_id = ?")?;
-        let solve_iter = solve_stmt.query_map([&s.id], |row| {
+        let solve_iter = solve_stmt.query_map([&s.id], |row: &rusqlite::Row| {
             let moves_str: String = row.get(2)?;
             let moves: Vec<String> = serde_json::from_str(&moves_str).unwrap_or_default();
             Ok(Solve {

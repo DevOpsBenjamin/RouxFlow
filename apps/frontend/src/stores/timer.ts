@@ -9,7 +9,7 @@ export const useTimerStore = defineStore('timer', () => {
     const isHandheld = ref(false)
     const isSynced = ref(false)
     const useGyroTiming = ref(true)
-    const flowState = ref<'Idle' | 'Scrambling' | 'Solving' | 'Summary'>('Idle')
+    const flowState = ref<'Idle' | 'Scrambling' | 'Ready' | 'Solving' | 'Summary' | 'Finished'>('Idle')
     const lastReceivedMove = ref<{ face: number; amount: number } | null>(null)
 
     const sessionStore = useSessionStore()

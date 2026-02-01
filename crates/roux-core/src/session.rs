@@ -27,11 +27,21 @@ pub struct Session {
     pub first_solve_at: Option<i64>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+pub enum FlowState {
+    Idle,
+    Scrambling,
+    Ready,
+    Solving,
+    Finished,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", content = "data")]
 pub enum CoreAction {
     SaveSolve(Solve),
     DemoteSession(String), // Session ID
+    FlowStateChanged(FlowState),
     NotifyReady,
     Pickup,
     Putdown,
@@ -130,6 +140,9 @@ pub struct SessionManager {
     last_orientation: Option<Quaternion>,
     is_stable: bool,
     stable_since: f64,
+
+    // Flow management
+    flow_state: FlowState,
 }
 
 #[wasm_bindgen]
@@ -142,6 +155,7 @@ impl SessionManager {
             last_orientation: None,
             is_stable: true,
             stable_since: 0.0,
+            flow_state: FlowState::Idle,
         }
     }
 
@@ -156,18 +170,19 @@ impl SessionManager {
             Ok(s) => s,
             Err(e) => return serde_json::to_string(&CoreAction::Error(e.to_string())).unwrap(),
         };
+        self.save_solve_internal(solve)
+    }
 
+    fn save_solve_internal(&mut self, solve: Solve) -> String {
         if let Some(session) = &mut self.active_session {
             // WCA Integrity: 1h limit
             if let SessionType::WCA = session.session_type {
                 if let Some(first_at) = session.first_solve_at {
                     let one_hour_ms = 3600 * 1000;
                     if solve.date > first_at + one_hour_ms {
-                        // Demote session
                         return serde_json::to_string(&CoreAction::DemoteSession(session.id.clone())).unwrap();
                     }
                 } else {
-                    // This is the first solve
                     session.first_solve_at = Some(solve.date);
                 }
 
@@ -175,7 +190,6 @@ impl SessionManager {
                     return serde_json::to_string(&CoreAction::Error("WCA Session full".into())).unwrap();
                 }
             }
-
             serde_json::to_string(&CoreAction::SaveSolve(solve)).unwrap()
         } else {
             serde_json::to_string(&CoreAction::Error("No active session".into())).unwrap()
@@ -208,9 +222,9 @@ impl SessionManager {
         "".into()
     }
 
-    pub fn create_session(&mut self, id: String, name: String, session_type: SessionType) -> String {
+    pub fn create_session(&mut self, name: String, session_type: SessionType) -> String {
         let session = Session {
-            id: id.clone(),
+            id: uuid::Uuid::new_v4().to_string(),
             name,
             session_type,
             solves: Vec::new(),
@@ -220,19 +234,61 @@ impl SessionManager {
         serde_json::to_string(&session).unwrap_or_default()
     }
 
-    pub fn start_scramble(&mut self, scramble: &str) {
+    pub fn start_scramble(&mut self, scramble: &str) -> String {
         self.scramble_validator = Some(ScrambleValidator::new(scramble));
+        self.flow_state = FlowState::Scrambling;
+        serde_json::to_string(&CoreAction::FlowStateChanged(self.flow_state)).unwrap_or_default()
+    }
+
+    pub fn reset_flow(&mut self) -> String {
+        self.flow_state = FlowState::Idle;
+        self.scramble_validator = None;
+        serde_json::to_string(&CoreAction::FlowStateChanged(self.flow_state)).unwrap_or_default()
     }
 
     pub fn get_active_session_json(&self) -> String {
         serde_json::to_string(&self.active_session).unwrap_or_default()
     }
 
-    pub fn handle_scramble_move(&mut self, move_str: &str, timestamp: f64) -> bool {
+    pub fn handle_scramble_move(&mut self, move_str: &str, timestamp: f64) -> String {
         if let Some(v) = &mut self.scramble_validator {
-            return v.handle_move(move_str, timestamp);
+            let moved = v.handle_move(move_str, timestamp);
+            
+            if v.is_ready() && self.flow_state != FlowState::Ready {
+                self.flow_state = FlowState::Ready;
+                return serde_json::to_string(&CoreAction::FlowStateChanged(self.flow_state)).unwrap_or_default();
+            }
+            
+            if moved {
+                return serde_json::to_string(&CoreAction::Move(move_str.to_string())).unwrap_or_default();
+            }
         }
-        false
+        "".into()
+    }
+
+    pub fn record_solve(&mut self, time_ms: u32, moves_json: &str) -> String {
+        let moves: Vec<String> = serde_json::from_str(moves_json).unwrap_or_default();
+        let solve = Solve {
+            id: uuid::Uuid::new_v4().to_string(),
+            time: time_ms,
+            moves,
+            date: chrono::Utc::now().timestamp_millis(),
+            is_valid: true,
+        };
+
+        self.flow_state = FlowState::Finished;
+        // This will result in TWO actions: SaveSolve and FlowStateChanged?
+        // Let's return the SaveSolve action, and UI will know it's finished.
+        self.save_solve_internal(solve)
+    }
+
+    pub fn set_solving(&mut self) -> String {
+        self.flow_state = FlowState::Solving;
+        serde_json::to_string(&CoreAction::FlowStateChanged(self.flow_state)).unwrap_or_default()
+    }
+
+    pub fn get_flow_state(&self) -> String {
+        serde_json::to_string(&self.flow_state).unwrap_or_default()
     }
 
     pub fn is_scramble_ready(&self) -> bool {

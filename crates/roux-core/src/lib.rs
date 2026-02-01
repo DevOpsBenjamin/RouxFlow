@@ -25,8 +25,11 @@ pub fn handle_ble_packet(data: &[u8], session: &mut SessionManager) -> String {
         if let Ok(m) = protocol.decode_move(&decrypted) {
             let move_str = m.notation();
             
-            // Sync with scramble validator
-            session.handle_scramble_move(&move_str, 0.0); // Timestamp logic can be refined
+            // Core logic manages state transitions internally
+            let action = session.handle_scramble_move(&move_str, 0.0);
+            if !action.is_empty() {
+                return action;
+            }
             
             return serde_json::to_string(&CoreAction::Move(move_str)).unwrap_or_default();
         }

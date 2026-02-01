@@ -4,8 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build:wasm": "wasm-pack build ../../crates/roux-core --target web --out-dir ../../apps/frontend/src/wasm/roux-core",
+    "build:wasm:core": "wasm-pack build ../../crates/roux-core --target web --out-dir ../../apps/frontend/src/wasm/roux-core",
+    "build:wasm:cloud": "wasm-pack build ../../crates/roux-storage-cloud --target web --out-dir ../../apps/frontend/src/wasm/roux-storage-cloud",
+    "build:wasm": "pnpm run build:wasm:core && pnpm run build:wasm:cloud",
+    "dev": "pnpm run build:wasm && vite",
     "build": "pnpm run build:wasm && vue-tsc -b && vite build",
     "preview": "vite preview"
   },

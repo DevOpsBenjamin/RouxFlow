@@ -12,13 +12,13 @@ use tokio::sync::Mutex;
 fn db_save_solve(state: State<'_, DbState>, session_id: String, solve_json: String) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     let solve: Solve = serde_json::from_str(&solve_json).map_err(|e| e.to_string())?;
-    db::save_solve(&conn, &session_id, &solve).map_err(|e| e.to_string())
+    db::save_solve(&conn, &session_id, &solve).map_err(|e: rusqlite::Error| e.to_string())
 }
 
 #[tauri::command]
 fn db_get_sessions(state: State<'_, DbState>) -> Result<String, String> {
     let conn = state.0.lock().unwrap();
-    let sessions = db::get_sessions(&conn).map_err(|e| e.to_string())?;
+    let sessions = db::get_sessions(&conn).map_err(|e: rusqlite::Error| e.to_string())?;
     serde_json::to_string(&sessions).map_err(|e| e.to_string())
 }
 
@@ -26,80 +26,67 @@ fn db_get_sessions(state: State<'_, DbState>) -> Result<String, String> {
 fn db_create_session(state: State<'_, DbState>, session_json: String) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     let session: Session = serde_json::from_str(&session_json).map_err(|e| e.to_string())?;
-    db::create_session(&conn, &session).map_err(|e| e.to_string())
+    db::create_session(&conn, &session).map_err(|e: rusqlite::Error| e.to_string())
 }
 
 #[tauri::command]
 fn db_demote_session(state: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
-    db::demote_session(&conn, &id).map_err(|e| e.to_string())
+    db::demote_session(&conn, &id).map_err(|e: rusqlite::Error| e.to_string())
 }
 
 #[tauri::command]
 fn db_save_cube(state: State<'_, DbState>, cube_json: String) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     let cube: db::Cube = serde_json::from_str(&cube_json).map_err(|e| e.to_string())?;
-    db::save_cube(&conn, &cube).map_err(|e| e.to_string())
+    db::save_cube(&conn, &cube).map_err(|e: rusqlite::Error| e.to_string())
 }
 
 #[tauri::command]
 fn db_get_cubes(state: State<'_, DbState>, user_id: Option<String>) -> Result<String, String> {
     let conn = state.0.lock().unwrap();
-    let cubes = db::get_cubes(&conn, user_id.as_deref()).map_err(|e| e.to_string())?;
+    let cubes = db::get_cubes(&conn, user_id.as_deref()).map_err(|e: rusqlite::Error| e.to_string())?;
     serde_json::to_string(&cubes).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn db_delete_cube(state: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
-    db::delete_cube(&conn, &id).map_err(|e| e.to_string())
+    db::delete_cube(&conn, &id).map_err(|e: rusqlite::Error| e.to_string())
 }
 
 #[tauri::command]
 async fn db_sync_cubes(state: State<'_, DbState>, user_id: String, url: String, key: String) -> Result<(), String> {
-    let storage = roux_core::storage::CloudStorage::new(url, key);
+    use roux_storage_cloud::SupabaseStorage;
+    
+    let storage = SupabaseStorage::new(url, key);
     
     // 1. Get local cubes
     let local_cubes = {
         let conn = state.0.lock().unwrap();
-        db::get_cubes(&conn, Some(&user_id)).map_err(|e| e.to_string())?
+        db::get_cubes(&conn, Some(&user_id)).map_err(|e: rusqlite::Error| e.to_string())?
     };
 
     // 2. Push local to cloud
     for cube in &local_cubes {
-        let core_cube = roux_core::storage::Cube {
-            id: cube.id.clone(),
-            user_id: cube.user_id.clone(),
-            name: cube.name.clone(),
-            device_type: cube.device_type.clone(),
-            mac_address: cube.mac_address.clone(),
-            created_at: cube.created_at,
-        };
-        storage.save_cube(&core_cube).await.map_err(|e| e.to_string())?;
+        let cube_json = serde_json::to_string(cube).map_err(|e| e.to_string())?;
+        storage.save_cube_json(cube_json).await.map_err(|e| e)?;
     }
 
     // 3. Pull from cloud
-    let remote_cubes = storage.get_cubes(&user_id).await.map_err(|e| e.to_string())?;
+    let remote_json = storage.get_cubes_json(user_id.clone()).await.map_err(|e| e)?;
+    let remote_cubes: Vec<db::Cube> = serde_json::from_str(&remote_json).map_err(|e| e.to_string())?;
 
     // 4. Save to local
     {
         let conn = state.0.lock().unwrap();
         for remote in remote_cubes {
-            let local_cube = db::Cube {
-                id: remote.id.clone(),
-                user_id: remote.user_id.clone(),
-                name: remote.name.clone(),
-                device_type: remote.device_type.clone(),
-                mac_address: remote.mac_address.clone(),
-                created_at: remote.created_at,
-            };
-            db::save_cube(&conn, &local_cube).map_err(|e| e.to_string())?;
+            db::save_cube(&conn, &remote).map_err(|e: rusqlite::Error| e.to_string())?;
         }
     }
 
     Ok(())
 }
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()

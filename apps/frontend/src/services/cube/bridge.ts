@@ -1,12 +1,14 @@
-import init, { handle_ble_packet, SessionManager, CloudStorage } from '../../wasm/roux-core/roux_core'
+import init, { handle_ble_packet, SessionManager } from '../../wasm/roux-core/roux_core'
+import { SupabaseStorage } from '../../wasm/roux-storage-cloud/roux_storage_cloud'
 import { useTimerStore } from '../../stores/timer'
+import { useSessionStore } from '../../stores/session'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { SavedCube } from '../../stores/bluetooth'
 
 let wasmInitialized = false
 export let sessionManager: SessionManager | null = null
-export let cloudStorage: CloudStorage | null = null
+export let cloudStorage: SupabaseStorage | null = null
 
 // Platform detection
 export const isTauri = !!(window as any).__TAURI_INTERNALS__
@@ -23,14 +25,60 @@ export async function ensureWasm() {
         await init()
         sessionManager = new SessionManager()
         wasmInitialized = true
+    }
+}
 
-        // If Tauri, listen for native BLE packets
-        if (isTauri) {
-            listen('ble-packet', (event) => {
-                const data = event.payload as number[]
-                CubeBridge.processRawPacket(new Uint8Array(data))
-            })
+// --- DRIVERS (Internal Implementation) ---
+
+const tauriDriver = {
+    async getCubes(userId: string | null) {
+        const res = await invoke<string>('db_get_cubes', { userId })
+        return JSON.parse(res) as SavedCube[]
+    },
+    async saveCube(cube: SavedCube) {
+        await invoke('db_save_cube', { cubeJson: JSON.stringify(cube) })
+    },
+    async deleteCube(id: string) {
+        await invoke('db_delete_cube', { id })
+    },
+    async syncCubes(userId: string) {
+        const config = await getSupabaseConfig()
+        await invoke('db_sync_cubes', {
+            userId,
+            url: config.url,
+            key: config.key
+        })
+    },
+    async getSessions() {
+        const json = await invoke('db_get_sessions') as string
+        return JSON.parse(json)
+    },
+    async createSession(session: any) {
+        await invoke('db_create_session', { sessionJson: JSON.stringify(session) })
+    }
+}
+
+const wasmDriver = {
+    async getClient() {
+        await ensureWasm()
+        if (!cloudStorage) {
+            const config = await getSupabaseConfig()
+            cloudStorage = new SupabaseStorage(config.url, config.key)
         }
+        return cloudStorage
+    },
+    async getCubes(userId: string) {
+        const client = await this.getClient()
+        const json = await client.get_cubes_json(userId)
+        return JSON.parse(json) as SavedCube[]
+    },
+    async saveCube(cube: SavedCube) {
+        const client = await this.getClient()
+        await client.save_cube_json(JSON.stringify(cube))
+    },
+    async deleteCube(id: string, userId: string) {
+        const client = await this.getClient()
+        await client.delete_cube_json(id, userId)
     }
 }
 
@@ -62,8 +110,17 @@ export class CubeBridge {
 
     static async handleCoreAction(action: any) {
         const timer = useTimerStore()
+        const sessionStore = useSessionStore()
 
         switch (action.type) {
+            case 'FlowStateChanged':
+                timer.flowState = action.data
+                if (action.data === 'Solving') {
+                    timer.startTimer()
+                } else if (action.data === 'Finished') {
+                    timer.stopTimer()
+                }
+                break;
             case 'SaveSolve':
                 // Bridge delegates to Storage Implementation
                 if (isTauri) {
@@ -71,6 +128,7 @@ export class CubeBridge {
                         sessionId: (window as any).activeSessionId,
                         solveJson: JSON.stringify(action.data)
                     })
+                    await sessionStore.loadSessions()
                 } else {
                     // Web API fallback here
                     console.log('[Web] Would save solve via API:', action.data)
@@ -79,16 +137,25 @@ export class CubeBridge {
             case 'DemoteSession':
                 if (isTauri) {
                     await invoke('db_demote_session', { id: action.data })
+                    await sessionStore.loadSessions()
                 }
                 break;
             case 'Pickup':
+                if (timer.flowState === 'Ready') {
+                    await ensureWasm()
+                    const actionJson = sessionManager?.set_solving()
+                    if (actionJson) this.handleCoreAction(JSON.parse(actionJson))
+                }
                 timer.handleEvent('pickup')
                 break;
             case 'Putdown':
+                if (timer.flowState === 'Solving') {
+                    const actionJson = sessionManager?.record_solve(timer.time, JSON.stringify(timer.currentMoves))
+                    if (actionJson) this.handleCoreAction(JSON.parse(actionJson))
+                }
                 timer.handleEvent('putdown')
                 break;
             case 'Move':
-                // action.data is the move notation string (e.g. "R", "U'")
                 timer.handleEvent('move', action.data)
                 break;
             case 'Error':
@@ -170,104 +237,49 @@ export class CubeBridge {
         }
     }
 
-    static async finalConnect(device: any): Promise<void> {
-        if (isTauri) {
-            await invoke('ble_connect', { id: device.id })
-            console.log(`[Bridge] Connected to ${device.name}`)
-        }
-    }
-
-    // Database accessors
     static async getSessions(): Promise<any[]> {
-        if (isTauri) {
-            const json = await invoke('db_get_sessions') as string
-            return JSON.parse(json)
-        }
+        if (isTauri) return tauriDriver.getSessions()
         return []
     }
 
     static async createSession(session: any) {
+        if (isTauri) return tauriDriver.createSession(session)
+    }
+
+    static handleSyncEvent(callback: (devices: any[]) => void) {
         if (isTauri) {
-            await invoke('db_create_session', { sessionJson: JSON.stringify(session) })
+            listen('ble-devices', (event: any) => {
+                callback(event.payload)
+            })
         }
     }
 
-    // Cube data management
-    static async getCubes(userId: string | null = null): Promise<SavedCube[]> {
+    static async finalConnect(device: any): Promise<void> {
+        await ensureWasm()
         if (isTauri) {
-            try {
-                const res = await invoke<string>('db_get_cubes', { userId })
-                return JSON.parse(res)
-            } catch (e) {
-                console.error('[Bridge] Failed to get cubes from SQLite', e)
-                return []
-            }
-        } else {
-            if (!userId) return []
-            await ensureWasm()
-            const config = await getSupabaseConfig()
-            if (!cloudStorage) cloudStorage = new CloudStorage(config.url, config.key)
-
-            try {
-                const json = await cloudStorage.get_cubes_json(userId)
-                return JSON.parse(json) as SavedCube[]
-            } catch (e) {
-                console.error('[Bridge] WASM Cube Fetch failed', e)
-                return []
-            }
+            await invoke('ble_connect', { id: device.id })
+            listen('ble-packet', (event: any) => {
+                this.processRawPacket(new Uint8Array(event.payload as number[]))
+            })
         }
+    }
+
+    static async getCubes(userId: string | null = null): Promise<SavedCube[]> {
+        if (isTauri) return tauriDriver.getCubes(userId)
+        if (userId) return wasmDriver.getCubes(userId)
+        return []
     }
 
     static async saveCube(cube: SavedCube) {
-        if (isTauri) {
-            await invoke('db_save_cube', { cubeJson: JSON.stringify(cube) })
-        } else if (cube.user_id) {
-            await ensureWasm()
-            const config = await getSupabaseConfig()
-            if (!cloudStorage) cloudStorage = new CloudStorage(config.url, config.key)
-
-            try {
-                await cloudStorage.save_cube_json(JSON.stringify(cube))
-            } catch (e) {
-                console.error('[Bridge] WASM Cube Save failed', e)
-                throw e
-            }
-        }
+        return isTauri ? tauriDriver.saveCube(cube) : (cube.user_id ? wasmDriver.saveCube(cube) : null)
     }
 
     static async deleteCube(id: string, userId: string | null = null) {
-        if (isTauri) {
-            await invoke('db_delete_cube', { id })
-        } else if (userId) {
-            await ensureWasm()
-            const config = await getSupabaseConfig()
-            if (!cloudStorage) cloudStorage = new CloudStorage(config.url, config.key)
-
-            try {
-                await cloudStorage.delete_cube_json(id, userId)
-            } catch (e) {
-                console.error('[Bridge] WASM Cube Delete failed', e)
-                throw e
-            }
-        }
+        return isTauri ? tauriDriver.deleteCube(id) : (userId ? wasmDriver.deleteCube(id, userId) : null)
     }
 
     static async syncCubes(userId: string) {
-        if (isTauri) {
-            console.log('[Bridge] Starting Native Cube Sync...')
-            const config = await getSupabaseConfig()
-            try {
-                await invoke('db_sync_cubes', {
-                    userId,
-                    url: config.url,
-                    key: config.key
-                })
-                console.log('[Bridge] Native Sync Finished!')
-            } catch (e) {
-                console.error('[Bridge] Native Sync failed', e)
-            }
-        } else {
-            console.log('[Bridge] Sync not needed on Web (Cloud direct)')
-        }
+        if (isTauri) return tauriDriver.syncCubes(userId)
+        console.log('[Bridge] Sync not needed on Web')
     }
 }
