@@ -3716,7 +3716,7 @@ dependencies = [
 
 [[package]]
 name = "roux-core"
-version = "0.1.0"
+version = "0.1.3"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -3734,7 +3734,7 @@ dependencies = [
 
 [[package]]
 name = "roux-storage-cloud"
-version = "0.1.0"
+version = "0.1.3"
 dependencies = [
  "getrandom 0.2.17",
  "reqwest",
@@ -3747,7 +3747,7 @@ dependencies = [
 
 [[package]]
 name = "roux-storage-sqlite"
-version = "0.1.0"
+version = "0.1.3"
 dependencies = [
  "roux-core",
  "rusqlite",
@@ -3757,7 +3757,7 @@ dependencies = [
 
 [[package]]
 name = "rouxflow-desktop"
-version = "0.1.1"
+version = "0.1.3"
 dependencies = [
  "btleplug",
  "futures",
