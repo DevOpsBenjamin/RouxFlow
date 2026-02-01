@@ -1,6 +1,6 @@
 [package]
 name = "roux-storage-sqlite"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2024"
 description = "SQLite local storage driver for RouxFlow (Tauri desktop)"
 authors = ["DevOpsBen"]
