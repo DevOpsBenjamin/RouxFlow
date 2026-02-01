@@ -4,6 +4,8 @@ import HomeView from './components/layout/HomeView.vue'
 import SessionView from './components/layout/SessionView.vue'
 import SolveAnalysis from './components/layout/SolveAnalysis.vue'
 import ProfileView from './components/layout/ProfileView.vue'
+import LeaderboardView from './components/layout/LeaderboardView.vue'
+import SupportedCubesView from './components/layout/SupportedCubesView.vue'
 import DeviceSelectionModal from './components/cube/DeviceSelectionModal.vue'
 import Navbar from './components/layout/Navbar.vue'
 import { useUIStore } from './stores/ui'
@@ -22,7 +24,7 @@ watch(() => auth.isAuthenticated, (isLogged) => {
 </script>
 
 <template>
-  <div class="min-h-[100dvh] bg-slate-950 text-slate-50 flex flex-col font-sans selection:bg-indigo-500/30">
+  <div class="h-[100dvh] bg-slate-950 text-slate-50 flex flex-col font-sans selection:bg-indigo-500/30 overflow-hidden">
     <DeviceSelectionModal />
     
     <!-- Show Navbar if NOT on Landing -->
@@ -32,7 +34,7 @@ watch(() => auth.isAuthenticated, (isLogged) => {
       </template>
     </Navbar>
 
-    <main class="flex-1 flex flex-col items-center justify-start overflow-x-hidden p-6 md:p-12">
+    <main class="flex-1 flex flex-col items-center justify-start overflow-y-auto overflow-x-hidden p-6 md:p-12">
       <Transition 
         enter-active-class="transition duration-500 ease-out"
         enter-from-class="transform translate-y-4 opacity-0"
@@ -45,6 +47,8 @@ watch(() => auth.isAuthenticated, (isLogged) => {
         <LandingView v-if="ui.currentState === 'Landing'" />
         <HomeView v-else-if="ui.currentState === 'Home'" />
         <ProfileView v-else-if="ui.currentState === 'Profile'" />
+        <LeaderboardView v-else-if="ui.currentState === 'Leaderboard'" />
+        <SupportedCubesView v-else-if="ui.currentState === 'SupportedCubes'" />
         <SolveAnalysis v-else-if="ui.currentState === 'Analysis'" :solve-id="ui.selectedSolveId || undefined" />
         <SessionView v-else />
       </Transition>

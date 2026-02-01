@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useBluetoothStore } from '../../stores/bluetooth'
+import { useUIStore } from '../../stores/ui'
 
-const bt = useBluetoothStore()
+const ui = useUIStore()
 </script>
 
 <template>
@@ -20,18 +20,17 @@ const bt = useBluetoothStore()
       </p>
     </div>
 
-    <div class="flex flex-col gap-4 w-full max-w-xs">
-      <button 
-        @click="bt.startScan()"
-        class="group relative py-4 px-8 rounded-2xl bg-indigo-600 text-white font-black uppercase tracking-widest text-sm shadow-xl shadow-indigo-600/20 hover:bg-indigo-500 hover:scale-105 active:scale-95 transition-all"
-      >
-        Connect Your Cube
-        <div class="absolute inset-0 rounded-2xl border-2 border-indigo-400/50 scale-110 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all"></div>
-      </button>
-      
-      <p class="text-[10px] text-slate-600 font-bold uppercase tracking-[0.2em]">
-        Supports MoYu AI, GAN, and more
+    <div class="flex flex-col gap-4 items-center">
+      <p class="text-slate-500 text-sm">
+        Use the <span class="text-indigo-400 font-bold">🔌 Cubes</span> menu in the header to connect your cube.
       </p>
+      
+      <button 
+        @click="ui.setSupportedCubes()"
+        class="text-indigo-400 hover:text-indigo-300 font-semibold text-sm underline underline-offset-4 transition-colors"
+      >
+        View Supported Cubes →
+      </button>
     </div>
   </div>
 </template>

@@ -1,18 +1,20 @@
 use super::{CubeProtocol, CubeMove, CubeState, Face, Quaternion};
 
-pub struct MoyuProtocol {
+/// GAN Gen2 protocol implementation
+/// Supports: MoYu AI (WCU*), GAN 356i v1, GAN 356i Carry, Monster Go 3Ai
+pub struct GanV2Protocol {
     #[allow(dead_code)]
     key: [u8; 16],
 }
 
-impl MoyuProtocol {
+impl GanV2Protocol {
     pub fn new(key: [u8; 16]) -> Self {
         Self { key }
     }
 }
 
-impl CubeProtocol for MoyuProtocol {
-    fn name(&self) -> &str { "MoYu AI" }
+impl CubeProtocol for GanV2Protocol {
+    fn name(&self) -> &str { "GAN Gen2" }
 
     fn has_gyro(&self) -> bool { true }
 

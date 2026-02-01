@@ -45,7 +45,20 @@ onMounted(() => {
       >
         Timer
       </button>
-      <button class="hover:text-white transition-colors cursor-not-allowed opacity-50">Stats</button>
+      <button 
+        @click="ui.setLeaderboard()" 
+        class="hover:text-white transition-colors"
+        :class="{ 'text-indigo-400': ui.currentState === 'Leaderboard' }"
+      >
+        Leaderboard
+      </button>
+      <button 
+        @click="ui.setSupportedCubes()" 
+        class="hover:text-white transition-colors"
+        :class="{ 'text-indigo-400': ui.currentState === 'SupportedCubes' }"
+      >
+        Cubes
+      </button>
     </nav>
 
     <div class="flex items-center gap-4">

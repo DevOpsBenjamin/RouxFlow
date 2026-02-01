@@ -9,13 +9,13 @@ pub fn greet(name: &str) -> String {
     format!("Hello, {}! This is RouxFlow Core logic speaking.", name)
 }
 
-use crate::cube::moyu::MoyuProtocol;
+use crate::cube::gan_v2::GanV2Protocol;
 use crate::cube::CubeProtocol;
 use crate::session::{SessionManager, CoreAction};
 
 #[wasm_bindgen]
 pub fn handle_ble_packet(data: &[u8], session: &mut SessionManager) -> String {
-    let protocol = MoyuProtocol::new([0u8; 16]);
+    let protocol = GanV2Protocol::new([0u8; 16]);
     let decrypted = match protocol.decrypt(data) {
         Ok(d) => d,
         Err(_) => return "".into(),
