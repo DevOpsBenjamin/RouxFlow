@@ -12,6 +12,8 @@ jobs:
   # Build Web Frontend and Deploy to Cloudflare
   deploy-web:
     runs-on: ubuntu-latest
+    # Only deploy to production if NOT a preview tag
+    if: ${{ !contains(github.ref_name, 'preview') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,9 +53,8 @@ jobs:
           projectName: rouxflowapp
           directory: apps/frontend/dist
 
-  # Build Tauri Desktop App (Windows + Linux)
+  # Build Tauri Desktop App (Windows + Linux) - always runs on any tag
   build-tauri:
-    needs: deploy-web
     permissions:
       contents: write
     strategy:
@@ -111,8 +112,9 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'RouxFlow v__VERSION__'
+          releaseName: 'RouxFlow ${{ github.ref_name }}'
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: false
-          prerelease: false
+          # Mark as prerelease if it contains preview or rc
+          prerelease: ${{ contains(github.ref_name, 'preview') }}
           args: ${{ matrix.args }}
