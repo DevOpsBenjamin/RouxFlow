@@ -52,10 +52,10 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: rouxflowapp
+          # Use diff projects: 'rouxflowapp-dev' (preview) vs 'rouxflowapp' (prod)
+          projectName: ${{ contains(github.ref_name, 'preview') && 'rouxflowapp-dev' || 'rouxflowapp' }}
           directory: apps/frontend/dist
-          # Preview tags → preview branch (dev.rouxflow.app), others → main (rouxflow.app)
-          branch: ${{ contains(github.ref_name, 'preview') && 'preview' || 'main' }}
+          branch: main  # Always deploy to 'main' of the respective project
 
   # Build Tauri Desktop App (Windows + Linux) - always runs on any tag
   build-tauri:
