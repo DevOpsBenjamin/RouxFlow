@@ -1,8 +1,8 @@
 [package]
-name = "roux-storage-cloud"
+name = "rouxflow-core"
 version = "0.1.8"
 edition = "2024"
-description = "Supabase cloud storage driver for RouxFlow"
+description = "Core logic for RouxFlow - Roux method speedcubing trainer"
 authors = ["DevOpsBen"]
 license = "MIT"
 repository = "https://github.com/DevOpsBenjamin/RouxFlow"
@@ -11,10 +11,15 @@ repository = "https://github.com/DevOpsBenjamin/RouxFlow"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-roux-core = { path = "../roux-core" }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-reqwest = { version = "0.12", features = ["json"] }
+aes = "0.8"
+cbc = "0.1"
+cipher = "0.4"
+aes-gcm = "0.10"
 getrandom = { version = "0.2", features = ["js"] }
+futures = "0.3"
+uuid = { version = "1.0", features = ["v4", "serde", "js"] }
+chrono = { version = "0.4", features = ["serde", "wasmbind"] }

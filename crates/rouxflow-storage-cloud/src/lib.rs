@@ -2,7 +2,7 @@
 //! Compiled to WASM for web platform
 
 use wasm_bindgen::prelude::*;
-use roux_core::storage::{Storage, Cube, StorageError};
+use rouxflow_core::storage::{Storage, Cube, StorageError};
 use reqwest::{Client, header};
 
 #[wasm_bindgen]

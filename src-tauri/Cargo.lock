@@ -3715,8 +3715,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "roux-core"
-version = "0.1.3"
+name = "rouxflow-core"
+version = "0.1.8"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -3733,39 +3733,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "roux-storage-cloud"
-version = "0.1.3"
-dependencies = [
- "getrandom 0.2.17",
- "reqwest",
- "roux-core",
- "serde",
- "serde_json",
- "wasm-bindgen",
- "wasm-bindgen-futures",
-]
-
-[[package]]
-name = "roux-storage-sqlite"
-version = "0.1.3"
-dependencies = [
- "roux-core",
- "rusqlite",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "rouxflow-desktop"
-version = "0.1.3"
+version = "0.1.8"
 dependencies = [
  "btleplug",
  "futures",
  "log",
  "reqwest",
- "roux-core",
- "roux-storage-cloud",
- "roux-storage-sqlite",
+ "rouxflow-core",
+ "rouxflow-storage-cloud",
+ "rouxflow-storage-sqlite",
  "rusqlite",
  "serde",
  "serde_json",
@@ -3777,6 +3754,29 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "rouxflow-storage-cloud"
+version = "0.1.8"
+dependencies = [
+ "getrandom 0.2.17",
+ "reqwest",
+ "rouxflow-core",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+]
+
+[[package]]
+name = "rouxflow-storage-sqlite"
+version = "0.1.8"
+dependencies = [
+ "rouxflow-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

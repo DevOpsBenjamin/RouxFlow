@@ -23,9 +23,9 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.9.5", features = [] }
 tauri-plugin-log = "2"
-roux-core = { path = "../crates/roux-core" }
-roux-storage-sqlite = { path = "../crates/roux-storage-sqlite" }
-roux-storage-cloud = { path = "../crates/roux-storage-cloud" }
+rouxflow-core = { path = "../crates/rouxflow-core" }
+rouxflow-storage-sqlite = { path = "../crates/rouxflow-storage-sqlite" }
+rouxflow-storage-cloud = { path = "../crates/rouxflow-storage-cloud" }
 rusqlite = { version = "0.31", features = ["bundled"] }
 reqwest = { version = "0.12", features = ["json"] }
 uuid = { version = "1.0", features = ["v4"] }

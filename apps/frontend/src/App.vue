@@ -49,6 +49,7 @@ watch(() => auth.isAuthenticated, (isLogged) => {
         <ProfileView v-else-if="ui.currentState === 'Profile'" />
         <LeaderboardView v-else-if="ui.currentState === 'Leaderboard'" />
         <SupportedCubesView v-else-if="ui.currentState === 'SupportedCubes'" />
+        <CubeManagerView v-else-if="ui.currentState === 'CubeManager'" />
         <SolveAnalysis v-else-if="ui.currentState === 'Analysis'" :solve-id="ui.selectedSolveId || undefined" />
         <SessionView v-else />
       </Transition>

@@ -3,7 +3,7 @@ mod ble;
 
 use db::{DbState, init_db};
 use ble::{BleState, init_ble, ble_scan, ble_connect, ble_list_devices, ble_check_available};
-use roux_core::session::{Session, Solve};
+use rouxflow_core::session::{Session, Solve};
 use tauri::{Manager, State, Emitter};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -57,7 +57,7 @@ fn db_delete_cube(state: State<'_, DbState>, id: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn db_sync_cubes(state: State<'_, DbState>, user_id: String, url: String, key: String) -> Result<(), String> {
-    use roux_storage_cloud::SupabaseStorage;
+    use rouxflow_storage_cloud::SupabaseStorage;
     
     let storage = SupabaseStorage::new(url, key);
     

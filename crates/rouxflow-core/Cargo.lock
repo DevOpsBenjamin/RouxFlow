@@ -438,8 +438,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "roux-core"
-version = "0.1.0"
+name = "rouxflow-core"
+version = "0.1.8"
 dependencies = [
  "aes",
  "aes-gcm",

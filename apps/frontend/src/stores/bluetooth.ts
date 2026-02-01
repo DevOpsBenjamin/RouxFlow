@@ -88,9 +88,12 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
         }
     }
 
+    const connectedDeviceInfo = ref<{ name: string; address: string; protocol: string; features?: { gyro: boolean } } | null>(null)
+
     function disconnect() {
         isConnected.value = false
         connectedDeviceName.value = null
+        connectedDeviceInfo.value = null
     }
 
     return {
@@ -100,6 +103,7 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
         isConnecting,
         isConnected,
         connectedDeviceName,
+        deviceInfo: connectedDeviceInfo,
         showPicker,
         error,
         setDevices,

@@ -53,11 +53,11 @@ onMounted(() => {
         Leaderboard
       </button>
       <button 
-        @click="ui.setSupportedCubes()" 
+        @click="ui.setCubeManager()" 
         class="hover:text-white transition-colors"
-        :class="{ 'text-indigo-400': ui.currentState === 'SupportedCubes' }"
+        :class="{ 'text-indigo-400': ui.currentState === 'CubeManager' }"
       >
-        Cubes
+        Cube Manager
       </button>
     </nav>
 
@@ -85,6 +85,14 @@ onMounted(() => {
                  class="text-[9px] text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
                >
                  <span>☁️</span> Sync to Cloud
+               </button>
+               
+               <!-- Manage Connected Cube Link -->
+               <button 
+                  @click="ui.setCubeManager()"
+                  class="mt-2 text-[10px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 transition-colors"
+               >
+                 <span>⚙️</span> Manage {{ bt.connectedDeviceName || 'Debug Cube' }}
                </button>
              </div>
              <button @click="bt.startScan()" class="text-[10px] bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded-md font-bold transition-colors">+ New</button>

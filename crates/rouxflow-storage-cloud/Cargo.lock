@@ -981,8 +981,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "roux-core"
-version = "0.1.0"
+name = "rouxflow-core"
+version = "0.1.8"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -999,12 +999,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "roux-storage-cloud"
-version = "0.1.0"
+name = "rouxflow-storage-cloud"
+version = "0.1.8"
 dependencies = [
  "getrandom 0.2.17",
  "reqwest",
- "roux-core",
+ "rouxflow-core",
  "serde",
  "serde_json",
  "wasm-bindgen",

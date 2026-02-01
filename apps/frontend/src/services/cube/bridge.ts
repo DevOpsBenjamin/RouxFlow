@@ -1,5 +1,5 @@
-import init, { handle_ble_packet, SessionManager } from '../../wasm/roux-core/roux_core'
-import { SupabaseStorage } from '../../wasm/roux-storage-cloud/roux_storage_cloud'
+import init, { handle_ble_packet, SessionManager } from '../../wasm/rouxflow-core/rouxflow_core'
+import { SupabaseStorage } from '../../wasm/rouxflow-storage-cloud/rouxflow_storage_cloud'
 import { useTimerStore } from '../../stores/timer'
 import { useSessionStore } from '../../stores/session'
 import { invoke } from '@tauri-apps/api/core'

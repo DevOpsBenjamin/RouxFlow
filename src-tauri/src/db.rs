@@ -1,5 +1,5 @@
 use rusqlite::{params, Connection, Result};
-use roux_core::session::{Session, Solve, SessionType};
+use rouxflow_core::session::{Session, Solve, SessionType};
 use std::sync::Mutex;
 
 pub struct DbState(pub Mutex<Connection>);

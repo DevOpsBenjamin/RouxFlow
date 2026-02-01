@@ -1,7 +1,7 @@
 //! SQLite Storage implementation for Tauri desktop app
 //! Uses rusqlite for local persistence
 
-use roux_core::storage::{Storage, Cube, StorageError};
+use rouxflow_core::storage::{Storage, Cube, StorageError};
 use rusqlite::{Connection, params};
 use std::sync::Mutex;
 
