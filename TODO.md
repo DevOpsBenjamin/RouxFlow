@@ -11,25 +11,14 @@ Focused on the "Core-First" architecture where Rust handles the engine and the B
 
 ## 🚀 Phase 2: UX & Navigation (Next Steps)
 - [x] **Landing Gate**: "Bluetooth-First" entry page.
-- [/] **Device Selection UI**: Replace mocked connection with a real device scanner in Tauri.
-    - [ ] Add `ble_list_devices` command to Rust backend.
-    - [ ] Create `DeviceSelectionModal.vue` for the frontend.
-    - [ ] Update `bridge.ts` to orchestrate multi-device selection.
-- [ ] **WCA vs Free Session Flow**:
-  - [ ] WCA: Strict scramble lock & teaser moves.
-  - [ ] Free: Post-solve decision between "Analyze" or "Next".
-- [ ] **Analysis Hub**:
-  - [ ] Wire `SolveAnalysis.vue` to real bridge data.
-  - [ ] History browser for previous sessions.
-
-## � Phase 3: Roux Intelligence
-- [ ] **Cube State Tracking**: Full bitpacked stickers representation in Rust.
-- [ ] **M-Slice Inference**: Correctly mapping gym moves to Roux-specific phases.
-- [ ] **Phase Detection**:
-  - [ ] FB & SB boolean checks.
-  - [ ] CMLL recognition.
-  - [ ] LSE sub-phase timing (EO, UL/UR, L4E).
+- [ ] **Bluetooth Reliability** (Current Focus):
+    - [ ] **Hardware**: Test with new antennas/dongle.
+    - [ ] **Driver**: Debug `btleplug` connection stability.
+    - [ ] **Protocol**: Robust subscription & auto-reconnect.
+- [/] **Device Selection UI**:
+    - [x] Basic UI implemented.
+    - [ ] Real device scanner in Tauri (WIP).
 
 ## 🎨 Phase 4: Polish
-- [ ] **3D Visualization**: Integrating a three.js cube preview.
+- [x] **3D Visualization**: `rouxflow-render` crate (WASM) with `three-d`.
 - [ ] **Benchmarking**: Compare solve splits against "Ideal Roux" efficiency stats.
