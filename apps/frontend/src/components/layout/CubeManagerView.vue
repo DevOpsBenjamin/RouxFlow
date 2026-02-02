@@ -19,7 +19,7 @@ const isGyroSupported = computed(() => {
 </script>
 
 <template>
-  <div class="w-full h-full p-[4vmin] flex flex-col gap-[4vh] overflow-hidden relative">
+  <div class="w-full h-full p-[2vmin] flex flex-col gap-[2vh] overflow-hidden relative">
     
     <!-- Background Gradient for Premium Feel -->
     <div class="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/20 -z-10"></div>
@@ -29,14 +29,14 @@ const isGyroSupported = computed(() => {
       enter-from-class="opacity-0 translate-y-8"
       enter-to-class="opacity-100 translate-y-0"
     >
-      <div class="flex-1 flex flex-col lg:flex-row gap-[4vmin] h-full overflow-hidden animate-in fade-in duration-700">
+      <div class="flex-1 flex flex-col lg:flex-row gap-[2vmin] h-full overflow-hidden animate-in fade-in duration-700">
         
         <!-- Left Panel: 3D View & Visualization -->
-        <section class="flex-1 relative bg-slate-900/40 backdrop-blur-xl rounded-[3vmin] border border-white/5 overflow-hidden shadow-2xl group">
+        <section class="lg:flex-none lg:aspect-square lg:h-full lg:w-auto w-full aspect-square relative bg-slate-900/40 backdrop-blur-xl rounded-[3vmin] border border-white/2 overflow-hidden shadow-2xl group flex flex-col items-center justify-center">
           <div class="absolute inset-0 bg-gradient-to-b from-transparent to-slate-950/80 pointer-events-none z-10"></div>
           
           <!-- 3D Canvas -->
-          <Cube3D class="w-full h-full" />
+          <Cube3D class="absolute inset-0 w-full h-full" />
           
           <!-- Overlay Info -->
           <div class="absolute bottom-0 left-0 right-0 p-[3vmin] z-20 flex justify-between items-end">
@@ -54,7 +54,7 @@ const isGyroSupported = computed(() => {
         </section>
 
         <!-- Right Panel: Controls & Settings -->
-        <aside class="lg:w-[35%] flex flex-col gap-[3vh]">
+        <aside class="flex-1 w-full min-w-0 flex flex-col gap-[3vh]">
           
           <!-- Orientation Control -->
           <div class="bg-indigo-500/10 backdrop-blur-xl rounded-[2.5vmin] p-[3vmin] border border-indigo-500/20 shadow-lg">

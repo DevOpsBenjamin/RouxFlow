@@ -42,7 +42,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="cube-container w-full h-full relative">
+  <div class="cube-container relative">
     <canvas 
       ref="canvasRef" 
       id="roux-render-canvas" 

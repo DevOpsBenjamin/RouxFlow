@@ -35,7 +35,7 @@ watch(() => auth.isAuthenticated, (isLogged) => {
       </template>
     </Navbar>
 
-    <main class="flex-1 flex flex-col items-center justify-start overflow-y-auto overflow-x-hidden p-6 md:p-12">
+    <main class="flex-1 flex flex-col items-center justify-start overflow-y-auto overflow-x-hidden p-[2vmin]">
       <Transition 
         enter-active-class="transition duration-500 ease-out"
         enter-from-class="transform translate-y-4 opacity-0"
