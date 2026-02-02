@@ -54,6 +54,16 @@ pub struct CubeState {
 
 #[wasm_bindgen]
 impl CubeState {
+    /// Create a solved cube state for testing
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        CubeState {
+            stickers: vec![0x01; 20], // Placeholder solved state
+            orientation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
+            motion: MotionState::Stable,
+        }
+    }
+
     pub fn is_solved(&self) -> bool {
         if self.stickers.len() < 20 { return false; }
         self.stickers[0] == 0x01 && self.stickers[1] == 0x01

@@ -1,0 +1,10 @@
+[package]
+name = "rouxflow-standalone"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rouxflow-core = { path = "../rouxflow-core" }
+rouxflow-render = { path = "../rouxflow-render" }
+three-d = "0.17" # Match rouxflow-render version
+cgmath = "0.18"
