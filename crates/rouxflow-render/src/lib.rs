@@ -145,11 +145,10 @@ fn setup_models(context: &Context) -> Vec<(Gm<Mesh, ColorMaterial>, Vector3<f32>
     models
 }
 
-// ========== NATIVE API (for standalone) ==========
-#[cfg(not(target_arch = "wasm32"))]
+// ========== SHARED RENDER STATE (Used by both Web and Native) ==========
 pub struct RenderState {
     models: Vec<(Gm<Mesh, ColorMaterial>, Vector3<f32>)>,
-    display_rotation: cgmath::Quaternion<f32>,
+    pub display_rotation: cgmath::Quaternion<f32>,
     camera: Camera,
     control: OrbitControl,
     ambient_light: AmbientLight,
@@ -157,7 +156,6 @@ pub struct RenderState {
     directional_light_2: DirectionalLight,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 impl RenderState {
     /// Initialize render state from GL context
     pub fn new(context: &Context, viewport: Viewport) -> Self {
@@ -239,10 +237,20 @@ impl RenderState {
         
         let lights: &[&dyn Light] = &[&self.ambient_light, &self.directional_light, &self.directional_light_2];
         
-        // No arbitrary scale - use real coordinates
+        // Use real coordinates
+        // If WASM seems too small, we might need a compensation scale
+        #[cfg(target_arch = "wasm32")]
+        let platform_scale = Mat4::from_scale(1.0); // We'll tune this if needed, but let's check basic transform first
+        #[cfg(not(target_arch = "wasm32"))]
+        let platform_scale = Mat4::identity();
+        
         for (model, pos) in &mut self.models {
             let translation_mat = Mat4::from_translation(*pos);
             let transform = rotation_mat * translation_mat;
+            
+            #[cfg(target_arch = "wasm32")]
+            let transform = transform * Mat4::from_scale(1.0); // Placeholder for the *2 if confirmed
+            
             model.set_transformation(transform);
             
             screen.render(&self.camera, &[model], lights);
@@ -276,8 +284,8 @@ pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
     let context = Context::from_gl_context(std::sync::Arc::new(glow_context))
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-    // Setup models using shared helper
-    let mut models = setup_models(&context);
+    // Create RenderState
+    let mut render_state = RenderState::new(&context, Viewport::new_at_origo(1, 1));
 
     let identity = Quaternion::new(1.0, 0.0, 0.0, 0.0);
 
@@ -294,19 +302,6 @@ pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
     // Setup autonomous render loop
     let loop_state_rc = STATE.with(|s| s.clone());
     
-    // Create camera (will be updated each frame with correct viewport)
-    let mut camera = Camera::new_perspective(
-        Viewport::new_at_origo(1, 1), // Placeholder, updated each frame
-        vec3(0.0, 0.0, 20.0),
-        vec3(0.0, 0.0, 0.0),
-        vec3(0.0, 1.0, 0.0),
-        degrees(45.0),
-        0.1,
-        100.0,
-    );
-    
-    let mut control = OrbitControl::new(camera.target().clone(), 0.1, 100.0);
-    
     // Render loop closure
     let f = Rc::new(RefCell::new(None::<Closure<dyn FnMut()>>));
     let g = f.clone();
@@ -321,36 +316,25 @@ pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
         let canvas_width = (rect.width() * dpr) as u32;
         let canvas_height = (rect.height() * dpr) as u32;
         
-        // Update camera viewport
+        // Update viewport
         let viewport = Viewport {
             x: 0,
             y: 0,
             width: canvas_width,
             height: canvas_height,
         };
-        camera.set_viewport(viewport);
+        render_state.set_viewport(viewport);
         
         // Read rotation from state
         let display_rotation = loop_state_rc.borrow().as_ref()
             .map(|s| s.display_rotation)
             .unwrap_or(Quaternion::new(1.0, 0.0, 0.0, 0.0));
         
-        let rotation_mat = Mat4::from(display_rotation);
+        render_state.display_rotation = display_rotation;
         
         // Render target
         let target = RenderTarget::screen(&context_for_loop, canvas_width, canvas_height);
-        target.clear(ClearState::color_and_depth(0.05, 0.05, 0.08, 1.0, 1.0));
-        
-        // Render all models
-        let scale_mat = Mat4::from_scale(0.7);
-        
-        for (model, pos) in &mut models {
-            let translation_mat = Mat4::from_translation(*pos);
-            let transform = rotation_mat * translation_mat * scale_mat;
-            model.set_transformation(transform);
-            
-            target.render(&camera, &[model], &[]);
-        }
+        render_state.render_frame(&target);
         
         // Continue loop
         request_animation_frame(f.borrow().as_ref().unwrap());
