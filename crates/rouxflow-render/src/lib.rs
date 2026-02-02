@@ -1,12 +1,16 @@
-use wasm_bindgen::prelude::*;
 use three_d::*;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+#[cfg(target_arch = "wasm32")]
 use std::rc::Rc;
+#[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
 
 // CGMath types used by three-d
+#[cfg(target_arch = "wasm32")]
 struct SharedState {
     raw_rotation: Quaternion<f32>,
     rotation_offset: Quaternion<f32>,
@@ -29,41 +33,112 @@ fn request_animation_frame(f: &Closure<dyn FnMut()>) {
         .expect("should register requestAnimationFrame");
 }
 
-// Helper to create debug grid models
+// Helper to create 3x3x3 Rubik's cube models
 fn setup_models(context: &Context) -> Vec<(Gm<Mesh, ColorMaterial>, Vector3<f32>)> {
-    // Base mesh: Centered at (0,0,0)
+    // Logic: In three-d 0.17, CpuMesh::cube() is already centered and size 2.0 (from -1.0 to 1.0).
+    // - Spacing = 2.0 means centers are at -2, 0, 2.
+    // - cubie_size = 0.95 means actual width is 2.0 * 0.95 = 1.9.
+    // - Resulting gap = spacing (2.0) - width (1.9) = 0.1.
+    let cubie_size = 0.95;   
+    let spacing = 2.0;      
+    
+    // Create base cube mesh (Size 2, centered at origin)
     let mut cpu_mesh = CpuMesh::cube();
-    cpu_mesh.transform(&Mat4::from_translation(vec3(-0.5, -0.5, -0.5))).unwrap();
+    
+    // Just scale it down slightly to create the gap
+    cpu_mesh.transform(&Mat4::from_scale(cubie_size)).unwrap();
 
     let mut models = Vec::new();
-    let spacing = 2.5;
     
-    // Grille 5x5 sur le plan XY (Z=0)
-    for x in -2..=2 {
-        for y in -2..=2 {
-            let pos = vec3(x as f32 * spacing, y as f32 * spacing, 0.0);
-            
-            let color = if x == 0 && y == 0 {
-                Srgba::new(255, 255, 255, 255)
-            } else {
-                let r = ((x + 2) as f32 / 4.0 * 200.0 + 55.0) as u8;
-                let g = ((y + 2) as f32 / 4.0 * 200.0 + 55.0) as u8;
-                let b = 80u8;
-                Srgba::new(r, g, b, 255)
-            };
-            
-            let m = Gm::new(
-                Mesh::new(context, &cpu_mesh),
-                ColorMaterial::new(
-                    context,
-                    &CpuMaterial {
-                        albedo: color,
-                        ..Default::default()
-                    },
-                ),
-            );
-            
-            models.push((m, pos));
+    // Black color for the cubie bodies
+    let _cubie_body_color = Srgba::new(20, 20, 20, 255);
+    
+    // Sticker properties
+    let sticker_scale = 0.8; // Sticker takes 80% of cubie face
+    let sticker_thickness = 0.02; // Very thin
+    let _sticker_offset = 0.96; // Just outside the 0.95 cubie surface
+    
+    // Create 27 cubies in 3x3x3 grid
+    for x in -1..=1 {
+        for y in -1..=1 {
+            for z in -1..=1 {
+                let center_pos = vec3(
+                    x as f32 * spacing,
+                    y as f32 * spacing,
+                    z as f32 * spacing
+                );
+                
+                // 1. ADD CUBIE BODY (Opaque Dark Grey - better for readability)
+                let body_color = Srgba::new(45, 45, 45, 255); 
+
+                let mut body = Gm::new(
+                    Mesh::new(context, &cpu_mesh),
+                    ColorMaterial::new(
+                        context,
+                        &CpuMaterial {
+                            albedo: body_color,
+                            roughness: 0.05, // Extra shiny for clear edges
+                            metallic: 0.2,
+                            ..Default::default()
+                        },
+                    ),
+                );
+                // Back to opaque for better readability
+                body.material.render_states.blend = Blend::Disabled;
+                models.push((body, center_pos));
+                
+                // 2. ADD STICKERS (Only on external faces)
+                
+                // Helper to add a sticker: scale is HALF dimensions because base cube is size 2
+                let mut add_sticker = |offset: Vector3<f32>, s: Vector3<f32>, color: Srgba| {
+                    let mut s_mesh = CpuMesh::cube();
+                    // NO translation! It's already centered at origin.
+                    s_mesh.transform(&Mat4::from_nonuniform_scale(s.x, s.y, s.z)).unwrap();
+                    
+                    let s_gm = Gm::new(
+                        Mesh::new(context, &s_mesh),
+                        ColorMaterial::new(
+                            context,
+                            &CpuMaterial {
+                                albedo: color,
+                                roughness: 0.2,
+                                ..Default::default()
+                            },
+                        ),
+                    );
+                    models.push((s_gm, center_pos + offset));
+                };
+
+                // Half-dimensions for scaling the size-2 cube
+                let s_half = cubie_size * sticker_scale;
+                let t_half = sticker_thickness / 2.0;
+                let off = cubie_size + t_half; // Surface is at exactly cubie_size
+
+                // Front (+Z) -> White
+                if z == 1 {
+                    add_sticker(vec3(0.0, 0.0, off), vec3(s_half, s_half, t_half), Srgba::WHITE);
+                }
+                // Back (-Z) -> Yellow
+                if z == -1 {
+                    add_sticker(vec3(0.0, 0.0, -off), vec3(s_half, s_half, t_half), Srgba::new(255, 255, 0, 255));
+                }
+                // Top (+Y) -> Green
+                if y == 1 {
+                    add_sticker(vec3(0.0, off, 0.0), vec3(s_half, t_half, s_half), Srgba::GREEN);
+                }
+                // Bottom (-Y) -> Blue
+                if y == -1 {
+                    add_sticker(vec3(0.0, -off, 0.0), vec3(s_half, t_half, s_half), Srgba::BLUE);
+                }
+                // Right (+X) -> Red
+                if x == 1 {
+                    add_sticker(vec3(off, 0.0, 0.0), vec3(t_half, s_half, s_half), Srgba::RED);
+                }
+                // Left (-X) -> Orange
+                if x == -1 {
+                    add_sticker(vec3(-off, 0.0, 0.0), vec3(t_half, s_half, s_half), Srgba::new(255, 165, 0, 255));
+                }
+            }
         }
     }
     
@@ -77,6 +152,9 @@ pub struct RenderState {
     display_rotation: cgmath::Quaternion<f32>,
     camera: Camera,
     control: OrbitControl,
+    ambient_light: AmbientLight,
+    directional_light: DirectionalLight,
+    directional_light_2: DirectionalLight,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -88,7 +166,7 @@ impl RenderState {
         
         let camera = Camera::new_perspective(
             viewport,
-            vec3(0.0, 0.0, 20.0),
+            vec3(0.0, 0.0, 14.0),  // Camera distance for 3x3x3 cube
             vec3(0.0, 0.0, 0.0),
             vec3(0.0, 1.0, 0.0),
             degrees(45.0),
@@ -98,11 +176,18 @@ impl RenderState {
         
         let control = OrbitControl::new(camera.target().clone(), 0.1, 100.0);
         
+        let ambient_light = AmbientLight::new(context, 0.4, Srgba::WHITE);
+        let directional_light = DirectionalLight::new(context, 1.0, Srgba::WHITE, &vec3(1.0, -1.0, -1.0));
+        let directional_light_2 = DirectionalLight::new(context, 0.6, Srgba::WHITE, &vec3(-1.0, 1.0, 1.0));
+        
         RenderState {
             models,
             display_rotation: identity,
             camera,
             control,
+            ambient_light,
+            directional_light,
+            directional_light_2,
         }
     }
     
@@ -117,27 +202,50 @@ impl RenderState {
     }
     
     /// Update cube state (stickers + orientation)
-    pub fn update_cube_state(&mut self, _stickers: &[u8], orientation: Option<(f32, f32, f32, f32)>) {
+    /// 
+    /// The stickers parameter uses the Twizzle Binary 3x3x3 Format:
+    /// https://experiments.cubing.net/cubing.js/spec/binary/
+    /// 
+    /// Format (~20 bytes):
+    /// - EP (Edge Permutation): 29 bits
+    /// - EO (Edge Orientation): 11 bits
+    /// - CP (Corner Permutation): 17 bits
+    /// - CO (Corner Orientation): 13 bits
+    /// - MO (Center Orientation): optional
+    /// - PO (Puzzle Orientation): optional
+    pub fn update_cube_state(&mut self, stickers: &[u8], orientation: Option<(f32, f32, f32, f32)>) {
         if let Some((x, y, z, w)) = orientation {
             self.display_rotation = cgmath::Quaternion::new(w, x, y, z);
         }
-        // TODO: Update cube colors from stickers
+        
+        // TODO: Decode Twizzle binary format
+        // For now, we just accept the binary data without parsing it
+        // When we switch from debug grid (5x5) to actual Rubik's cube (3x3x3),
+        // we'll need to:
+        // 1. Parse EP, EO, CP, CO from binary
+        // 2. Map each of 27 cubies to world positions
+        // 3. For each cubie, determine which faces are visible
+        // 4. Map sticker colors to those visible faces
+        
+        let _is_solved = stickers.len() >= 2 && stickers[0] == 0x01 && stickers[1] == 0x01;
     }
     
     /// Render one frame
     pub fn render_frame(&mut self, screen: &RenderTarget) {
         let rotation_mat = Mat4::from(self.display_rotation);
         
-        screen.clear(ClearState::color_and_depth(0.05, 0.05, 0.08, 1.0, 1.0));
+        // Lighter gray background as requested
+        screen.clear(ClearState::color_and_depth(0.25, 0.25, 0.28, 1.0, 1.0));
         
-        let scale_mat = Mat4::from_scale(0.7);
+        let lights: &[&dyn Light] = &[&self.ambient_light, &self.directional_light, &self.directional_light_2];
         
+        // No arbitrary scale - use real coordinates
         for (model, pos) in &mut self.models {
             let translation_mat = Mat4::from_translation(*pos);
-            let transform = rotation_mat * translation_mat * scale_mat;
+            let transform = rotation_mat * translation_mat;
             model.set_transformation(transform);
             
-            screen.render(&self.camera, &[model], &[]);
+            screen.render(&self.camera, &[model], lights);
         }
     }
 }

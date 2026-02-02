@@ -1160,6 +1160,7 @@ dependencies = [
  "cgmath",
  "console_error_panic_hook",
  "log",
+ "rouxflow-core",
  "serde",
  "three-d",
  "wasm-bindgen",
