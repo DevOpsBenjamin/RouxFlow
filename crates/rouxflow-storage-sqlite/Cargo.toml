@@ -8,6 +8,7 @@ license = "MIT"
 repository = "https://github.com/DevOpsBenjamin/RouxFlow"
 
 [dependencies]
+async-trait = "0.1.89"
 rouxflow-core = { path = "../rouxflow-core" }
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }

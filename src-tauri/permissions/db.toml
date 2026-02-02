@@ -6,6 +6,12 @@ commands.allow = [
     "db_get_sessions",
     "db_create_session",
     "db_demote_session",
+    "db_save_cube",
+    "db_get_cubes",
+    "db_delete_cube",
+    "db_sync_cubes",
     "ble_scan",
-    "ble_connect"
+    "ble_connect",
+    "ble_list_devices",
+    "ble_check_available"
 ]

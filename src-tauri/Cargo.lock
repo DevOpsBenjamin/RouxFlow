@@ -3720,6 +3720,7 @@ version = "0.1.8"
 dependencies = [
  "aes",
  "aes-gcm",
+ "async-trait",
  "cbc",
  "chrono",
  "cipher",
@@ -3734,7 +3735,7 @@ dependencies = [
 
 [[package]]
 name = "rouxflow-desktop"
-version = "0.1.8"
+version = "0.1.10"
 dependencies = [
  "btleplug",
  "futures",
@@ -3760,6 +3761,7 @@ dependencies = [
 name = "rouxflow-storage-cloud"
 version = "0.1.8"
 dependencies = [
+ "async-trait",
  "getrandom 0.2.17",
  "reqwest",
  "rouxflow-core",
@@ -3773,6 +3775,7 @@ dependencies = [
 name = "rouxflow-storage-sqlite"
 version = "0.1.8"
 dependencies = [
+ "async-trait",
  "rouxflow-core",
  "rusqlite",
  "serde",

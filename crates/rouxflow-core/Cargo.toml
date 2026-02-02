@@ -23,3 +23,4 @@ getrandom = { version = "0.2", features = ["js"] }
 futures = "0.3"
 uuid = { version = "1.0", features = ["v4", "serde", "js"] }
 chrono = { version = "0.4", features = ["serde", "wasmbind"] }
+async-trait = "0.1.89"
