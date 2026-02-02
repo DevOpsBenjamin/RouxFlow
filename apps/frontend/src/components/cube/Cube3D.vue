@@ -1,12 +1,23 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const isLoaded = ref(false)
 
-
 onMounted(async () => {
   if (!canvasRef.value) return
+
+  // IMPORTANT: Set initial canvas dimensions BEFORE winit takes control.
+  // On the web, the canvas element often starts with default 300x150 attributes
+  // even if CSS sizes it differently. Winit reads the canvas attributes at init,
+  // so we must sync them with the actual displayed size ONCE before init.
+  // After winit starts, it will manage resizing on its own.
+  const rect = canvasRef.value.getBoundingClientRect()
+  const dpr = window.devicePixelRatio || 1
+  canvasRef.value.width = Math.round(rect.width * dpr)
+  canvasRef.value.height = Math.round(rect.height * dpr)
+  
+  console.log(`[Cube3D] Initial canvas size: ${canvasRef.value.width}x${canvasRef.value.height} (CSS: ${rect.width}x${rect.height}, DPR: ${dpr})`)
 
   try {
     // Dynamic import of the WASM module
@@ -33,11 +44,6 @@ onMounted(async () => {
   } catch (e) {
       console.error("Failed to load 3D engine:", e)
   }
-})
-
-onUnmounted(() => {
-  // TODO: Implement cleaner shutdown if possible. 
-  // currently we rely on the browser checking canvas existence.
 })
 </script>
 
