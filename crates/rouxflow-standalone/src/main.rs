@@ -51,11 +51,11 @@ fn main() {
         
         // Handle Move Playback
         if !scramble_moves.is_empty() && scramble_index < scramble_moves.len() {
-            if last_move.elapsed() >= Duration::from_secs(1) {
+            if last_move.elapsed() >= Duration::from_millis(500) {
                 let move_str = &scramble_moves[scramble_index];
                 println!("[Scramble {}/{}] Applying: {}", scramble_index + 1, scramble_moves.len(), move_str);
                 cube_state.apply_move(move_str);
-                cube_state.dump_debug();
+                //cube_state.dump_debug();
                 scramble_index += 1;
                 last_move = Instant::now();
             }
@@ -66,7 +66,7 @@ fn main() {
                 if let Some(&move_str) = move_options.choose(&mut rng) {
                     println!("[10s] Applying Random Move: {}", move_str);
                     cube_state.apply_move(move_str);
-                    cube_state.dump_debug();
+                    //cube_state.dump_debug();
                 }
                 last_move = Instant::now();
             }
