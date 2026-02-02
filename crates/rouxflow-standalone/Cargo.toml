@@ -8,3 +8,4 @@ rouxflow-core = { path = "../rouxflow-core" }
 rouxflow-render = { path = "../rouxflow-render" }
 three-d = "0.17" # Match rouxflow-render version
 cgmath = "0.18"
+rand = "0.8"
