@@ -1,6 +1,6 @@
 [package]
 name = "rouxflow-desktop"
-version = "v0.0.11-preview"
+version = "0.0.12"
 description = "RouxFlow - Smart Bluetooth Rubik's Cube Trainer for Roux Method"
 authors = ["DevOpsBen"]
 license = "MIT"
