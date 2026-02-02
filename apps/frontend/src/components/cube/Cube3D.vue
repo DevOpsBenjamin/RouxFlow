@@ -3,31 +3,41 @@ import { onMounted, onUnmounted, ref } from 'vue'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const isLoaded = ref(false)
-let renderer: any = null
+
 
 onMounted(async () => {
   if (!canvasRef.value) return
 
-  // Dynamic import of the WASM module
-  const wasm = await import('../../wasm/rouxflow-render/rouxflow_render.js')
-  await wasm.default() // Initialize WASM memory if needed (standard for wasm-pack)
+  try {
+    // Dynamic import of the WASM module
+    const wasm = await import('../../wasm/rouxflow-render/rouxflow_render.js')
+    await wasm.default() 
 
-  // Initialize the renderer on our canvas
-  // We use a unique ID for the canvas to be safe
-  const canvasId = canvasRef.value.id
-  /* ... */
-  renderer = new wasm.RouxRenderer(canvasId)
-  isLoaded.value = true
+    const canvasId = canvasRef.value.id
+    
+    try {
+        wasm.init_renderer(canvasId)
+    } catch (e: any) {
+        // winit throws this error on the web to break control flow and start the loop
+        if (typeof e === 'string' && e.includes("Using exceptions for control flow")) {
+             console.log("[RouxRenderer] Loop started successfully (caught control flow exception)")
+        } else if (e instanceof Error && e.message.includes("Using exceptions for control flow")) {
+             console.log("[RouxRenderer] Loop started successfully (caught control flow exception)")
+        } else {
+             console.error("[RouxRenderer] Initialization error:", e)
+             throw e
+        }
+    }
+    
+    isLoaded.value = true
+  } catch (e) {
+      console.error("Failed to load 3D engine:", e)
+  }
 })
 
 onUnmounted(() => {
-  if (renderer) {
-    // Ideally we would free memory here, but WASM struct is dummy for now
-    try {
-        renderer.free() 
-    } catch (e) { console.warn("Error freeing renderer", e) }
-    renderer = null
-  }
+  // TODO: Implement cleaner shutdown if possible. 
+  // currently we rely on the browser checking canvas existence.
 })
 </script>
 
