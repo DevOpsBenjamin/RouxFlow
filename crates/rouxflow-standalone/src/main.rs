@@ -66,13 +66,17 @@ fn main() {
             last_update = Instant::now();
         }
         
-        // Every 10s: apply U move (TODO: implement in core)
+        // Every 10s: apply U move
         if last_move.elapsed() >= Duration::from_secs(10) {
-            println!("[10s] TODO: Apply U move");
+            println!("[10s] Applying U move");
+            cube_state.apply_move("U");
+            cube_state.dump_debug();
             last_move = Instant::now();
         }
         
         // Render frame (render state handles everything)
+        let orientation = cube_state.orientation.map(|q| (q.x, q.y, q.z, q.w));
+        render_state.update_cube_state(&cube_state.get_facelets(), orientation);
         render_state.render_frame(&frame_input.screen());
         
         FrameOutput::default()

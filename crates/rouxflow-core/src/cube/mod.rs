@@ -44,29 +44,50 @@ pub enum MotionState {
     Moving = 1,
 }
 
+pub mod facelet;
+
 #[wasm_bindgen]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CubeState {
     pub(crate) stickers: Vec<u8>,
     pub orientation: Option<Quaternion>,
     pub motion: MotionState,
+    #[serde(skip)]
+    pub(crate) logic: facelet::FaceletCube,
 }
 
 #[wasm_bindgen]
 impl CubeState {
-    /// Create a solved cube state for testing
+    /// Create a solved cube state
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         CubeState {
-            stickers: vec![0x01; 20], // Placeholder solved state
+            stickers: vec![0x01; 20], 
             orientation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
             motion: MotionState::Stable,
+            logic: facelet::FaceletCube::new(),
         }
     }
 
+    /// Apply a move (like "U", "R'", "F2") using the internal logic engine
+    pub fn apply_move(&mut self, move_str: &str) {
+        self.logic.apply_move(move_str);
+    }
+
+    pub fn dump_debug(&self) {
+        self.logic.dump_debug();
+    }
+
+
+    /// Get all 54 facelet colors as a flat array of bytes (0-5)
+    pub fn get_facelets(&self) -> Vec<u8> {
+        self.logic.facelets.iter().map(|&c| c as u8).collect()
+    }
+
     pub fn is_solved(&self) -> bool {
-        if self.stickers.len() < 20 { return false; }
-        self.stickers[0] == 0x01 && self.stickers[1] == 0x01
+        // Simple check for facelet model: compare with new cube
+        let solved = facelet::FaceletCube::new();
+        self.logic.facelets == solved.facelets
     }
 
     #[wasm_bindgen(getter)]

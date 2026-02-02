@@ -61,6 +61,7 @@ impl CubeProtocol for GanV2Protocol {
             stickers: data[1..].to_vec(), // Skip type byte
             orientation: None,
             motion: super::MotionState::Stable,
+            logic: super::facelet::FaceletCube::new(),
         })
     }
 

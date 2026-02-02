@@ -16,6 +16,7 @@ struct SharedState {
     rotation_offset: Quaternion<f32>,
     display_rotation: Quaternion<f32>,
     has_gyro: bool,
+    facelets: Vec<u8>,
 }
 
 // Thread-local global state to allow access across the WASM boundary
@@ -68,76 +69,65 @@ fn setup_models(context: &Context) -> Vec<(Gm<Mesh, ColorMaterial>, Vector3<f32>
                     z as f32 * spacing
                 );
                 
-                // 1. ADD CUBIE BODY (Opaque Dark Grey - better for readability)
+                // 1. ADD CUBIE BODIES
                 let body_color = Srgba::new(45, 45, 45, 255); 
-
                 let mut body = Gm::new(
                     Mesh::new(context, &cpu_mesh),
                     ColorMaterial::new(
                         context,
                         &CpuMaterial {
                             albedo: body_color,
-                            roughness: 0.05, // Extra shiny for clear edges
+                            roughness: 0.05,
                             metallic: 0.2,
                             ..Default::default()
                         },
                     ),
                 );
-                // Back to opaque for better readability
                 body.material.render_states.blend = Blend::Disabled;
                 models.push((body, center_pos));
-                
-                // 2. ADD STICKERS (Only on external faces)
-                
-                // Helper to add a sticker: scale is HALF dimensions because base cube is size 2
-                let mut add_sticker = |offset: Vector3<f32>, s: Vector3<f32>, color: Srgba| {
-                    let mut s_mesh = CpuMesh::cube();
-                    // NO translation! It's already centered at origin.
-                    s_mesh.transform(&Mat4::from_nonuniform_scale(s.x, s.y, s.z)).unwrap();
-                    
-                    let s_gm = Gm::new(
-                        Mesh::new(context, &s_mesh),
-                        ColorMaterial::new(
-                            context,
-                            &CpuMaterial {
-                                albedo: color,
-                                roughness: 0.2,
-                                ..Default::default()
-                            },
-                        ),
-                    );
-                    models.push((s_gm, center_pos + offset));
+            }
+        }
+    }
+
+    // 2. ADD STICKERS (Grouped by face: U, R, F, D, L, B)
+    let s_half = cubie_size * sticker_scale;
+    let t_half = sticker_thickness / 2.0;
+    let off = spacing + cubie_size + t_half; // Correct jump to outer surface (approx 2.96)
+
+    let faces = [
+        ("U", Srgba::WHITE),
+        ("R", Srgba::RED),
+        ("F", Srgba::GREEN),
+        ("D", Srgba::new(255, 255, 0, 255)),
+        ("L", Srgba::new(255, 165, 0, 255)),
+        ("B", Srgba::BLUE),
+    ];
+
+    for (name, color) in faces {
+        for row in -1..=1 { 
+            for col in -1..=1 { 
+                let sticker_pos = match name {
+                    "U" => vec3(col as f32 * spacing, off, row as f32 * spacing),
+                    "D" => vec3(col as f32 * spacing, -off, -row as f32 * spacing),
+                    "F" => vec3(col as f32 * spacing, -row as f32 * spacing, off),
+                    "B" => vec3(-col as f32 * spacing, -row as f32 * spacing, -off),
+                    "R" => vec3(off, -row as f32 * spacing, -col as f32 * spacing),
+                    "L" => vec3(-off, -row as f32 * spacing, col as f32 * spacing),
+                    _ => unreachable!(),
                 };
 
-                // Half-dimensions for scaling the size-2 cube
-                let s_half = cubie_size * sticker_scale;
-                let t_half = sticker_thickness / 2.0;
-                let off = cubie_size + t_half; // Surface is at exactly cubie_size
-
-                // Front (+Z) -> White
-                if z == 1 {
-                    add_sticker(vec3(0.0, 0.0, off), vec3(s_half, s_half, t_half), Srgba::WHITE);
-                }
-                // Back (-Z) -> Yellow
-                if z == -1 {
-                    add_sticker(vec3(0.0, 0.0, -off), vec3(s_half, s_half, t_half), Srgba::new(255, 255, 0, 255));
-                }
-                // Top (+Y) -> Green
-                if y == 1 {
-                    add_sticker(vec3(0.0, off, 0.0), vec3(s_half, t_half, s_half), Srgba::GREEN);
-                }
-                // Bottom (-Y) -> Blue
-                if y == -1 {
-                    add_sticker(vec3(0.0, -off, 0.0), vec3(s_half, t_half, s_half), Srgba::BLUE);
-                }
-                // Right (+X) -> Red
-                if x == 1 {
-                    add_sticker(vec3(off, 0.0, 0.0), vec3(t_half, s_half, s_half), Srgba::RED);
-                }
-                // Left (-X) -> Orange
-                if x == -1 {
-                    add_sticker(vec3(-off, 0.0, 0.0), vec3(t_half, s_half, s_half), Srgba::new(255, 165, 0, 255));
-                }
+                let mut s_mesh = CpuMesh::cube();
+                s_mesh.transform(&Mat4::from_nonuniform_scale(
+                    if name == "R" || name == "L" { t_half } else { s_half },
+                    if name == "U" || name == "D" { t_half } else { s_half },
+                    if name == "F" || name == "B" { t_half } else { s_half },
+                )).unwrap();
+                
+                let s_gm = Gm::new(
+                    Mesh::new(context, &s_mesh),
+                    ColorMaterial::new(context, &CpuMaterial { albedo: color, roughness: 0.2, ..Default::default() }),
+                );
+                models.push((s_gm, sticker_pos));
             }
         }
     }
@@ -211,21 +201,33 @@ impl RenderState {
     /// - CO (Corner Orientation): 13 bits
     /// - MO (Center Orientation): optional
     /// - PO (Puzzle Orientation): optional
-    pub fn update_cube_state(&mut self, stickers: &[u8], orientation: Option<(f32, f32, f32, f32)>) {
+    pub fn update_cube_state(&mut self, facelets: &[u8], orientation: Option<(f32, f32, f32, f32)>) {
         if let Some((x, y, z, w)) = orientation {
             self.display_rotation = cgmath::Quaternion::new(w, x, y, z);
         }
         
-        // TODO: Decode Twizzle binary format
-        // For now, we just accept the binary data without parsing it
-        // When we switch from debug grid (5x5) to actual Rubik's cube (3x3x3),
-        // we'll need to:
-        // 1. Parse EP, EO, CP, CO from binary
-        // 2. Map each of 27 cubies to world positions
-        // 3. For each cubie, determine which faces are visible
-        // 4. Map sticker colors to those visible faces
-        
-        let _is_solved = stickers.len() >= 2 && stickers[0] == 0x01 && stickers[1] == 0x01;
+        // If we have 54 facelets (1 byte per sticker), update the colors
+        if facelets.len() == 54 {
+            let get_color = |c_idx: u8| match c_idx {
+                0 => Srgba::WHITE,
+                1 => Srgba::new(255, 255, 0, 255), // Yellow
+                2 => Srgba::GREEN,
+                3 => Srgba::BLUE,
+                4 => Srgba::RED,
+                5 => Srgba::new(255, 165, 0, 255), // Orange
+                _ => Srgba::BLACK,
+            };
+
+            // Our model list has 27 bodies + 54 stickers = 81 total
+            // Stickers start at index 27.
+            if self.models.len() >= 81 {
+                for i in 0..54 {
+                    if let Some((gm, _)) = self.models.get_mut(27 + i) {
+                        gm.material.color = get_color(facelets[i]);
+                    }
+                }
+            }
+        }
     }
     
     /// Render one frame
@@ -238,19 +240,9 @@ impl RenderState {
         let lights: &[&dyn Light] = &[&self.ambient_light, &self.directional_light, &self.directional_light_2];
         
         // Use real coordinates
-        // If WASM seems too small, we might need a compensation scale
-        #[cfg(target_arch = "wasm32")]
-        let platform_scale = Mat4::from_scale(1.0); // We'll tune this if needed, but let's check basic transform first
-        #[cfg(not(target_arch = "wasm32"))]
-        let platform_scale = Mat4::identity();
-        
         for (model, pos) in &mut self.models {
             let translation_mat = Mat4::from_translation(*pos);
             let transform = rotation_mat * translation_mat;
-            
-            #[cfg(target_arch = "wasm32")]
-            let transform = transform * Mat4::from_scale(1.0); // Placeholder for the *2 if confirmed
-            
             model.set_transformation(transform);
             
             screen.render(&self.camera, &[model], lights);
@@ -296,6 +288,7 @@ pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
             rotation_offset: identity,
             display_rotation: identity,
             has_gyro: false,
+            facelets: vec![0; 54], // Start with correct size
         });
     });
 
@@ -325,11 +318,12 @@ pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
         };
         render_state.set_viewport(viewport);
         
-        // Read rotation from state
-        let display_rotation = loop_state_rc.borrow().as_ref()
-            .map(|s| s.display_rotation)
-            .unwrap_or(Quaternion::new(1.0, 0.0, 0.0, 0.0));
+        // Read rotation and facelets from state
+        let (display_rotation, facelets) = loop_state_rc.borrow().as_ref()
+            .map(|s| (s.display_rotation, s.facelets.clone()))
+            .unwrap_or((Quaternion::new(1.0, 0.0, 0.0, 0.0), Vec::new()));
         
+        render_state.update_cube_state(&facelets, None);
         render_state.display_rotation = display_rotation;
         
         // Render target
@@ -364,9 +358,10 @@ pub fn set_gyro_enabled(enabled: bool) {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
-pub fn update_gyro(x: f32, y: f32, z: f32, w: f32) {
+pub fn update_render_state(facelets: Vec<u8>, x: f32, y: f32, z: f32, w: f32) {
     STATE.with(|s| {
         if let Some(state) = s.borrow_mut().as_mut() {
+            state.facelets = facelets;
             state.raw_rotation = Quaternion::new(w, x, y, z);
             state.display_rotation = state.rotation_offset * state.raw_rotation;
         }
