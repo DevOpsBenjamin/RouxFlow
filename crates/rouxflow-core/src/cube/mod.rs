@@ -45,6 +45,7 @@ pub enum MotionState {
 }
 
 pub mod facelet;
+pub mod roux;
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +77,18 @@ impl CubeState {
 
     pub fn dump_debug(&self) {
         self.logic.dump_debug();
+    }
+
+    pub fn is_fb_solved(&self) -> bool {
+        roux::RouxSolver::is_fb_solved(&self.logic)
+    }
+
+    pub fn is_sb_solved(&self) -> bool {
+        roux::RouxSolver::is_sb_solved(&self.logic)
+    }
+
+    pub fn is_cmll_solved(&self) -> bool {
+        roux::RouxSolver::is_cmll_solved(&self.logic)
     }
 
 
