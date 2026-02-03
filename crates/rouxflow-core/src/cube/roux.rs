@@ -114,27 +114,27 @@ impl RouxSolver {
         let start_search = Instant::now();
         let mut solutions = Vec::new();
         
+        println!("      [Legacy Search] Thinking...");
+
         // Try increasing depths to find the shortest solutions first
-        for depth in 0..=9 {
+        for depth in 0..=5 {
             let start_depth = Instant::now();
             let prev_count = solutions.len();
+            let mut nodes = 0;
             
-            Self::dfs_find_fb(cube, &mut Vec::new(), depth, &mut solutions, count, "");
+            Self::dfs_find_fb(cube, &mut Vec::new(), depth, &mut solutions, count, "", &mut nodes);
             
+            let elapsed = start_depth.elapsed();
             if solutions.len() > prev_count {
-                let depth_elapsed = start_depth.elapsed();
-                let total_elapsed = start_search.elapsed();
                 for i in prev_count..solutions.len() {
-                    println!("   -> Solution {} found at depth {} (Time: {:?} total, {:?} for depth {})", 
-                        i + 1, depth, total_elapsed, depth_elapsed, depth);
+                    println!("      [Legacy Search] Solution {} found at depth {} (Nodes: {}, Depth Time: {:?})", 
+                        i + 1, depth, nodes, elapsed);
                 }
                 if solutions.len() >= count { break; }
             }
             
-            // Log progress for slow depths
-            if start_depth.elapsed().as_secs() > 1 {
-                println!("   [Search] Depth {} finished in {:?}", depth, start_depth.elapsed());
-            }
+            // Log progress - show all depths for comparison
+            println!("      [Legacy Search] Depth {} finished (Nodes: {}, Time: {:?})", depth, nodes, elapsed);
         }
         
         (solutions, start_search.elapsed())
@@ -146,8 +146,10 @@ impl RouxSolver {
         limit: usize, 
         solutions: &mut Vec<Vec<String>>, 
         count: usize,
-        last_face: &str
+        last_face: &str,
+        nodes: &mut usize
     ) {
+        *nodes += 1;
         if solutions.len() >= count { return; }
         
         // Check if solved (Expensive, maybe optimize with a bitmask later)
@@ -173,7 +175,7 @@ impl RouxSolver {
             next_cube.apply_move(m);
             
             path.push(m.to_string());
-            Self::dfs_find_fb(&next_cube, path, limit, solutions, count, face);
+            Self::dfs_find_fb(&next_cube, path, limit, solutions, count, face, nodes);
             path.pop();
             
             if solutions.len() >= count { return; }

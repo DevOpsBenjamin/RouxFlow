@@ -1,0 +1,8 @@
+[package]
+name = "rouxflow-ai"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rouxflow-core = { path = "../rouxflow-core" }
+serde = { version = "1.0", features = ["derive"] }

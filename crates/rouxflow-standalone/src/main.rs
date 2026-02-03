@@ -132,15 +132,24 @@ fn main() {
                     render_state.camera.target()
                 );
                 
-                println!("\nSearching for optimized FB solutions... (Thinking...)");
+                println!("\n[Search] Starting FB optimizations...");
+                
+                // 1. Legacy Solver (Core)
+                println!("   -> Legacy Solver: Thinking... ");
                 let mut search_cube = CubeState::new();
                 search_cube.logic = scrambled_logic.clone();
-                let (solutions, duration) = search_cube.find_fb_solutions(3);
-                optimization_solutions = solutions;
-                println!("Total Search Time: {:?}", duration);
-                println!("Found {} solutions.", optimization_solutions.len());
+                let (legacy_sols, legacy_time) = search_cube.find_fb_solutions(3);
+                println!("Found {} in {:?}", legacy_sols.len(), legacy_time);
+                
+                // 2. New AI Solver (Bitboard)
+                println!("   -> AI Solver (Bitboard): Thinking... ");
+                let bit_cube = rouxflow_ai::bitcube::BitCube::from_facelet(&scrambled_logic);
+                let (ai_sols, ai_time) = rouxflow_ai::solver::AISolver::find_fb_solutions(&bit_cube, 3);
+                println!("Found {} in {:?}", ai_sols.len(), ai_time);
 
-                // Reset cube to scrambled state immediately
+                optimization_solutions = ai_sols; // Use AI solutions for playback
+                
+                playback_state = PlaybackState::AnalysisPause;
                 cube_state.logic = scrambled_logic.clone();
                 
                 move_idx += 1; // Mark initial report as done

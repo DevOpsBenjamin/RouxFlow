@@ -1165,6 +1165,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rouxflow-ai"
+version = "0.1.0"
+dependencies = [
+ "rouxflow-core",
+ "serde",
+]
+
+[[package]]
 name = "rouxflow-core"
 version = "0.1.8"
 dependencies = [
@@ -1204,6 +1212,7 @@ version = "0.1.0"
 dependencies = [
  "cgmath",
  "rand",
+ "rouxflow-ai",
  "rouxflow-core",
  "rouxflow-render",
  "three-d",
