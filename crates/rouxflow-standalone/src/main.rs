@@ -79,11 +79,12 @@ fn main() {
                 move_idx += 1;
                 last_move = now;
                 
-                // ROUX STATUS CHECK
                 let fb = if cube_state.is_fb_solved() { "✅" } else { "❌" };
                 let sb = if cube_state.is_sb_solved() { "✅" } else { "❌" };
                 let cmll = if cube_state.is_cmll_solved() { "✅" } else { "❌" };
-                println!("[Solve {}/{}] Move: {:<3} | FB: {} | SB: {} | CMLL: {}", move_idx, solve_moves.len(), m, fb, sb, cmll);
+                let bad_edges = cube_state.count_bad_edges();
+                println!("[Solve {}/{}] {:<3} | FB: {} | SB: {} | CMLL: {} | EO: {} bad", 
+                    move_idx, solve_moves.len(), m, fb, sb, cmll, bad_edges);
             }
         }
         // 3. Random fallback

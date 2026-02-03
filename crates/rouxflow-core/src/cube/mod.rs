@@ -91,6 +91,10 @@ impl CubeState {
         roux::RouxSolver::is_cmll_solved(&self.logic)
     }
 
+    pub fn count_bad_edges(&self) -> usize {
+        roux::RouxSolver::count_bad_edges(&self.logic)
+    }
+
 
     /// Get all 54 facelet colors as a flat array of bytes (0-5)
     pub fn get_facelets(&self) -> Vec<u8> {
