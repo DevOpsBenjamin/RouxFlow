@@ -212,9 +212,9 @@ fn main() {
                 render_state.update_cube_state(&cube_state.facelets(), None);
                 
                 if current_opt_idx < optimization_solutions.len() {
-                    println!(">>> Waiting 3s before next solution...");
+                    println!(">>> Waiting 5s before next solution...");
                     playback_state = PlaybackState::AnalysisPause; // Reuse AnalysisPause or logic below
-                    last_move = now + Duration::from_secs(7); // Wait only 3s (10 - 7)
+                    last_move = now + Duration::from_secs(5); // Wait 5s total (10 - 5)
                     move_idx = solve_moves.len() + 2; // Jump to Step B
                 } else {
                     println!("\nAll optimization solutions shown. Solve Complete.");

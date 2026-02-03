@@ -89,6 +89,11 @@ impl AISolver {
             let face = m.face();
             if face == last_face { continue; }
             
+            // Pruning for commuting faces (e.g., allow U-then-D, prune D-then-U)
+            // Convention: always play the lower index face first when they commute.
+            // Faces: U:0, D:1 | L:2, R:3 | F:4, B:5
+            if (face ^ 1 == last_face) && (face < last_face) { continue; }
+            
             cube.apply_move_enum(m);
             path.push(m);
             

@@ -15,7 +15,7 @@ impl Move {
         Move::U, Move::Up, Move::U2,
         Move::D, Move::Dp, Move::D2,
         Move::L, Move::Lp, Move::L2,
-        Move::R, Move::Rp, Move::R2,
+        Move::Rw, Move::Rwp, Move::Rw2,
         Move::F, Move::Fp, Move::F2,
         Move::B, Move::Bp, Move::B2,
         Move::M, Move::Mp, Move::M2,
