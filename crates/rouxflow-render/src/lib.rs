@@ -155,11 +155,11 @@ pub struct RenderState {
     anim_duration_secs: f32, // how long the animation should take
     
     // Pending state (applied after animation ends)
-    pending_facelets: Option<Vec<u8>>,
+    pub(crate) pending_facelets: Option<Vec<u8>>,
     
-    camera: Camera,
-    control: OrbitControl,
-    ambient_light: AmbientLight,
+    pub camera: Camera,
+    pub control: OrbitControl,
+    pub ambient_light: AmbientLight,
     directional_light: DirectionalLight,
     directional_light_2: DirectionalLight,
 }
@@ -172,7 +172,7 @@ impl RenderState {
         
         let camera = Camera::new_perspective(
             viewport,
-            vec3(0.0, 0.0, 14.0),
+            vec3(11.0, 6.0, 7.0), // User's preferred orbit view
             vec3(0.0, 0.0, 0.0),
             vec3(0.0, 1.0, 0.0),
             degrees(45.0),
@@ -311,8 +311,8 @@ impl RenderState {
             self.anim_progress = (self.anim_progress + delta_time * speed).min(1.0);
         }
 
-        // When animation JUST finished, apply the pending state
-        if was_animating && self.anim_progress >= 1.0 {
+        // When animation JUST finished, OR if we have a pending state and are not animating
+        if (was_animating && self.anim_progress >= 1.0) || (self.anim_progress >= 1.0 && self.pending_facelets.is_some()) {
             self.apply_pending_state();
         }
 

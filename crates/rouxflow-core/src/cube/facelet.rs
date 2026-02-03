@@ -1,6 +1,6 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Color {
     White = 0,
     Yellow = 1,
@@ -13,7 +13,7 @@ pub enum Color {
 /// A Rubik's Cube represented by its 54 facelets.
 /// Face order: U(0), R(1), F(2), D(3), L(4), B(5)
 /// Each face is 3x3 (9 facelets), indexed 0-8 (top-left to bottom-right)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FaceletCube {
     pub facelets: Vec<Color>,
 }

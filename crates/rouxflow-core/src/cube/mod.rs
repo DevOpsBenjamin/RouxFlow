@@ -54,7 +54,8 @@ pub struct CubeState {
     pub orientation: Option<Quaternion>,
     pub motion: MotionState,
     #[serde(skip)]
-    pub(crate) logic: facelet::FaceletCube,
+    #[wasm_bindgen(skip)]
+    pub logic: facelet::FaceletCube,
 }
 
 #[wasm_bindgen]
@@ -103,9 +104,9 @@ impl CubeState {
         roux::RouxSolver::is_l4e_solved(&self.logic)
     }
 
-
     /// Get all 54 facelet colors as a flat array of bytes (0-5)
-    pub fn get_facelets(&self) -> Vec<u8> {
+    #[wasm_bindgen(getter)]
+    pub fn facelets(&self) -> Vec<u8> {
         self.logic.facelets.iter().map(|&c| c as u8).collect()
     }
 
@@ -127,6 +128,17 @@ impl CubeState {
     #[wasm_bindgen(getter)]
     pub fn stickers(&self) -> Vec<u8> {
         self.stickers.clone()
+    }
+}
+
+// Native-only methods (non-WASM compatible types like Vec<Vec<String>>)
+impl CubeState {
+    pub fn find_fb_solutions(&self, count: usize) -> (Vec<Vec<String>>, std::time::Duration) {
+        roux::RouxSolver::find_fb_solutions(&self.logic, count)
+    }
+    
+    pub fn invert_moves(moves: &[String]) -> Vec<String> {
+        roux::RouxSolver::invert_moves(moves)
     }
 }
 

@@ -104,6 +104,94 @@ impl RouxSolver {
         }
         bad
     }
+
+    /// Bounded search to find efficient First Block (FB) solutions
+    /// Returns (Solutions, TotalDuration)
+    /// Bounded search to find efficient First Block (FB) solutions
+    /// Returns (Solutions, TotalDuration)
+    pub fn find_fb_solutions(cube: &FaceletCube, count: usize) -> (Vec<Vec<String>>, std::time::Duration) {
+        use std::time::Instant;
+        let start_search = Instant::now();
+        let mut solutions = Vec::new();
+        
+        // Try increasing depths to find the shortest solutions first
+        for depth in 0..=9 {
+            let start_depth = Instant::now();
+            let prev_count = solutions.len();
+            
+            Self::dfs_find_fb(cube, &mut Vec::new(), depth, &mut solutions, count, "");
+            
+            if solutions.len() > prev_count {
+                let depth_elapsed = start_depth.elapsed();
+                let total_elapsed = start_search.elapsed();
+                for i in prev_count..solutions.len() {
+                    println!("   -> Solution {} found at depth {} (Time: {:?} total, {:?} for depth {})", 
+                        i + 1, depth, total_elapsed, depth_elapsed, depth);
+                }
+                if solutions.len() >= count { break; }
+            }
+            
+            // Log progress for slow depths
+            if start_depth.elapsed().as_secs() > 1 {
+                println!("   [Search] Depth {} finished in {:?}", depth, start_depth.elapsed());
+            }
+        }
+        
+        (solutions, start_search.elapsed())
+    }
+
+    fn dfs_find_fb(
+        cube: &FaceletCube, 
+        path: &mut Vec<String>, 
+        limit: usize, 
+        solutions: &mut Vec<Vec<String>>, 
+        count: usize,
+        last_face: &str
+    ) {
+        if solutions.len() >= count { return; }
+        
+        // Check if solved (Expensive, maybe optimize with a bitmask later)
+        if Self::is_fb_solved(cube) {
+            solutions.push(path.clone());
+            return;
+        }
+        
+        if path.len() >= limit { return; }
+
+        let moves = [
+            "U", "U'", "U2", "D", "D'", "D2", "L", "L'", "L2", 
+            "F", "F'", "F2", "B", "B'", "B2", "M", "M'", "M2",
+            "r", "r'", "r2"
+        ];
+
+        for m in moves {
+            let face = &m[0..1];
+            if face == last_face { continue; }
+            
+            // Lightweight move and recurse
+            let mut next_cube = cube.clone(); 
+            next_cube.apply_move(m);
+            
+            path.push(m.to_string());
+            Self::dfs_find_fb(&next_cube, path, limit, solutions, count, face);
+            path.pop();
+            
+            if solutions.len() >= count { return; }
+        }
+    }
+
+    /// Helper to invert a sequence of moves
+    pub fn invert_moves(moves: &[String]) -> Vec<String> {
+        moves.iter().rev().map(|m| {
+            if m.ends_with('2') {
+                m.clone()
+            } else if m.ends_with('\'') {
+                m[0..m.len()-1].to_string()
+            } else {
+                format!("{}'", m)
+            }
+        }).collect()
+    }
 }
 
 fn is_bad_edge(top_front: Color, side: Color, u_ref: Color, f_ref: Color) -> bool {

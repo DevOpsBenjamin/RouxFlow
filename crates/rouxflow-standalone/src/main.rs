@@ -4,7 +4,13 @@ use rouxflow_render::RenderState;
 use std::time::{Duration, Instant};
 
 #[derive(PartialEq, Clone, Copy, Debug)]
-enum RouxPhase { FB, SB, CMLL, LSE_EO, LSE_ULUR, LSE_L4E, DONE }
+enum RouxPhase { Fb, Sb, Cmll, LseEo, LseUlur, LseL4e, Done }
+
+#[derive(PartialEq, Clone, Copy, Debug)]
+enum PlaybackState { Scramble, Solve, AnalysisPause, OptimizationUndo, OptimizationPlay, Finished }
+
+#[derive(PartialEq, Clone, Copy, Debug)]
+enum MovePhase { User, AI }
 
 
 fn main() {
@@ -39,10 +45,17 @@ fn main() {
     // Timing and Progress
     let mut last_move = Instant::now();
     let mut move_idx = 0;
-    let mut is_solving = false;
+    let mut playback_state = PlaybackState::Scramble;
+    
+    // Optimization Tracking
+    let mut optimization_solutions: Vec<Vec<String>> = Vec::new();
+    let mut current_opt_idx = 0;
+    
+    // Save scrambled state for AI search
+    let mut scrambled_logic = cube_state.logic.clone();
     
     // Roux Phase Tracking
-    let mut current_phase = RouxPhase::FB;
+    let mut current_phase = RouxPhase::Fb;
     let mut phase_moves: Vec<(String, Vec<String>)> = vec![
         ("FB".to_string(), Vec::new()),
         ("SB".to_string(), Vec::new()),
@@ -69,7 +82,7 @@ fn main() {
         let now = Instant::now();
         
         // 1. Play Scramble (Fast: 200ms between moves, 150ms animation)
-        if !is_solving && move_idx < scramble_moves.len() {
+        if playback_state == PlaybackState::Scramble && move_idx < scramble_moves.len() {
             if last_move.elapsed() >= Duration::from_millis(200) {
                 let m = &scramble_moves[move_idx];
                 cube_state.apply_move(m);
@@ -79,14 +92,16 @@ fn main() {
                 last_move = now;
                 if move_idx == scramble_moves.len() {
                     println!("Scramble complete. Starting solve playback...");
-                    is_solving = true;
+                    // Save the scrambled logic for AI search later
+                    scrambled_logic = cube_state.logic.clone();
+                    playback_state = PlaybackState::Solve;
                     move_idx = 0;
                     last_move = now + Duration::from_secs(1);
                 }
             }
         } 
         // 2. Play Solve (Snappy: 150ms between moves, 100ms animation)
-        else if is_solving && move_idx < solve_moves.len() {
+        else if playback_state == PlaybackState::Solve && move_idx < solve_moves.len() {
             if last_move.elapsed() >= Duration::from_millis(150) {
                 let m = &solve_moves[move_idx];
                 cube_state.apply_move(m);
@@ -99,17 +114,139 @@ fn main() {
                 track_move_phase(&mut current_phase, &mut phase_moves, &cube_state, m, move_idx, solve_moves.len(), debug_mode);
 
                 if move_idx == solve_moves.len() {
-                    print_solve_analysis(&cube_state, &phase_moves);
+                    // Start the analysis pause AFTER the last move animation has time to be seen
+                    playback_state = PlaybackState::AnalysisPause;
+                    last_move = now; // Start 1s timer
                 }
             }
         }
+        // 3. Pause after Analysis (1s for last move + 10s for analysis)
+        else if playback_state == PlaybackState::AnalysisPause {
+            // Step A: Wait 1s for the last move animation to definitely finish
+            if move_idx == solve_moves.len() && last_move.elapsed() >= Duration::from_millis(1000) {
+                print_solve_analysis(&cube_state, &phase_moves);
+                
+                // Print camera orbit state as requested
+                println!("Camera State: Position({:?}), Target({:?})", 
+                    render_state.camera.position(), 
+                    render_state.camera.target()
+                );
+                
+                println!("\nSearching for optimized FB solutions... (Thinking...)");
+                let mut search_cube = CubeState::new();
+                search_cube.logic = scrambled_logic.clone();
+                let (solutions, duration) = search_cube.find_fb_solutions(3);
+                optimization_solutions = solutions;
+                println!("Total Search Time: {:?}", duration);
+                println!("Found {} solutions.", optimization_solutions.len());
 
+                // Reset cube to scrambled state immediately
+                cube_state.logic = scrambled_logic.clone();
+                
+                move_idx += 1; // Mark initial report as done
+                last_move = now; // Start the 10s review timer
+                println!(">>> Reviewing analysis... (10s total pause)");
+            }
+            // Step B: Split the 10s pause (5s view solve, 5s prepare)
+            else if move_idx > solve_moves.len() {
+                let elapsed = last_move.elapsed();
+                
+                // After 5s: Show we are starting the AI phase
+                if move_idx == solve_moves.len() + 1 && elapsed >= Duration::from_secs(5) {
+                    println!(">>> 5s elapsed: Preparing for AI solutions...");
+                    move_idx += 1; 
+                }
+                
+                // After 10s total: Start FIRST optimization
+                if elapsed >= Duration::from_secs(10) {
+                    if current_opt_idx < optimization_solutions.len() {
+                        let sol_len = optimization_solutions[current_opt_idx].len();
+                        println!("\n[AI INFO] Starting Solution {}/{} ({} moves)", current_opt_idx + 1, optimization_solutions.len(), sol_len);
+                        println!("Moves: {}", optimization_solutions[current_opt_idx].join(" "));
+                        
+                        // Force reset to EXACT scrambled state before starting AI solution
+                        cube_state.logic = scrambled_logic.clone();
+                        render_state.update_cube_state(&cube_state.facelets(), None);
+                        
+                        playback_state = PlaybackState::OptimizationPlay;
+                        move_idx = 0;
+                        last_move = now;
+                    } else {
+                        println!("\nNo optimization solutions found in current depth.");
+                        playback_state = PlaybackState::Finished;
+                    }
+                }
+            }
+        }
+        // New State: Optimization Undo (Plays inverse moves quickly)
+        else if playback_state == PlaybackState::OptimizationUndo {
+            let undo_moves = CubeState::invert_moves(&optimization_solutions[current_opt_idx - 1]);
+            if move_idx < undo_moves.len() {
+                if last_move.elapsed() >= Duration::from_millis(150) {
+                    let m = &undo_moves[move_idx];
+                    cube_state.apply_move(m);
+                    render_state.trigger_move_anim(m, 0.1);
+
+                    move_idx += 1;
+                    last_move = now;
+                }
+            } else {
+                // Undo finished
+                println!(">>> Solution Undo finished. Resetting to exact scramble state.");
+                cube_state.logic = scrambled_logic.clone();
+                render_state.update_cube_state(&cube_state.facelets(), None);
+                
+                if current_opt_idx < optimization_solutions.len() {
+                    println!(">>> Waiting 3s before next solution...");
+                    playback_state = PlaybackState::AnalysisPause; // Reuse AnalysisPause or logic below
+                    last_move = now + Duration::from_secs(7); // Wait only 3s (10 - 7)
+                    move_idx = solve_moves.len() + 2; // Jump to Step B
+                } else {
+                    println!("\nAll optimization solutions shown. Solve Complete.");
+                    playback_state = PlaybackState::Finished;
+                }
+            }
+        }
+        // 4. Play Optimization Solution (3s per move)
+        else if playback_state == PlaybackState::OptimizationPlay {
+            let current_sol = &optimization_solutions[current_opt_idx];
+            if move_idx < current_sol.len() {
+                if last_move.elapsed() >= Duration::from_secs(3) {
+                    let m = &current_sol[move_idx];
+                    println!("   -> AI Move {}/{}: {}", move_idx + 1, current_sol.len(), m);
+                    cube_state.apply_move(m);
+                    render_state.trigger_move_anim(m, 1.0);
+
+                    move_idx += 1;
+                    last_move = now;
+                }
+            } else {
+                // Solution finished
+                current_opt_idx += 1;
+                println!(">>> Solution {} Finished.", current_opt_idx);
+                
+                if current_opt_idx <= optimization_solutions.len() {
+                    println!(">>> Starting INVERTED playback (Undoing solution)...");
+                    playback_state = PlaybackState::OptimizationUndo;
+                    move_idx = 0;
+                    last_move = now;
+                } else {
+                    println!("\nAll optimization solutions shown. Solve Complete.");
+                    playback_state = PlaybackState::Finished;
+                }
+            }
+        }
+        // (OptimizationGap removed in favor of OptimizationUndo)
 
         // Render frame
-        render_state.update_cube_state(&cube_state.get_facelets(), None);
+        render_state.update_cube_state(&cube_state.facelets(), None);
         render_state.render_frame(&frame_input.screen(), frame_input.elapsed_time as f32 / 1000.0);
         
-        FrameOutput::default()
+        // Exit if finished
+        FrameOutput {
+            exit: playback_state == PlaybackState::Finished,
+            ..Default::default()
+        }
     });
 }
 
@@ -123,11 +260,11 @@ fn track_move_phase(
     debug: bool
 ) {
     let phase_idx = match current_phase {
-        RouxPhase::FB => 0,
-        RouxPhase::SB => 1,
-        RouxPhase::CMLL => 2,
-        RouxPhase::LSE_EO => 3,
-        RouxPhase::LSE_ULUR => 4,
+        RouxPhase::Fb => 0,
+        RouxPhase::Sb => 1,
+        RouxPhase::Cmll => 2,
+        RouxPhase::LseEo => 3,
+        RouxPhase::LseUlur => 4,
         _ => 5,
     };
     phase_moves[phase_idx].1.push(m.to_string());
@@ -146,23 +283,23 @@ fn track_move_phase(
 
     // Transition logic
     let bad_edges = cube.count_bad_edges();
-    if *current_phase == RouxPhase::FB && cube.is_fb_solved() {
-        *current_phase = RouxPhase::SB;
+    if *current_phase == RouxPhase::Fb && cube.is_fb_solved() {
+        *current_phase = RouxPhase::Sb;
         println!(">>> Progress: First Block Finished [Solve {:2}/{:2}]", idx, total);
-    } else if *current_phase == RouxPhase::SB && cube.is_sb_solved() {
-        *current_phase = RouxPhase::CMLL;
+    } else if *current_phase == RouxPhase::Sb && cube.is_sb_solved() {
+        *current_phase = RouxPhase::Cmll;
         println!(">>> Progress: Second Block Finished [Solve {:2}/{:2}]", idx, total);
-    } else if *current_phase == RouxPhase::CMLL && cube.is_cmll_solved() {
-        *current_phase = RouxPhase::LSE_EO;
+    } else if *current_phase == RouxPhase::Cmll && cube.is_cmll_solved() {
+        *current_phase = RouxPhase::LseEo;
         println!(">>> Progress: CMLL Finished [Solve {:2}/{:2}]", idx, total);
-    } else if *current_phase == RouxPhase::LSE_EO && bad_edges == 0 {
-        *current_phase = RouxPhase::LSE_ULUR;
+    } else if *current_phase == RouxPhase::LseEo && bad_edges == 0 {
+        *current_phase = RouxPhase::LseUlur;
         println!(">>> Progress: LSE EO Finished [Solve {:2}/{:2}]", idx, total);
-    } else if *current_phase == RouxPhase::LSE_ULUR && cube.is_ul_ur_placed() {
-        *current_phase = RouxPhase::LSE_L4E;
+    } else if *current_phase == RouxPhase::LseUlur && cube.is_ul_ur_placed() {
+        *current_phase = RouxPhase::LseL4e;
         println!(">>> Progress: LSE UL/UR Finished [Solve {:2}/{:2}]", idx, total);
-    } else if *current_phase == RouxPhase::LSE_L4E && cube.is_l4e_solved() {
-        *current_phase = RouxPhase::DONE;
+    } else if *current_phase == RouxPhase::LseL4e && cube.is_l4e_solved() {
+        *current_phase = RouxPhase::Done;
         println!(">>> Progress: Solve Finished [Solve {:2}/{:2}]", idx, total);
     }
 }
