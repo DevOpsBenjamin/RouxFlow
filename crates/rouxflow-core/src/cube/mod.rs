@@ -95,6 +95,14 @@ impl CubeState {
         roux::RouxSolver::count_bad_edges(&self.logic)
     }
 
+    pub fn is_ul_ur_placed(&self) -> bool {
+        roux::RouxSolver::is_ul_ur_placed(&self.logic)
+    }
+
+    pub fn is_l4e_solved(&self) -> bool {
+        roux::RouxSolver::is_l4e_solved(&self.logic)
+    }
+
 
     /// Get all 54 facelet colors as a flat array of bytes (0-5)
     pub fn get_facelets(&self) -> Vec<u8> {

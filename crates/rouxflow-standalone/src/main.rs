@@ -39,6 +39,19 @@ fn main() {
     let mut move_idx = 0;
     let mut is_solving = false;
     
+    // Roux Phase Tracking
+    #[derive(PartialEq, Clone, Copy, Debug)]
+    enum RouxPhase { FB, SB, CMLL, LSE_EO, LSE_ULUR, LSE_L4E, DONE }
+    let mut current_phase = RouxPhase::FB;
+    let mut phase_moves: Vec<(String, Vec<String>)> = vec![
+        ("FB".to_string(), Vec::new()),
+        ("SB".to_string(), Vec::new()),
+        ("CMLL".to_string(), Vec::new()),
+        ("LSE (EO)".to_string(), Vec::new()),
+        ("LSE (ULUR)".to_string(), Vec::new()),
+        ("LSE (Finish)".to_string(), Vec::new()),
+    ];
+    
     use rand::seq::SliceRandom;
     let move_options = ["U", "U'", "U2", "D", "D'", "D2", "L", "L'", "L2", "R", "R'", "R2", "F", "F'", "F2", "B", "B'", "B2"];
 
@@ -57,34 +70,82 @@ fn main() {
         
         let now = Instant::now();
         
-        // 1. Play Scramble (Fast: 200ms)
+        // 1. Play Scramble (Fast)
         if !is_solving && move_idx < scramble_moves.len() {
             if last_move.elapsed() >= Duration::from_millis(100) {
                 cube_state.apply_move(&scramble_moves[move_idx]);
                 move_idx += 1;
                 last_move = now;
                 if move_idx == scramble_moves.len() {
-                    println!("Scramble complete. Starting solve playback in 1s...");
+                    println!("Scramble complete. Starting solve playback...");
                     is_solving = true;
                     move_idx = 0;
-                    last_move = now + Duration::from_secs(1); // Small delay before solve
+                    last_move = now + Duration::from_secs(1);
                 }
             }
         } 
-        // 2. Play Solve (Slower: 800ms)
+        // 2. Play Solve (Tracking Phases)
         else if is_solving && move_idx < solve_moves.len() {
-            if last_move.elapsed() >= Duration::from_millis(800) {
+            if last_move.elapsed() >= Duration::from_millis(500) {
                 let m = &solve_moves[move_idx];
                 cube_state.apply_move(m);
                 move_idx += 1;
                 last_move = now;
-                
+
+                // Add move to current phase repository
+                let phase_idx = match current_phase {
+                    RouxPhase::FB => 0,
+                    RouxPhase::SB => 1,
+                    RouxPhase::CMLL => 2,
+                    RouxPhase::LSE_EO => 3,
+                    RouxPhase::LSE_ULUR => 4,
+                    _ => 5,
+                };
+                phase_moves[phase_idx].1.push(m.clone());
+
+                // Update Phase State Machine (triggers only once per phase)
                 let fb = if cube_state.is_fb_solved() { "✅" } else { "❌" };
                 let sb = if cube_state.is_sb_solved() { "✅" } else { "❌" };
                 let cmll = if cube_state.is_cmll_solved() { "✅" } else { "❌" };
                 let bad_edges = cube_state.count_bad_edges();
+                
                 println!("[Solve {}/{}] {:<3} | FB: {} | SB: {} | CMLL: {} | EO: {} bad", 
                     move_idx, solve_moves.len(), m, fb, sb, cmll, bad_edges);
+
+                // Phase transition logic
+                if current_phase == RouxPhase::FB && cube_state.is_fb_solved() {
+                    current_phase = RouxPhase::SB;
+                    println!(">>> Progress: First Block Finished");
+                } else if current_phase == RouxPhase::SB && cube_state.is_sb_solved() {
+                    current_phase = RouxPhase::CMLL;
+                    println!(">>> Progress: Second Block Finished");
+                } else if current_phase == RouxPhase::CMLL && cube_state.is_cmll_solved() {
+                    current_phase = RouxPhase::LSE_EO;
+                    println!(">>> Progress: CMLL Finished");
+                } else if current_phase == RouxPhase::LSE_EO && bad_edges == 0 {
+                    current_phase = RouxPhase::LSE_ULUR;
+                    println!(">>> Progress: LSE EO Finished");
+                } else if current_phase == RouxPhase::LSE_ULUR && cube_state.is_ul_ur_placed() {
+                    current_phase = RouxPhase::LSE_L4E;
+                    println!(">>> Progress: LSE UL/UR Finished");
+                } else if current_phase == RouxPhase::LSE_L4E && cube_state.is_l4e_solved() {
+                    current_phase = RouxPhase::DONE;
+                    println!(">>> Progress: Solve Finished");
+                }
+
+                if move_idx == solve_moves.len() {
+                    println!("\n===== ROUX SOLVE ANALYSIS =====");
+                    let mut total_moves = 0;
+                    for (name, moves) in &phase_moves {
+                        if !moves.is_empty() {
+                            println!("{:<15}: {:2} moves -> {}", name, moves.len(), moves.join(" "));
+                            total_moves += moves.len();
+                        }
+                    }
+                    println!("-------------------------------");
+                    println!("Total Moves: {}", total_moves);
+                    println!("===============================\n");
+                }
             }
         }
         // 3. Random fallback
