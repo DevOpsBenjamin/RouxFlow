@@ -1,61 +1,83 @@
 use crate::bitcube::BitCube;
 use std::time::{Instant, Duration};
+use crate::move_indices::Move;
+use rayon::prelude::*;
 
 pub struct AISolver;
 
 impl AISolver {
-    /// Accelerated First Block (FB) search using BitCube
     pub fn find_fb_solutions(cube: &BitCube, count: usize) -> (Vec<Vec<String>>, Duration) {
         let start = Instant::now();
         let mut solutions = Vec::new();
-        let mut work_cube = cube.clone();
         
-        println!("      [AI Search] Thinking...");
+        println!("      [AI Search] Parallel Thinking (Rayon Enabled)...");
 
-        // Moveset for FB (Roux native style)
-        let moves = [
-            "U", "U'", "U2", "D", "D'", "D2", "L", "L'", "L2", 
-            "F", "F'", "F2", "B", "B'", "B2", "M", "M'", "M2",
-            "r", "r'", "r2"
-        ];
+        let moves = Move::ALL;
 
-        // IDA* style search (iterative deepening) - Limited to depth 5 for testing
-        for depth in 0..=5 {
+        // IDA* style search
+        // We stop at depth 8 for benchmark
+        for depth in 2..=8 {
             let start_depth = Instant::now();
-            let mut path = Vec::new();
-            let mut nodes = 0;
-            let prev_count = solutions.len();
-
-            Self::dfs(&mut work_cube, &mut path, depth, &mut solutions, count, &moves, "", &mut nodes);
             
+            // Parallelize top level and aggregate solutions AND nodes
+            let (depth_solutions, total_nodes): (Vec<Vec<Vec<Move>>>, Vec<usize>) = moves.into_par_iter()
+                .map(|first_move| {
+                    let mut local_solutions = Vec::new();
+                    let mut work_cube = cube.clone();
+                    let mut path = vec![first_move];
+                    let mut nodes = 0;
+                    
+                    work_cube.apply_move_enum(first_move);
+                    Self::dfs_numerical(
+                        &mut work_cube, 
+                        &mut path, 
+                        depth, 
+                        &mut local_solutions, 
+                        count, 
+                        &moves, 
+                        first_move.face(), 
+                        &mut nodes
+                    );
+                    (local_solutions, nodes)
+                })
+                .unzip();
+
+            let depth_nodes: usize = total_nodes.into_iter().sum();
             let elapsed = start_depth.elapsed();
-            if solutions.len() > prev_count {
-                for i in prev_count..solutions.len() {
-                    println!("      [AI Search] Solution {} found at depth {} (Nodes: {}, Time: {:?})", 
-                        i + 1, depth, nodes, elapsed);
+            
+            // Add unique solutions
+            let flattened: Vec<Vec<Move>> = depth_solutions.into_iter().flatten().collect();
+            for sol in flattened {
+                let sol_str = sol.iter().map(|m| m.as_str().to_string()).collect();
+                if !solutions.contains(&sol_str) {
+                    solutions.push(sol_str);
                 }
-            } else {
-                println!("      [AI Search] Depth {} finished (Nodes: {}, Time: {:?})", depth, nodes, elapsed);
             }
 
-            if solutions.len() >= count { break; }
+            println!("      [AI Search] Depth {} finished (Nodes: {}, Solutions Found: {}, Time: {:?})", 
+                depth, depth_nodes, solutions.len(), elapsed);
+            
+            // Benchmarking usually ignores count limits to see full time
         }
         
         (solutions, start.elapsed())
     }
 
-    fn dfs(
+    fn dfs_numerical(
         cube: &mut BitCube,
-        path: &mut Vec<String>,
+        path: &mut Vec<Move>,
         limit: usize,
-        solutions: &mut Vec<Vec<String>>,
+        solutions: &mut Vec<Vec<Move>>,
         count: usize,
-        moves: &[&'static str],
-        last_face: &str,
+        moves: &[Move],
+        last_face: u8,
         nodes: &mut usize
     ) {
         *nodes += 1;
-        if solutions.len() >= count { return; }
+        
+        // --- PRUNING PLACEHOLDER ---
+        // If we had a table, we would check: 
+        // if path.len() + table.estimate(cube) > limit { return; }
         
         if cube.is_fb_solved() {
             solutions.push(path.clone());
@@ -65,32 +87,21 @@ impl AISolver {
         if path.len() >= limit { return; }
 
         for &m in moves {
-            let face = &m[0..1];
+            let face = m.face();
             if face == last_face { continue; }
-            // Basic pruning: parallel moves
-            if (face == "D" && last_face == "U") || (face == "B" && last_face == "F") || (face == "R" && last_face == "L") { continue; }
+            
+            // Basic pruning: parallel moves (U after D, etc)
+            if (face == 1 && last_face == 0) || (face == 5 && last_face == 4) { continue; }
 
-            // Move
-            cube.apply_move(m);
-            path.push(m.to_string());
+            cube.apply_move_enum(m);
+            path.push(m);
             
-            Self::dfs(cube, path, limit, solutions, count, moves, face, nodes);
+            Self::dfs_numerical(cube, path, limit, solutions, count, moves, face, nodes);
             
-            // Backtrack
             path.pop();
-            cube.apply_move(&Self::invert_move(m));
+            cube.apply_move_enum(m.inverse());
             
             if solutions.len() >= count { return; }
-        }
-    }
-
-    fn invert_move(m: &str) -> String {
-        if m.ends_with('2') {
-            m.to_string()
-        } else if m.ends_with('\'') {
-            m[0..m.len()-1].to_string()
-        } else {
-            format!("{}'", m)
         }
     }
 }

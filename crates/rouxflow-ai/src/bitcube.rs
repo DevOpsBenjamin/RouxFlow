@@ -1,4 +1,5 @@
 use rouxflow_core::cube::facelet::{FaceletCube, Color};
+use crate::move_indices::Move;
 
 /// A Rubik's Cube represented by bitboards for high-performance search.
 /// Each color (White, Yellow, Green, Blue, Red, Orange) has a 64-bit integer.
@@ -21,7 +22,22 @@ impl BitCube {
         BitCube { boards }
     }
 
-    /// Optimized move application using bitwise operations
+    /// Optimized move application using numeric enum
+    pub fn apply_move_enum(&mut self, m: Move) {
+        match m {
+            Move::U => self.rotate_u(), Move::Up => self.rotate_u_prime(), Move::U2 => { self.rotate_u(); self.rotate_u(); },
+            Move::D => self.rotate_d(), Move::Dp => self.rotate_d_prime(), Move::D2 => { self.rotate_d(); self.rotate_d(); },
+            Move::L => self.rotate_l(), Move::Lp => self.rotate_l_prime(), Move::L2 => { self.rotate_l(); self.rotate_l(); },
+            Move::R => self.rotate_r(), Move::Rp => self.rotate_r_prime(), Move::R2 => { self.rotate_r(); self.rotate_r(); },
+            Move::F => self.rotate_f(), Move::Fp => self.rotate_f_prime(), Move::F2 => { self.rotate_f(); self.rotate_f(); },
+            Move::B => self.rotate_b(), Move::Bp => self.rotate_b_prime(), Move::B2 => { self.rotate_b(); self.rotate_b(); },
+            Move::M => self.rotate_m(), Move::Mp => self.rotate_m_prime(), Move::M2 => { self.rotate_m(); self.rotate_m(); },
+            Move::r => { self.rotate_r(); self.rotate_m_prime(); },
+            Move::rp => { self.rotate_r_prime(); self.rotate_m(); },
+            Move::r2 => { self.rotate_r(); self.rotate_r(); self.rotate_m(); self.rotate_m(); },
+        }
+    }
+
     pub fn apply_move(&mut self, move_str: &str) {
         let clean_move = move_str.trim();
         if clean_move.is_empty() { return; }
@@ -55,248 +71,206 @@ impl BitCube {
         }
     }
 
-    /// Helper to apply a permutation of bits to all boards
-    fn apply_permutation(&mut self, p: &[usize; 54]) {
-        let mut next_boards = [0u64; 6];
-        for color_idx in 0..6 {
-            let mut next_board = 0u64;
-            let current_board = self.boards[color_idx];
-            for (to, &from) in p.iter().enumerate() {
-                if (current_board & (1 << from)) != 0 {
-                    next_board |= 1 << to;
-                }
-            }
-            next_boards[color_idx] = next_board;
-        }
-        self.boards = next_boards;
+    // Face rotation bit indices (unrolled for speed)
+    // 012 -> 258, 345 -> 147, 678 -> 036
+    #[inline(always)]
+    fn rotate_face_bits(v: u64) -> u64 {
+        // v bits: 0 1 2 / 3 4 5 / 6 7 8
+        let corners = ((v & 0x01) << 2) | ((v & 0x04) << 6) | ((v & 0x100) >> 2) | ((v & 0x40) >> 6);
+        let edges   = ((v & 0x02) << 4) | ((v & 0x20) << 2) | ((v & 0x80) >> 4) | ((v & 0x08) >> 2);
+        let center  = v & 0x10;
+        corners | edges | center
     }
 
-    // Individual face rotations (Clockwise)
-    // Indices: U(0-8), R(9-17), F(18-26), D(27-35), L(36-44), B(45-53)
-    
     fn rotate_u(&mut self) {
-        let f_mask: u64 = 0x7 << 18;
-        let r_mask: u64 = 0x7 << 9;
-        let b_mask: u64 = 0x7 << 45;
-        let l_mask: u64 = 0x7 << 36;
-        let u_face_mask: u64 = 0x1FF;
-
+        const SIDE_MASK: u64 = (0x7 << 18) | (0x7 << 9) | (0x7 << 45) | (0x7 << 36);
         for b in &mut self.boards {
             let old = *b;
-            let mut next = old & !(f_mask | r_mask | b_mask | l_mask | u_face_mask);
-            
-            // Face rotation (012 -> 258, 345 -> 147, 678 -> 036)
-            next |= ((old >> 0) & 1) << 2; next |= ((old >> 1) & 1) << 5; next |= ((old >> 2) & 1) << 8;
-            next |= ((old >> 3) & 1) << 1; next |= ((old >> 4) & 1) << 4; next |= ((old >> 5) & 1) << 7;
-            next |= ((old >> 6) & 1) << 0; next |= ((old >> 7) & 1) << 3; next |= ((old >> 8) & 1) << 6;
-
-            // Sides: F -> L (18->36), L -> B (36->45), B -> R (45->9), R -> F (9->18)
-            next |= (old & r_mask) << 9;   // R -> F
-            next |= (old & f_mask) << 18;  // F -> L
-            next |= (old & l_mask) << 9;   // L -> B
-            next |= (old & b_mask) >> 36;  // B -> R
+            let mut next = old & !(SIDE_MASK | 0x1FF);
+            next |= Self::rotate_face_bits(old & 0x1FF);
+            next |= ((old >> 9) & 0x7) << 18; // R -> F
+            next |= ((old >> 18) & 0x7) << 36; // F -> L
+            next |= ((old >> 36) & 0x7) << 45; // L -> B
+            next |= ((old >> 45) & 0x7) << 9;  // B -> R
             *b = next;
         }
     }
 
     fn rotate_d(&mut self) {
-        let f_mask: u64 = 0x7 << (18 + 6);
-        let r_mask: u64 = 0x7 << (9 + 6);
-        let b_mask: u64 = 0x7 << (45 + 6);
-        let l_mask: u64 = 0x7 << (36 + 6);
-        let d_face_mask: u64 = 0x1FF << 27;
-
+        const SIDE_MASK: u64 = (0x7 << 24) | (0x7 << 15) | (0x7 << 51) | (0x7 << 42);
         for b in &mut self.boards {
             let old = *b;
-            let mut next = old & !(f_mask | r_mask | b_mask | l_mask | d_face_mask);
-            let s = 27;
-            next |= ((old >> (s+0)) & 1) << (s+2); next |= ((old >> (s+1)) & 1) << (s+5); next |= ((old >> (s+2)) & 1) << (s+8);
-            next |= ((old >> (s+3)) & 1) << (s+1); next |= ((old >> (s+4)) & 1) << (s+4); next |= ((old >> (s+5)) & 1) << (s+7);
-            next |= ((old >> (s+6)) & 1) << (s+0); next |= ((old >> (s+7)) & 1) << (s+3); next |= ((old >> (s+8)) & 1) << (s+6);
-
-            // Sides: F -> R -> B -> L -> F
-            next |= (old & l_mask) << 9; // L -> B
-            next |= (old & b_mask) >> 36; // B -> R
-            next |= (old & r_mask) << 9; // R -> F
-            next |= (old & f_mask) << 18; // F -> L
+            let mut next = old & !(SIDE_MASK | (0x1FF << 27));
+            next |= Self::rotate_face_bits((old >> 27) & 0x1FF) << 27;
+            next |= ((old >> 42) & 0x7) << 51; // L -> B
+            next |= ((old >> 51) & 0x7) << 15; // B -> R
+            next |= ((old >> 15) & 0x7) << 24; // R -> F
+            next |= ((old >> 24) & 0x7) << 42; // F -> L
             *b = next;
         }
     }
 
-    // L Move: U -> F -> D -> B
     fn rotate_l(&mut self) {
+        const U_COL: u64 = 0x49; // 0,3,6
+        const F_COL: u64 = U_COL << 18;
+        const D_COL: u64 = U_COL << 27;
+        const B_COL: u64 = (1 << 47) | (1 << 50) | (1 << 53);
+        const L_FACE_MASK: u64 = 0x1FF << 36;
         for b in &mut self.boards {
             let old = *b;
-            let mut next = old;
-            // Face simplified for now (L: 36..45)
-            let s = 36; next &= !(0x1FF << s);
-            next |= ((old >> (s+0)) & 1) << (s+2); next |= ((old >> (s+1)) & 1) << (s+5); next |= ((old >> (s+2)) & 1) << (s+8);
-            next |= ((old >> (s+3)) & 1) << (s+1); next |= ((old >> (s+4)) & 1) << (s+4); next |= ((old >> (s+5)) & 1) << (s+7);
-            next |= ((old >> (s+6)) & 1) << (s+0); next |= ((old >> (s+7)) & 1) << (s+3); next |= ((old >> (s+8)) & 1) << (s+6);
-            
-            // Sides (Indices: U0,3,6; F0,3,6; D0,3,6; B8,5,2)
-            // U->F, F->D, D->B, B->U
-            next &= !((1<<0)|(1<<3)|(1<<6) | (1<<18)|(1<<21)|(1<<24) | (1<<27)|(1<<30)|(1<<33) | (1<<53)|(1<<50)|(1<<47));
-            next |= ((old >> 0) & 1) << 18; next |= ((old >> 3) & 1) << 21; next |= ((old >> 6) & 1) << 24; // U->F
-            next |= ((old >> 18) & 1) << 27; next |= ((old >> 21) & 1) << 30; next |= ((old >> 24) & 1) << 33; // F->D
-            next |= ((old >> 27) & 1) << 53; next |= ((old >> 30) & 1) << 50; next |= ((old >> 33) & 1) << 47; // D->B
-            next |= ((old >> 53) & 1) << 0; next |= ((old >> 50) & 1) << 3; next |= ((old >> 47) & 1) << 6; // B->U
+            let mut next = old & !(U_COL | F_COL | D_COL | B_COL | L_FACE_MASK);
+            next |= Self::rotate_face_bits((old >> 36) & 0x1FF) << 36;
+            next |= (old & U_COL) << 18; // U -> F
+            next |= (old & F_COL) << 9;  // F -> D
+            // D -> B reversed
+            next |= ((old >> 27) & 1) << 53; next |= ((old >> 30) & 1) << 50; next |= ((old >> 33) & 1) << 47;
+            // B -> U reversed
+            next |= ((old >> 53) & 1) << 0; next |= ((old >> 50) & 1) << 3; next |= ((old >> 47) & 1) << 6;
             *b = next;
         }
     }
 
     fn rotate_r(&mut self) {
+        const U_COL: u64 = 0x49 << 2; // 2,5,8
+        const F_COL: u64 = U_COL << 18;
+        const D_COL: u64 = U_COL << 27;
+        const B_COL: u64 = (1 << 45) | (1 << 48) | (1 << 51);
+        const R_FACE_MASK: u64 = 0x1FF << 9;
         for b in &mut self.boards {
             let old = *b;
-            let mut next = old;
-            let s = 9; next &= !(0x1FF << s);
-            next |= ((old >> (s+0)) & 1) << (s+2); next |= ((old >> (s+1)) & 1) << (s+5); next |= ((old >> (s+2)) & 1) << (s+8);
-            next |= ((old >> (s+3)) & 1) << (s+1); next |= ((old >> (s+4)) & 1) << (s+4); next |= ((old >> (s+5)) & 1) << (s+7);
-            next |= ((old >> (s+6)) & 1) << (s+0); next |= ((old >> (s+7)) & 1) << (s+3); next |= ((old >> (s+8)) & 1) << (s+6);
-            
-            // U->B, B->D, D->F, F->U
-            next &= !((1<<2)|(1<<5)|(1<<8) | (1<<51)|(1<<48)|(1<<45) | (1<<29)|(1<<32)|(1<<35) | (1<<20)|(1<<23)|(1<<26));
-            next |= ((old >> 2) & 1) << 51; next |= ((old >> 5) & 1) << 48; next |= ((old >> 8) & 1) << 45; // U->B
-            next |= ((old >> 51) & 1) << 29; next |= ((old >> 48) & 1) << 32; next |= ((old >> 45) & 1) << 35; // B->D
-            next |= ((old >> 29) & 1) << 20; next |= ((old >> 32) & 1) << 23; next |= ((old >> 35) & 1) << 26; // D->F
-            next |= ((old >> 20) & 1) << 2; next |= ((old >> 23) & 1) << 5; next |= ((old >> 26) & 1) << 8; // F->U
+            let mut next = old & !(U_COL | F_COL | D_COL | B_COL | R_FACE_MASK);
+            next |= Self::rotate_face_bits((old >> 9) & 0x1FF) << 9;
+            // Cycle: U -> B, B -> D, D -> F, F -> U
+            next |= ((old >> 2) & 1) << 51; next |= ((old >> 5) & 1) << 48; next |= ((old >> 8) & 1) << 45;
+            next |= ((old >> 51) & 1) << 29; next |= ((old >> 48) & 1) << 32; next |= ((old >> 45) & 1) << 35;
+            next |= (old & D_COL) >> 9;  // D -> F
+            next |= (old & F_COL) >> 18; // F -> U
             *b = next;
         }
     }
 
     fn rotate_f(&mut self) {
+        const U_ROW: u64 = 0x7 << 6;   // 6,7,8
+        const R_COL: u64 = 0x49 << 9;  // 9,12,15
+        const D_ROW: u64 = (1<<27)|(1<<28)|(1<<29); // 27,28,29
+        const L_COL: u64 = 0x49 << 38; // 38,41,44
+        const F_FACE_MASK: u64 = 0x1FF << 18;
         for b in &mut self.boards {
             let old = *b;
-            let mut next = old;
-            let s = 18; next &= !(0x1FF << s);
-            next |= ((old >> (s+0)) & 1) << (s+2); next |= ((old >> (s+1)) & 1) << (s+5); next |= ((old >> (s+2)) & 1) << (s+8);
-            next |= ((old >> (s+3)) & 1) << (s+1); next |= ((old >> (s+4)) & 1) << (s+4); next |= ((old >> (s+5)) & 1) << (s+7);
-            next |= ((old >> (s+6)) & 1) << (s+0); next |= ((old >> (s+7)) & 1) << (s+3); next |= ((old >> (s+8)) & 1) << (s+6);
-            
-            // U6,7,8 -> R0,3,6 -> D2,1,0 -> L8,5,2 -> U6,7,8
-            next &= !((1<<6)|(1<<7)|(1<<8) | (1<<9)|(1<<12)|(1<<15) | (1<<29)|(1<<28)|(1<<27) | (1<<44)|(1<<41)|(1<<38));
-            next |= ((old >> 6) & 1) << 9; next |= ((old >> 7) & 1) << 12; next |= ((old >> 8) & 1) << 15; // U->R
-            next |= ((old >> 9) & 1) << 29; next |= ((old >> 12) & 1) << 28; next |= ((old >> 15) & 1) << 27; // R->D
-            next |= ((old >> 29) & 1) << 44; next |= ((old >> 28) & 1) << 41; next |= ((old >> 27) & 1) << 38; // D->L
-            next |= ((old >> 44) & 1) << 6; next |= ((old >> 41) & 1) << 7; next |= ((old >> 38) & 1) << 8; // L->U
+            let mut next = old & !(U_ROW | R_COL | D_ROW | L_COL | F_FACE_MASK);
+            next |= Self::rotate_face_bits((old >> 18) & 0x1FF) << 18;
+            // Cycle: U678->R91215, R91215->D292827, D292827->L444138, L444138->U678
+            next |= ((old >> 6) & 1) << 9; next |= ((old >> 7) & 1) << 12; next |= ((old >> 8) & 1) << 15;
+            next |= ((old >> 9) & 1) << 29; next |= ((old >> 12) & 1) << 28; next |= ((old >> 15) & 1) << 27;
+            next |= ((old >> 29) & 1) << 44; next |= ((old >> 28) & 1) << 41; next |= ((old >> 27) & 1) << 38;
+            next |= ((old >> 44) & 1) << 6; next |= ((old >> 41) & 1) << 7; next |= ((old >> 38) & 1) << 8;
             *b = next;
         }
     }
 
     fn rotate_b(&mut self) {
+        const U_ROW: u64 = 0x7; // 0,1,2
+        const L_COL: u64 = 0x49 << 36; // 36,39,42
+        const D_ROW: u64 = (1<<33)|(1<<34)|(1<<35); // 33,34,35
+        const R_COL: u64 = 0x49 << 11; // 11,14,17
+        const B_FACE_MASK: u64 = 0x1FF << 45;
         for b in &mut self.boards {
             let old = *b;
-            let mut next = old;
-            let s = 45; next &= !(0x1FF << s);
-            next |= ((old >> (s+0)) & 1) << (s+2); next |= ((old >> (s+1)) & 1) << (s+5); next |= ((old >> (s+2)) & 1) << (s+8);
-            next |= ((old >> (s+3)) & 1) << (s+1); next |= ((old >> (s+4)) & 1) << (s+4); next |= ((old >> (s+5)) & 1) << (s+7);
-            next |= ((old >> (s+6)) & 1) << (s+0); next |= ((old >> (s+7)) & 1) << (s+3); next |= ((old >> (s+8)) & 1) << (s+6);
-            
-            // U2,1,0 -> L0,3,6 -> D6,7,8 -> R8,5,2 -> U2,1,0
-            next &= !((1<<2)|(1<<1)|(1<<0) | (1<<36)|(1<<39)|(1<<42) | (1<<33)|(1<<34)|(1<<35) | (1<<17)|(1<<14)|(1<<11));
-            next |= ((old >> 2) & 1) << 36; next |= ((old >> 1) & 1) << 39; next |= ((old >> 0) & 1) << 42; // U->L
-            next |= ((old >> 36) & 1) << 33; next |= ((old >> 39) & 1) << 34; next |= ((old >> 42) & 1) << 35; // L->D
-            next |= ((old >> 33) & 1) << 17; next |= ((old >> 34) & 1) << 14; next |= ((old >> 35) & 1) << 11; // D->R
-            next |= ((old >> 17) & 1) << 2; next |= ((old >> 14) & 1) << 1; next |= ((old >> 11) & 1) << 0; // R->U
+            let mut next = old & !(U_ROW | L_COL | D_ROW | R_COL | B_FACE_MASK);
+            next |= Self::rotate_face_bits((old >> 45) & 0x1FF) << 45;
+            // Cycle: U012->L363942, L363942->D353433, D353433->R171411, R171411->U012
+            next |= ((old >> 2) & 1) << 36; next |= ((old >> 1) & 1) << 39; next |= ((old >> 0) & 1) << 42;
+            next |= ((old >> 36) & 1) << 33; next |= ((old >> 39) & 1) << 34; next |= ((old >> 42) & 1) << 35;
+            next |= ((old >> 33) & 1) << 17; next |= ((old >> 34) & 1) << 14; next |= ((old >> 35) & 1) << 11;
+            next |= ((old >> 17) & 1) << 2; next |= ((old >> 14) & 1) << 1; next |= ((old >> 11) & 1) << 0;
             *b = next;
         }
     }
 
     fn rotate_m(&mut self) {
+        const U_COL: u64 = 0x49 << 1; 
+        const F_COL: u64 = U_COL << 18;
+        const D_COL: u64 = U_COL << 27;
+        const B_COL: u64 = (1 << 46) | (1 << 49) | (1 << 52);
         for b in &mut self.boards {
             let old = *b;
-            let mut next = old;
-            // Center stickers: U1,4,7; F1,4,7; D1,4,7; B7,4,1
-            next &= !((1<<1)|(1<<4)|(1<<7) | (1<<19)|(1<<22)|(1<<25) | (1<<28)|(1<<31)|(1<<34) | (1<<52)|(1<<49)|(1<<46));
-            next |= ((old >> 1) & 1) << 19; next |= ((old >> 4) & 1) << 22; next |= ((old >> 7) & 1) << 25; // U->F
-            next |= ((old >> 19) & 1) << 28; next |= ((old >> 22) & 1) << 31; next |= ((old >> 25) & 1) << 34; // F->D
-            next |= ((old >> 28) & 1) << 52; next |= ((old >> 31) & 1) << 49; next |= ((old >> 34) & 1) << 46; // D->B
-            next |= ((old >> 52) & 1) << 1; next |= ((old >> 49) & 1) << 4; next |= ((old >> 46) & 1) << 7; // B->U
+            let mut next = old & !(U_COL | F_COL | D_COL | B_COL);
+            next |= (old & U_COL) << 18;
+            next |= (old & F_COL) << 9;
+            next |= ((old >> 28) & 1) << 52; next |= ((old >> 31) & 1) << 49; next |= ((old >> 34) & 1) << 46;
+            next |= ((old >> 52) & 1) << 1; next |= ((old >> 49) & 1) << 4; next |= ((old >> 46) & 1) << 7;
             *b = next;
         }
     }
 
     fn rotate_s(&mut self) {
+        const U_ROW: u64 = 0x7 << 3; 
+        const R_COL: u64 = 0x49 << 10;
+        const D_ROW: u64 = 0x7 << 30;
+        const L_COL: u64 = 0x49 << 37;
         for b in &mut self.boards {
             let old = *b;
-            let mut next = old;
-            // U3,4,5; R1,4,7; D5,4,3; L7,4,1
-            next &= !((1<<3)|(1<<4)|(1<<5) | (1<<10)|(1<<13)|(1<<16) | (1<<32)|(1<<31)|(1<<30) | (1<<43)|(1<<40)|(1<<37));
-            next |= ((old >> 3) & 1) << 10; next |= ((old >> 4) & 1) << 13; next |= ((old >> 5) & 1) << 16; // U->R
-            next |= ((old >> 10) & 1) << 32; next |= ((old >> 13) & 1) << 31; next |= ((old >> 16) & 1) << 30; // R->D
-            next |= ((old >> 32) & 1) << 43; next |= ((old >> 31) & 1) << 40; next |= ((old >> 30) & 1) << 37; // D->L
-            next |= ((old >> 43) & 1) << 3; next |= ((old >> 40) & 1) << 4; next |= ((old >> 37) & 1) << 5; // L->U
+            let mut next = old & !(U_ROW | R_COL | D_ROW | L_COL);
+            next |= ((old >> 3) & 1) << 10; next |= ((old >> 4) & 1) << 13; next |= ((old >> 5) & 1) << 16;
+            next |= ((old >> 10) & 1) << 32; next |= ((old >> 13) & 1) << 31; next |= ((old >> 16) & 1) << 30;
+            next |= ((old >> 32) & 1) << 43; next |= ((old >> 31) & 1) << 40; next |= ((old >> 30) & 1) << 37;
+            next |= ((old >> 43) & 1) << 3; next |= ((old >> 40) & 1) << 4; next |= ((old >> 37) & 1) << 5;
             *b = next;
         }
     }
 
     fn rotate_e(&mut self) {
+        const F_ROW: u64 = 0x7 << 21;
+        const R_ROW: u64 = 0x7 << 12;
+        const B_ROW: u64 = 0x7 << 48;
+        const L_ROW: u64 = 0x7 << 39;
         for b in &mut self.boards {
             let old = *b;
-            let mut next = old;
-            // F3,4,5; R3,4,5; B3,4,5; L3,4,5
-            next &= !((0x7<<21) | (0x7<<12) | (0x7<<48) | (0x7<<39));
-            next |= (old & (0x7<<21)) >> 9;  // F -> R
-            next |= (old & (0x7<<12)) << 36; // R -> B
-            next |= (old & (0x7<<48)) >> 9;  // B -> L
-            next |= (old & (0x7<<39)) >> 18; // L -> F
+            let mut next = old & !(F_ROW | R_ROW | B_ROW | L_ROW);
+            next |= ((old >> 21) & 0x7) << 12; // F -> R
+            next |= ((old >> 12) & 0x7) << 48; // R -> B
+            next |= ((old >> 48) & 0x7) << 39; // B -> L
+            next |= ((old >> 39) & 0x7) << 21; // L -> F
             *b = next;
         }
     }
 
     // Helpers for full cube rotations or special moves
-    fn rotate_m_prime(&mut self) { for _ in 0..3 { self.rotate_m(); } }
-    fn rotate_l_prime(&mut self) { for _ in 0..3 { self.rotate_l(); } }
-    fn rotate_e_prime(&mut self) { for _ in 0..3 { self.rotate_e(); } }
-    fn rotate_d_prime(&mut self) { for _ in 0..3 { self.rotate_d(); } }
-    fn rotate_b_prime(&mut self) { for _ in 0..3 { self.rotate_b(); } }
-
-    fn get_identity_perm(&self) -> [usize; 54] {
-        let mut p = [0usize; 54];
-        for i in 0..54 { p[i] = i; }
-        p
-    }
-
-    fn perm_rotate_face(&self, p: &mut [usize; 54], face_idx: usize) {
-        let s = face_idx * 9;
-        let old = *p;
-        p[s + 0] = old[s + 6]; p[s + 1] = old[s + 3]; p[s + 2] = old[s + 0];
-        p[s + 3] = old[s + 7]; p[s + 4] = old[s + 4]; p[s + 5] = old[s + 1];
-        p[s + 6] = old[s + 8]; p[s + 7] = old[s + 5]; p[s + 8] = old[s + 2];
-    }
+    #[inline(always)] pub fn rotate_u_prime(&mut self) { for _ in 0..3 { self.rotate_u(); } }
+    #[inline(always)] pub fn rotate_d_prime(&mut self) { for _ in 0..3 { self.rotate_d(); } }
+    #[inline(always)] pub fn rotate_l_prime(&mut self) { for _ in 0..3 { self.rotate_l(); } }
+    #[inline(always)] pub fn rotate_r_prime(&mut self) { for _ in 0..3 { self.rotate_r(); } }
+    #[inline(always)] pub fn rotate_f_prime(&mut self) { for _ in 0..3 { self.rotate_f(); } }
+    #[inline(always)] pub fn rotate_b_prime(&mut self) { for _ in 0..3 { self.rotate_b(); } }
+    #[inline(always)] pub fn rotate_m_prime(&mut self) { for _ in 0..3 { self.rotate_m(); } }
+    #[inline(always)] pub fn rotate_e_prime(&mut self) { for _ in 0..3 { self.rotate_e(); } }
     
     /// Check if First Block (FB) is solved on a specific color/orientation.
-    /// Default: Left block on White/Yellow
+    /// Default: Left block on Orange face (Face 4)
     pub fn is_fb_solved(&self) -> bool {
-        // DL edge: indices 30 (D facelet 3) and 43 (L facelet 7) -- Wait, let's check FaceletCube mapping again.
-        // Actually, RouxSolver::is_fb_solved in core is what we want to clone.
-        // Piece mapping for FaceletCube:
-        // L Center: 40 (Always index 40 for L face)
-        // DL edge: Facelets 31 (D) and 43 (L)
-        // FL edge: Facelets 21 (F) and 39 (L)
-        // BL edge: Facelets 49 (B) and 37 (L)
-        // DFL corner: Facelets 24 (F), 33 (D), 42 (L)
-        // DBL corner: Facelets 35 (D), 44 (L), 51 (B)
+        // Colors from rouxflow_core::cube::facelet::Color:
+        // White=0, Yellow=1, Green=2, Blue=3, Red=4, Orange=5
+        let orange = 5; let yellow = 1; let blue = 3; let green = 2;
         
-        // This check is bitwise: (boards[color] & (1 << index)) != 0
-        // We need to know which color is which at identity.
-        // Standard: U=White(0), R=Red(4), F=Green(2), D=Yellow(1), L=Orange(5), B=Blue(3)
-        let orange = 5; let yellow = 1; let blue = 3; let white = 0; let green = 2;
+        // Piece Mapping for Face 4 (Left / Orange):
+        // L Center: 40
+        // DL edge: D3 (30) + L7 (43)
+        // FL edge: F3 (21) + L5 (41)
+        // BL edge: B3 (48) + L1 (37)
+        // DFL corner: D0 (27) + L8 (44) + F6 (24)
+        // DBL corner: D6 (33) + L6 (42) + B8 (53)
         
-        // Check L center
+        // 1. Center
         if (self.boards[orange] & (1 << 40)) == 0 { return false; }
         
-        // DL edge (Orange-Yellow)
-        if (self.boards[yellow] & (1 << 31)) == 0 || (self.boards[orange] & (1 << 43)) == 0 { return false; }
-        // FL edge (Orange-Green)
-        if (self.boards[green] & (1 << 21)) == 0 || (self.boards[orange] & (1 << 39)) == 0 { return false; }
-        // BL edge (Orange-Blue)
-        if (self.boards[blue] & (1 << 49)) == 0 || (self.boards[orange] & (1 << 37)) == 0 { return false; }
+        // 2. Edges
+        if (self.boards[yellow] & (1 << 30)) == 0 || (self.boards[orange] & (1 << 43)) == 0 { return false; } // DL
+        if (self.boards[green]  & (1 << 21)) == 0 || (self.boards[orange] & (1 << 41)) == 0 { return false; } // FL
+        if (self.boards[blue]   & (1 << 48)) == 0 || (self.boards[orange] & (1 << 37)) == 0 { return false; } // BL
         
-        // DFL corner (Orange-Yellow-Green)
-        if (self.boards[orange] & (1 << 42)) == 0 || (self.boards[yellow] & (1 << 33)) == 0 || (self.boards[green] & (1 << 24)) == 0 { return false; }
-        // DBL corner (Orange-Yellow-Blue)
-        if (self.boards[orange] & (1 << 44)) == 0 || (self.boards[yellow] & (1 << 35)) == 0 || (self.boards[blue] & (1 << 51)) == 0 { return false; }
+        // 3. Corners
+        if (self.boards[orange] & (1 << 44)) == 0 || (self.boards[yellow] & (1 << 27)) == 0 || (self.boards[green] & (1 << 24)) == 0 { return false; } // DFL
+        if (self.boards[orange] & (1 << 42)) == 0 || (self.boards[yellow] & (1 << 33)) == 0 || (self.boards[blue]  & (1 << 53)) == 0 { return false; } // DBL
 
         true
     }
