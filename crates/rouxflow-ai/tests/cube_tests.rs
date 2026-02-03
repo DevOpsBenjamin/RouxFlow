@@ -1,4 +1,4 @@
-use rouxflow_ai::bitcube::BitCube;
+use rouxflow_ai::{BitCube, ToFacelet};
 use rouxflow_core::cube::facelet::FaceletCube;
 
 #[test]
@@ -17,7 +17,7 @@ fn test_50_random_scrambles() {
     
     for i in 1..=50 {
         let mut legacy_cube = FaceletCube::new();
-        let mut bit_cube = BitCube::new();
+        let mut bit_cube = BitCube::new_solved();
         let mut scramble = Vec::new();
         
         let len = rng.gen_range(10..20); // Slightly shorter for readable logs

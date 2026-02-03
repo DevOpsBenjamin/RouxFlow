@@ -1220,9 +1220,14 @@ name = "rouxflow-ai"
 version = "0.1.0"
 dependencies = [
  "rayon",
+ "rouxflow-bitboard",
  "rouxflow-core",
  "serde",
 ]
+
+[[package]]
+name = "rouxflow-bitboard"
+version = "0.1.0"
 
 [[package]]
 name = "rouxflow-core"

@@ -1,4 +1,3 @@
-use rouxflow_core::cube::facelet::{FaceletCube, Color};
 use crate::move_indices::Move;
 
 /// A Rubik's Cube represented by bitboards for high-performance search.
@@ -10,17 +9,26 @@ pub struct BitCube {
 }
 
 impl BitCube {
-    pub fn new() -> Self {
-        Self::from_facelet(&FaceletCube::new())
-    }
-
-    pub fn from_facelet(facelet_cube: &FaceletCube) -> Self {
+    /// Optimized constructor that sets bits directly.
+    /// Useful for build scripts and tight loops.
+    pub fn new_solved() -> Self {
         let mut boards = [0u64; 6];
-        for (i, &color) in facelet_cube.facelets.iter().enumerate() {
-            boards[color as usize] |= 1 << i;
-        }
+        // U (White=0): 0-8
+        boards[0] = 0x1FF;
+        // D (Yellow=1): 27-35
+        boards[1] = 0x1FF << 27;
+        // F (Green=2): 18-26
+        boards[2] = 0x1FF << 18;
+        // B (Blue=3): 45-53
+        boards[3] = 0x1FF << 45;
+        // R (Red=4): 9-17
+        boards[4] = 0x1FF << 9; 
+        // L (Orange=5): 36-44
+        boards[5] = 0x1FF << 36;
+        
         BitCube { boards }
     }
+
 
     /// Optimized move application using numeric enum
     pub fn apply_move_enum(&mut self, m: Move) {
@@ -286,56 +294,46 @@ impl BitCube {
     #[inline(always)] pub fn rotate_b_prime(&mut self) { for _ in 0..3 { self.rotate_b(); } }
     #[inline(always)] pub fn rotate_m_prime(&mut self) { for _ in 0..3 { self.rotate_m(); } }
     #[inline(always)] pub fn rotate_e_prime(&mut self) { for _ in 0..3 { self.rotate_e(); } }
-    
+
     /// Check if First Block (FB) is solved on a specific color/orientation.
-    /// Default: Left block on Orange face (Face 4)
-    fn get_board_at(&self, idx: usize) -> usize {
+    pub fn get_color_at(&self, idx: usize) -> usize {
         for i in 0..6 {
             if (self.boards[i] & (1 << idx)) != 0 { return i; }
         }
-        0 // Should not happen on valid cube
+        0
     }
 
     pub fn is_fb_solved(&self) -> bool {
-        // Match Legacy FB exactly (Loose logic):
-        let l_color = self.get_board_at(40);
-        
-        // Face L: 39..=44
-        for i in 39..=44 {
-            if self.get_board_at(i) != l_color { return false; }
-        }
-        
-        // Bars (Must be equal to each other, not necessarily a specific face)
-        if self.get_board_at(27) != self.get_board_at(30) || self.get_board_at(30) != self.get_board_at(33) { return false; }
-        if self.get_board_at(21) != self.get_board_at(24) { return false; }
-        if self.get_board_at(50) != self.get_board_at(53) { return false; }
-        
-        // Opposite check
-        let d_color = self.get_board_at(27);
-        let opposites = [1, 0, 3, 2, 5, 4];
-        if opposites[l_color] == d_color { return false; }
-
-        true
+        // Default Roux orientation: Left=Orange(5), Down=Yellow(1), Front=Green(2), Back=Blue(3)
+        self.is_fb_solved_ext(5, 1, 2, 3)
     }
 
-    pub fn to_facelet(&self) -> FaceletCube {
-        let mut facelets = vec![Color::White; 54];
-        for i in 0..54 {
-            for color_idx in 0..6 {
-                if (self.boards[color_idx] & (1 << i)) != 0 {
-                    facelets[i] = match color_idx {
-                        0 => Color::White,
-                        1 => Color::Yellow,
-                        2 => Color::Green,
-                        3 => Color::Blue,
-                        4 => Color::Red,
-                        5 => Color::Orange,
-                        _ => unreachable!(),
-                    };
-                    break;
-                }
-            }
+    pub fn is_fb_solved_ext(&self, l: usize, d: usize, f: usize, b: usize) -> bool {
+        // Face L center check (40)
+        if self.get_color_at(40) != l { return false; }
+        
+        // Face L: 39..=44 must match center
+        for i in 39..=44 {
+            if self.get_color_at(i) != l { return false; }
         }
-        FaceletCube { facelets }
+        
+        // D bar (27,30,33) match check
+        // NOTE: We IGNORE the D center check to allow "Pseudo-Blocks" (misaligned M-slice).
+        // The block is valid if the pieces are correct, even if centers are rotated (e.g. r2).
+        // let d_center = self.get_color_at(31); 
+        // if d_center != d { return false; } 
+        if self.get_color_at(27) != d || self.get_color_at(30) != d || self.get_color_at(33) != d { return false; }
+        
+        // F bar (21,24) match check
+        // let f_center = self.get_color_at(22);
+        // if f_center != f { return false; }
+        if self.get_color_at(21) != f || self.get_color_at(24) != f { return false; }
+        
+        // B bar (50,53) match check
+        // let b_center = self.get_color_at(49);
+        // if b_center != b { return false; }
+        if self.get_color_at(50) != b || self.get_color_at(53) != b { return false; }
+
+        true
     }
 }

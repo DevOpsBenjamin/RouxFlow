@@ -2,6 +2,9 @@ use three_d::*;
 use rouxflow_core::cube::CubeState;
 use rouxflow_render::RenderState;
 use std::time::{Duration, Instant};
+use rouxflow_ai::pruning::PruningTable;
+use rouxflow_ai::solver::AISolver;
+use rouxflow_ai::{BitCube, FromFacelet};
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 enum RouxPhase { Fb, Sb, Cmll, LseEo, LseUlur, LseL4e, Done }
@@ -37,6 +40,12 @@ fn main() {
         eprintln!("Example: rouxflow-standalone \"R U R' U'\" \"x2 y U R U' R'\" --debug");
         std::process::exit(1);
     }
+
+    // --- AI PRUNING TABLE SETUP ---
+    // Now embedded in the binary for instant load / WASM compatibility
+    println!("[AI] Loading Pruning Table (Embedded)...");
+    let fb_table = PruningTable::new_fb();
+    // ------------------------------
     
     let scramble_moves: Vec<String> = args[1].split_whitespace().map(|s| s.to_string()).collect();
     let solve_moves: Vec<String> = args[2].split_whitespace().map(|s| s.to_string()).collect();
@@ -134,7 +143,8 @@ fn main() {
                 
                 println!("\n[Search] Starting FB optimizations...");
                 
-                // 1. Legacy Solver (Core)
+                /* 
+                // 1. Legacy Solver (Core) - Temporarily disabled (Too slow)
                 println!("   -> Legacy Solver: Thinking... ");
                 let mut search_cube = CubeState::new();
                 search_cube.logic = scrambled_logic.clone();
@@ -143,11 +153,12 @@ fn main() {
                 for (i, sol) in legacy_sols.iter().enumerate() {
                     println!("      [Legacy Sol {}] {}", i + 1, sol.join(" "));
                 }
+                */
                 
-                // 2. New AI Solver (Bitboard)
+                // 2. New AI Solver (Bitboard + Pruning Table)
                 println!("   -> AI Solver (Bitboard): Thinking... ");
-                let bit_cube = rouxflow_ai::bitcube::BitCube::from_facelet(&scrambled_logic);
-                let (ai_sols, ai_time) = rouxflow_ai::solver::AISolver::find_fb_solutions(&bit_cube, 100);
+                let bit_cube = rouxflow_ai::BitCube::from_facelet(&scrambled_logic);
+                let (ai_sols, ai_time) = AISolver::find_fb_solutions_optimized(&bit_cube, 6, &fb_table);
                 println!("Found {} in {:?}", ai_sols.len(), ai_time);
                 for (i, sol) in ai_sols.iter().enumerate() {
                     println!("      [AI Sol {}] {}", i + 1, sol.join(" "));

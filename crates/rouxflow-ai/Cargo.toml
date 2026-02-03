@@ -5,8 +5,12 @@ edition = "2024"
 
 [dependencies]
 rouxflow-core = { path = "../rouxflow-core" }
+rouxflow-bitboard = { path = "../rouxflow-bitboard" }
 serde = { version = "1.0", features = ["derive"] }
 rayon = "1.8"
+
+[build-dependencies]
+rouxflow-bitboard = { path = "../rouxflow-bitboard" }
 
 [dev-dependencies]
 rand = "0.8"
