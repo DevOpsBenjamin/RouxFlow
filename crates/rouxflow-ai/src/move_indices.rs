@@ -7,7 +7,7 @@ pub enum Move {
     F, Fp, F2,
     B, Bp, B2,
     M, Mp, M2,
-    r, rp, r2,
+    Rw, Rwp, Rw2,
 }
 
 impl Move {
@@ -30,7 +30,7 @@ impl Move {
             Move::F => "F", Move::Fp => "F'", Move::F2 => "F2",
             Move::B => "B", Move::Bp => "B'", Move::B2 => "B2",
             Move::M => "M", Move::Mp => "M'", Move::M2 => "M2",
-            Move::r => "r", Move::rp => "r'", Move::r2 => "r2",
+            Move::Rw => "r", Move::Rwp => "r'", Move::Rw2 => "r2",
         }
     }
 
@@ -43,7 +43,7 @@ impl Move {
             Move::F | Move::Fp | Move::F2 => 4,
             Move::B | Move::Bp | Move::B2 => 5,
             Move::M | Move::Mp | Move::M2 => 6,
-            Move::r | Move::rp | Move::r2 => 3, // r is basically R
+            Move::Rw | Move::Rwp | Move::Rw2 => 3, // r is basically R
         }
     }
 
@@ -56,7 +56,7 @@ impl Move {
             Move::F  => Move::Fp, Move::Fp => Move::F, Move::F2 => Move::F2,
             Move::B  => Move::Bp, Move::Bp => Move::B, Move::B2 => Move::B2,
             Move::M  => Move::Mp, Move::Mp => Move::M, Move::M2 => Move::M2,
-            Move::r  => Move::rp, Move::rp => Move::r, Move::r2 => Move::r2,
+            Move::Rw  => Move::Rwp, Move::Rwp => Move::Rw, Move::Rw2 => Move::Rw2,
         }
     }
 }

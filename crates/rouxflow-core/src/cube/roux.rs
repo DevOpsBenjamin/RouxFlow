@@ -117,7 +117,7 @@ impl RouxSolver {
         println!("      [Legacy Search] Thinking...");
 
         // Try increasing depths to find the shortest solutions first
-        for depth in 0..=5 {
+        for depth in 0..=6 {
             let start_depth = Instant::now();
             let prev_count = solutions.len();
             let mut nodes = 0;
@@ -130,7 +130,6 @@ impl RouxSolver {
                     println!("      [Legacy Search] Solution {} found at depth {} (Nodes: {}, Depth Time: {:?})", 
                         i + 1, depth, nodes, elapsed);
                 }
-                if solutions.len() >= count { break; }
             }
             
             // Log progress - show all depths for comparison

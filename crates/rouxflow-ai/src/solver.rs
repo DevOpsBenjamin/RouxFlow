@@ -15,8 +15,9 @@ impl AISolver {
         let moves = Move::ALL;
 
         // IDA* style search
-        // We stop at depth 8 for benchmark
-        for depth in 2..=8 {
+        // We stop at depth 7 for benchmark
+        // Limit to depth 6 as requested
+        for depth in 2..=6 {
             let start_depth = Instant::now();
             
             // Parallelize top level and aggregate solutions AND nodes
@@ -56,8 +57,6 @@ impl AISolver {
 
             println!("      [AI Search] Depth {} finished (Nodes: {}, Solutions Found: {}, Time: {:?})", 
                 depth, depth_nodes, solutions.len(), elapsed);
-            
-            // Benchmarking usually ignores count limits to see full time
         }
         
         (solutions, start.elapsed())
@@ -90,9 +89,6 @@ impl AISolver {
             let face = m.face();
             if face == last_face { continue; }
             
-            // Basic pruning: parallel moves (U after D, etc)
-            if (face == 1 && last_face == 0) || (face == 5 && last_face == 4) { continue; }
-
             cube.apply_move_enum(m);
             path.push(m);
             

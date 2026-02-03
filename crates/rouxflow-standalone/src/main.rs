@@ -138,14 +138,20 @@ fn main() {
                 println!("   -> Legacy Solver: Thinking... ");
                 let mut search_cube = CubeState::new();
                 search_cube.logic = scrambled_logic.clone();
-                let (legacy_sols, legacy_time) = search_cube.find_fb_solutions(3);
+                let (legacy_sols, legacy_time) = search_cube.find_fb_solutions(100);
                 println!("Found {} in {:?}", legacy_sols.len(), legacy_time);
+                for (i, sol) in legacy_sols.iter().enumerate() {
+                    println!("      [Legacy Sol {}] {}", i + 1, sol.join(" "));
+                }
                 
                 // 2. New AI Solver (Bitboard)
                 println!("   -> AI Solver (Bitboard): Thinking... ");
                 let bit_cube = rouxflow_ai::bitcube::BitCube::from_facelet(&scrambled_logic);
-                let (ai_sols, ai_time) = rouxflow_ai::solver::AISolver::find_fb_solutions(&bit_cube, 3);
+                let (ai_sols, ai_time) = rouxflow_ai::solver::AISolver::find_fb_solutions(&bit_cube, 100);
                 println!("Found {} in {:?}", ai_sols.len(), ai_time);
+                for (i, sol) in ai_sols.iter().enumerate() {
+                    println!("      [AI Sol {}] {}", i + 1, sol.join(" "));
+                }
 
                 optimization_solutions = ai_sols; // Use AI solutions for playback
                 
@@ -230,18 +236,20 @@ fn main() {
                     last_move = now;
                 }
             } else {
-                // Solution finished
-                current_opt_idx += 1;
-                println!(">>> Solution {} Finished.", current_opt_idx);
-                
-                if current_opt_idx <= optimization_solutions.len() {
-                    println!(">>> Starting INVERTED playback (Undoing solution)...");
-                    playback_state = PlaybackState::OptimizationUndo;
-                    move_idx = 0;
-                    last_move = now;
-                } else {
-                    println!("\nAll optimization solutions shown. Solve Complete.");
-                    playback_state = PlaybackState::Finished;
+                // Solution finished - WAIT 5s before undoing for visual verification
+                if last_move.elapsed() >= Duration::from_secs(5) {
+                    current_opt_idx += 1;
+                    println!(">>> Solution {} Finished.", current_opt_idx);
+                    
+                    if current_opt_idx <= optimization_solutions.len() {
+                        println!(">>> Starting INVERTED playback (Undoing solution)...");
+                        playback_state = PlaybackState::OptimizationUndo;
+                        move_idx = 0;
+                        last_move = now;
+                    } else {
+                        println!("\nAll optimization solutions shown. Solve Complete.");
+                        playback_state = PlaybackState::Finished;
+                    }
                 }
             }
         }
