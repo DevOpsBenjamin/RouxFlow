@@ -51,16 +51,33 @@ impl RouxSolver {
     /// Check if the Last 4 Edges (L4E) are solved
     pub fn is_l4e_solved(cube: &FaceletCube) -> bool {
         let f = &cube.facelets;
-        // Basically means the whole M-slice is solved relative to FB/SB
+        
+        // First check: if the whole cube is uniform (solved), then L4E is solved
+        let mut all_uniform = true;
+        for face_idx in 0..6 {
+            let start = face_idx * 9;
+            let c = f[start];
+            for i in 1..9 {
+                if f[start + i] != c {
+                    all_uniform = false;
+                    break;
+                }
+            }
+            if !all_uniform { break; }
+        }
+        if all_uniform { return true; }
+
+        // Fallback: Check M-slice edges relative to centers
+        // For now, if the cube is not fully finished, we check the standard orientation
+        // (This will be improved later for full color neutrality)
         let d_color = f[31];
         let f_color = f[22];
         
-        // Check M-slice edges: UF, UB, DF, DB
         f[7] == f[22] && f[19] == f[4] &&  // UF
-        f[1] == f[46] && f[46] == f[4] &&  // UB (approx)
         f[31] == d_color && f[25] == f_color && // DF
         f[34] == d_color && // DB
-        cube.facelets.iter().enumerate().all(|(i, &c)| c == FaceletCube::new().facelets[i])
+        // UB check
+        f[1] == f[46] && f[46] == f[4] 
     }
 
     /// Count misoriented edges for LSE EO phase (Bad edges)

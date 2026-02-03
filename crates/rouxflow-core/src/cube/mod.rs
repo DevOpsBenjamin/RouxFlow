@@ -110,9 +110,18 @@ impl CubeState {
     }
 
     pub fn is_solved(&self) -> bool {
-        // Simple check for facelet model: compare with new cube
-        let solved = facelet::FaceletCube::new();
-        self.logic.facelets == solved.facelets
+        // A cube is solved if every face has only one color
+        let f = &self.logic.facelets;
+        for face_idx in 0..6 {
+            let face_start = face_idx * 9;
+            let first_color = f[face_start];
+            for i in 1..9 {
+                if f[face_start + i] != first_color {
+                    return false;
+                }
+            }
+        }
+        true
     }
 
     #[wasm_bindgen(getter)]
