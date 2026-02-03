@@ -135,10 +135,28 @@ fn setup_models(context: &Context) -> Vec<(Gm<Mesh, ColorMaterial>, Vector3<f32>
     models
 }
 
+// Animation types
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum AnimType {
+    Global,
+    Slice { axis: char, coord: f32 },
+}
+
 // ========== SHARED RENDER STATE (Used by both Web and Native) ==========
 pub struct RenderState {
     models: Vec<(Gm<Mesh, ColorMaterial>, Vector3<f32>)>,
     pub display_rotation: cgmath::Quaternion<f32>,
+    
+    // Animation State
+    anim_type: AnimType,
+    anim_target_angle: f32, // target angle (e.g. 90, -90, 180)
+    anim_progress: f32, // 0.0 to 1.0
+    anim_axis: char,
+    anim_duration_secs: f32, // how long the animation should take
+    
+    // Pending state (applied after animation ends)
+    pending_facelets: Option<Vec<u8>>,
+    
     camera: Camera,
     control: OrbitControl,
     ambient_light: AmbientLight,
@@ -154,7 +172,7 @@ impl RenderState {
         
         let camera = Camera::new_perspective(
             viewport,
-            vec3(0.0, 0.0, 14.0),  // Camera distance for 3x3x3 cube
+            vec3(0.0, 0.0, 14.0),
             vec3(0.0, 0.0, 0.0),
             vec3(0.0, 1.0, 0.0),
             degrees(45.0),
@@ -171,6 +189,12 @@ impl RenderState {
         RenderState {
             models,
             display_rotation: identity,
+            anim_type: AnimType::Global,
+            anim_target_angle: 0.0,
+            anim_axis: 'y',
+            anim_progress: 1.0,
+            anim_duration_secs: 0.4,
+            pending_facelets: None,
             camera,
             control,
             ambient_light,
@@ -179,6 +203,85 @@ impl RenderState {
         }
     }
     
+    /// Trigger a visual rotation animation for ANY move
+    /// duration_secs: how long the animation should take
+    pub fn trigger_move_anim(&mut self, move_str: &str, duration_secs: f32) {
+        let clean_move = move_str.trim();
+        if clean_move.is_empty() { return; }
+
+        let (base, angle) = if clean_move.ends_with("2'") || clean_move.ends_with('2') {
+            (&clean_move[0..clean_move.len()-1], 180.0)
+        } else if clean_move.ends_with('\'') {
+            (&clean_move[0..clean_move.len()-1], -90.0)
+        } else {
+            (clean_move, 90.0)
+        };
+
+        let s = 2.0;
+
+        let (a_type, axis, final_angle) = match base {
+            // Standard face moves (outer layer)
+            "U" => (AnimType::Slice { axis: 'y', coord: s }, 'y', -angle),
+            "D" => (AnimType::Slice { axis: 'y', coord: -s }, 'y', angle),
+            "L" => (AnimType::Slice { axis: 'x', coord: -s }, 'x', angle),
+            "R" => (AnimType::Slice { axis: 'x', coord: s }, 'x', -angle),
+            "F" => (AnimType::Slice { axis: 'z', coord: s }, 'z', -angle),
+            "B" => (AnimType::Slice { axis: 'z', coord: -s }, 'z', angle),
+            // Middle slice moves
+            "M" => (AnimType::Slice { axis: 'x', coord: 0.0 }, 'x', angle),
+            "E" => (AnimType::Slice { axis: 'y', coord: 0.0 }, 'y', angle),
+            "S" => (AnimType::Slice { axis: 'z', coord: 0.0 }, 'z', -angle),
+            // Wide moves (outer + middle, use coord 0.5 as marker)
+            "r" => (AnimType::Slice { axis: 'x', coord: 0.5 }, 'x', -angle),
+            "l" => (AnimType::Slice { axis: 'x', coord: -0.5 }, 'x', angle),
+            "u" => (AnimType::Slice { axis: 'y', coord: 0.5 }, 'y', -angle),
+            "d" => (AnimType::Slice { axis: 'y', coord: -0.5 }, 'y', angle),
+            "f" => (AnimType::Slice { axis: 'z', coord: 0.5 }, 'z', -angle),
+            "b" => (AnimType::Slice { axis: 'z', coord: -0.5 }, 'z', angle),
+            // Global rotations
+            "x" => (AnimType::Global, 'x', -angle),
+            "y" => (AnimType::Global, 'y', -angle),
+            "z" => (AnimType::Global, 'z', -angle),
+            _ => return,
+        };
+
+        self.anim_type = a_type;
+        self.anim_axis = axis;
+        self.anim_target_angle = final_angle;
+        self.anim_progress = 0.0;
+        self.anim_duration_secs = duration_secs;
+    }
+
+    /// Queue the new state to be applied after animation completes
+    pub fn queue_new_state(&mut self, facelets: &[u8]) {
+        if facelets.len() == 54 {
+            self.pending_facelets = Some(facelets.to_vec());
+        }
+    }
+
+    /// Apply pending facelets to models (called after animation ends)
+    fn apply_pending_state(&mut self) {
+        if let Some(facelets) = self.pending_facelets.take() {
+            let get_color = |c_idx: u8| match c_idx {
+                0 => Srgba::WHITE,
+                1 => Srgba::new(255, 255, 0, 255),
+                2 => Srgba::GREEN,
+                3 => Srgba::BLUE,
+                4 => Srgba::RED,
+                5 => Srgba::new(255, 165, 0, 255),
+                _ => Srgba::BLACK,
+            };
+
+            if self.models.len() >= 81 {
+                for i in 0..54 {
+                    if let Some((gm, _)) = self.models.get_mut(27 + i) {
+                        gm.material.color = get_color(facelets[i]);
+                    }
+                }
+            }
+        }
+    }
+
     /// Update viewport (when window resizes)
     pub fn set_viewport(&mut self, viewport: Viewport) {
         self.camera.set_viewport(viewport);
@@ -189,62 +292,85 @@ impl RenderState {
         self.control.handle_events(&mut self.camera, events);
     }
     
-    /// Update cube state (stickers + orientation)
-    /// 
-    /// The stickers parameter uses the Twizzle Binary 3x3x3 Format:
-    /// https://experiments.cubing.net/cubing.js/spec/binary/
-    /// 
-    /// Format (~20 bytes):
-    /// - EP (Edge Permutation): 29 bits
-    /// - EO (Edge Orientation): 11 bits
-    /// - CP (Corner Permutation): 17 bits
-    /// - CO (Corner Orientation): 13 bits
-    /// - MO (Center Orientation): optional
-    /// - PO (Puzzle Orientation): optional
+    /// Legacy method - now just queues state
     pub fn update_cube_state(&mut self, facelets: &[u8], orientation: Option<(f32, f32, f32, f32)>) {
         if let Some((x, y, z, w)) = orientation {
             self.display_rotation = cgmath::Quaternion::new(w, x, y, z);
         }
-        
-        // If we have 54 facelets (1 byte per sticker), update the colors
-        if facelets.len() == 54 {
-            let get_color = |c_idx: u8| match c_idx {
-                0 => Srgba::WHITE,
-                1 => Srgba::new(255, 255, 0, 255), // Yellow
-                2 => Srgba::GREEN,
-                3 => Srgba::BLUE,
-                4 => Srgba::RED,
-                5 => Srgba::new(255, 165, 0, 255), // Orange
-                _ => Srgba::BLACK,
-            };
-
-            // Our model list has 27 bodies + 54 stickers = 81 total
-            // Stickers start at index 27.
-            if self.models.len() >= 81 {
-                for i in 0..54 {
-                    if let Some((gm, _)) = self.models.get_mut(27 + i) {
-                        gm.material.color = get_color(facelets[i]);
-                    }
-                }
-            }
-        }
+        self.queue_new_state(facelets);
     }
     
     /// Render one frame
-    pub fn render_frame(&mut self, screen: &RenderTarget) {
-        let rotation_mat = Mat4::from(self.display_rotation);
+    pub fn render_frame(&mut self, screen: &RenderTarget, delta_time: f32) {
+        use cgmath::Rotation3;
+
+        // Update animation progress
+        let was_animating = self.anim_progress < 1.0;
+        if self.anim_progress < 1.0 {
+            let speed = if self.anim_duration_secs > 0.0 { 1.0 / self.anim_duration_secs } else { 10.0 };
+            self.anim_progress = (self.anim_progress + delta_time * speed).min(1.0);
+        }
+
+        // When animation JUST finished, apply the pending state
+        if was_animating && self.anim_progress >= 1.0 {
+            self.apply_pending_state();
+        }
+
+        // Calculate current animation angle (0 -> target during animation)
+        let current_angle = if self.anim_progress < 1.0 {
+            self.anim_target_angle * self.anim_progress
+        } else {
+            0.0
+        };
+
+        let anim_rot = if current_angle != 0.0 {
+            let axis_vec = match self.anim_axis {
+                'x' => vec3(1.0, 0.0, 0.0),
+                'y' => vec3(0.0, 1.0, 0.0),
+                'z' => vec3(0.0, 0.0, 1.0),
+                _ => vec3(0.0, 1.0, 0.0),
+            };
+            cgmath::Quaternion::from_axis_angle(axis_vec, cgmath::Deg(current_angle))
+        } else {
+            cgmath::Quaternion::new(1.0, 0.0, 0.0, 0.0)
+        };
+
+        let global_rot_mat = Mat4::from(self.display_rotation);
+        let anim_rot_mat = Mat4::from(anim_rot);
         
-        // Lighter gray background as requested
         screen.clear(ClearState::color_and_depth(0.25, 0.25, 0.28, 1.0, 1.0));
-        
         let lights: &[&dyn Light] = &[&self.ambient_light, &self.directional_light, &self.directional_light_2];
         
-        // Use real coordinates
         for (model, pos) in &mut self.models {
+            let mut final_transform = global_rot_mat;
+
+            // Apply animation if part of slice or global
+            let is_in_anim = match self.anim_type {
+                AnimType::Global => true,
+                AnimType::Slice { axis, coord } => {
+                    let p = match axis {
+                        'x' => pos.x,
+                        'y' => pos.y,
+                        'z' => pos.z,
+                        _ => 0.0,
+                    };
+                    // Outer layer: coord > 1.0 or coord < -1.0
+                    // Middle slice: coord == 0.0
+                    // Wide move: coord = 0.5 (right+middle) or -0.5 (left+middle)
+                    if coord > 1.0 { p > 1.0 }
+                    else if coord < -1.0 { p < -1.0 }
+                    else if coord > 0.1 { p > -1.0 }  // Wide right: everything except left layer
+                    else if coord < -0.1 { p < 1.0 }  // Wide left: everything except right layer
+                    else { p.abs() < 1.0 }            // Middle slice only
+                }
+            };
+
+            if is_in_anim {
+                final_transform = final_transform * anim_rot_mat;
+            }
+
             let translation_mat = Mat4::from_translation(*pos);
-            let transform = rotation_mat * translation_mat;
-            model.set_transformation(transform);
-            
+            model.set_transformation(final_transform * translation_mat);
             screen.render(&self.camera, &[model], lights);
         }
     }
@@ -301,8 +427,13 @@ pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
     
     let canvas_for_loop = canvas_element.clone();
     let context_for_loop = context.clone();
+    let mut last_time = web_sys::window().unwrap().performance().unwrap().now();
     
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
+        let now = web_sys::window().unwrap().performance().unwrap().now();
+        let delta_time = ((now - last_time) / 1000.0) as f32;
+        last_time = now;
+
         // Read canvas dimensions dynamically
         let rect = canvas_for_loop.get_bounding_client_rect();
         let dpr = web_sys::window().unwrap().device_pixel_ratio();
@@ -328,7 +459,7 @@ pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
         
         // Render target
         let target = RenderTarget::screen(&context_for_loop, canvas_width, canvas_height);
-        render_state.render_frame(&target);
+        render_state.render_frame(&target, delta_time);
         
         // Continue loop
         request_animation_frame(f.borrow().as_ref().unwrap());

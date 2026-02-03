@@ -22,17 +22,14 @@ fn main() {
     
     // Parse CLI arguments
     let args: Vec<String> = std::env::args().collect();
-    let scramble_moves: Vec<String> = if args.len() > 1 {
-        args[1].split_whitespace().map(|s| s.to_string()).collect()
-    } else {
-        Vec::new()
-    };
+    if args.len() < 3 {
+        eprintln!("Usage: rouxflow-standalone \"<scramble>\" \"<solve>\"");
+        eprintln!("Example: rouxflow-standalone \"R U R' U'\" \"x2 y U R U' R'\"");
+        std::process::exit(1);
+    }
     
-    let solve_moves: Vec<String> = if args.len() > 2 {
-        args[2].split_whitespace().map(|s| s.to_string()).collect()
-    } else {
-        Vec::new()
-    };
+    let scramble_moves: Vec<String> = args[1].split_whitespace().map(|s| s.to_string()).collect();
+    let solve_moves: Vec<String> = args[2].split_whitespace().map(|s| s.to_string()).collect();
 
     // Timing and Progress
     let mut last_move = Instant::now();
@@ -52,8 +49,7 @@ fn main() {
         ("LSE (Finish)".to_string(), Vec::new()),
     ];
     
-    use rand::seq::SliceRandom;
-    let move_options = ["U", "U'", "U2", "D", "D'", "D2", "L", "L'", "L2", "R", "R'", "R2", "F", "F'", "F2", "B", "B'", "B2"];
+
 
     println!("Window created - starting render loop");
     if !scramble_moves.is_empty() {
@@ -70,10 +66,13 @@ fn main() {
         
         let now = Instant::now();
         
-        // 1. Play Scramble (Fast)
+        // 1. Play Scramble (Fast: 200ms between moves, 150ms animation)
         if !is_solving && move_idx < scramble_moves.len() {
-            if last_move.elapsed() >= Duration::from_millis(100) {
-                cube_state.apply_move(&scramble_moves[move_idx]);
+            if last_move.elapsed() >= Duration::from_millis(200) {
+                let m = &scramble_moves[move_idx];
+                cube_state.apply_move(m);
+                render_state.trigger_move_anim(m, 0.15);
+
                 move_idx += 1;
                 last_move = now;
                 if move_idx == scramble_moves.len() {
@@ -84,11 +83,13 @@ fn main() {
                 }
             }
         } 
-        // 2. Play Solve (Tracking Phases)
+        // 2. Play Solve (500ms between moves, 400ms animation)
         else if is_solving && move_idx < solve_moves.len() {
             if last_move.elapsed() >= Duration::from_millis(500) {
                 let m = &solve_moves[move_idx];
                 cube_state.apply_move(m);
+                render_state.trigger_move_anim(m, 0.4);
+
                 move_idx += 1;
                 last_move = now;
 
@@ -150,21 +151,11 @@ fn main() {
                 }
             }
         }
-        // 3. Random fallback
-        else if scramble_moves.is_empty() {
-            if last_move.elapsed() >= Duration::from_secs(10) {
-                let mut rng = rand::thread_rng();
-                if let Some(&m) = move_options.choose(&mut rng) {
-                    println!("[Random] Applying: {}", m);
-                    cube_state.apply_move(m);
-                }
-                last_move = now;
-            }
-        }
+
 
         // Render frame
         render_state.update_cube_state(&cube_state.get_facelets(), None);
-        render_state.render_frame(&frame_input.screen());
+        render_state.render_frame(&frame_input.screen(), frame_input.elapsed_time as f32 / 1000.0);
         
         FrameOutput::default()
     });
