@@ -108,9 +108,11 @@ fn main() {
                 let sb = if cube_state.is_sb_solved() { "✅" } else { "❌" };
                 let cmll = if cube_state.is_cmll_solved() { "✅" } else { "❌" };
                 let bad_edges = cube_state.count_bad_edges();
+                let ulur = if cube_state.is_ul_ur_placed() { "✅" } else { "❌" };
+                let l4e = if cube_state.is_l4e_solved() { "✅" } else { "❌" };
                 
-                println!("[Solve {}/{}] {:<3} | FB: {} | SB: {} | CMLL: {} | EO: {} bad", 
-                    move_idx, solve_moves.len(), m, fb, sb, cmll, bad_edges);
+                println!("[Solve {:2}/{:2}] {:<3} | FB: {} | SB: {} | CMLL: {} | EO: {} bad | ULUR: {} | L4E: {}", 
+                    move_idx, solve_moves.len(), m, fb, sb, cmll, bad_edges, ulur, l4e);
 
                 // Phase transition logic
                 if current_phase == RouxPhase::FB && cube_state.is_fb_solved() {
