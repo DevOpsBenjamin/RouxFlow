@@ -333,7 +333,143 @@ impl BitCube {
         // let b_center = self.get_color_at(49);
         // if b_center != b { return false; }
         if self.get_color_at(50) != b || self.get_color_at(53) != b { return false; }
-
+        
         true
+    }
+
+    // --- Global Rotation Helpers (Correct Bitwise) ---
+    
+    fn rot90_cw(face_bits: u64) -> u64 {
+        let b = face_bits;
+        let mut n = 0;
+        if (b & (1<<0)) != 0 { n |= 1<<2; }
+        if (b & (1<<1)) != 0 { n |= 1<<5; }
+        if (b & (1<<2)) != 0 { n |= 1<<8; }
+        if (b & (1<<5)) != 0 { n |= 1<<7; }
+        if (b & (1<<8)) != 0 { n |= 1<<6; }
+        if (b & (1<<7)) != 0 { n |= 1<<3; }
+        if (b & (1<<6)) != 0 { n |= 1<<0; }
+        if (b & (1<<3)) != 0 { n |= 1<<1; }
+        if (b & (1<<4)) != 0 { n |= 1<<4; }
+        n
+    }
+
+    fn rot90_ccw(face_bits: u64) -> u64 {
+        let b = face_bits;
+        let mut n = 0;
+        if (b & (1<<0)) != 0 { n |= 1<<6; }
+        if (b & (1<<1)) != 0 { n |= 1<<3; }
+        if (b & (1<<2)) != 0 { n |= 1<<0; }
+        if (b & (1<<5)) != 0 { n |= 1<<1; }
+        if (b & (1<<8)) != 0 { n |= 1<<2; }
+        if (b & (1<<7)) != 0 { n |= 1<<5; }
+        if (b & (1<<6)) != 0 { n |= 1<<8; }
+        if (b & (1<<3)) != 0 { n |= 1<<7; }
+        if (b & (1<<4)) != 0 { n |= 1<<4; }
+        n
+    }
+    
+    fn rot180(face_bits: u64) -> u64 {
+        let b = face_bits;
+        let mut n = 0;
+        if (b & (1<<0)) != 0 { n |= 1<<8; }
+        if (b & (1<<1)) != 0 { n |= 1<<7; }
+        if (b & (1<<2)) != 0 { n |= 1<<6; }
+        if (b & (1<<5)) != 0 { n |= 1<<3; }
+        if (b & (1<<8)) != 0 { n |= 1<<0; }
+        if (b & (1<<7)) != 0 { n |= 1<<1; }
+        if (b & (1<<6)) != 0 { n |= 1<<2; }
+        if (b & (1<<3)) != 0 { n |= 1<<5; }
+        if (b & (1<<4)) != 0 { n |= 1<<4; }
+        n
+    }
+
+    pub fn rotate_y(&mut self) {
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next = 0;
+            // U (0-8) -> CW
+            next |= Self::rot90_cw(old & 0x1FF);
+            // D (27-35) -> CCW
+            next |= Self::rot90_ccw((old >> 27) & 0x1FF) << 27;
+            // F(18-26) -> L(36-44)
+            next |= ((old >> 18) & 0x1FF) << 36;
+            // L(36-44) -> B(45-53)
+            next |= ((old >> 36) & 0x1FF) << 45;
+            // B(45-53) -> R(9-17)
+            next |= ((old >> 45) & 0x1FF) << 9;
+            // R(9-17) -> F(18-26)
+            next |= ((old >> 9) & 0x1FF) << 18;
+            *b = next;
+        }
+    }
+
+    pub fn rotate_y_prime(&mut self) {
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next = 0;
+            // U (0-8) -> CCW
+            next |= Self::rot90_ccw(old & 0x1FF);
+            // D (27-35) -> CW
+            next |= Self::rot90_cw((old >> 27) & 0x1FF) << 27;
+            // F(18-26) -> R(9-17)
+            next |= ((old >> 18) & 0x1FF) << 9;
+            // R(9-17) -> B(45-53)
+            next |= ((old >> 9) & 0x1FF) << 45;
+            // B(45-53) -> L(36-44)
+            next |= ((old >> 45) & 0x1FF) << 36;
+            // L(36-44) -> F(18-26)
+            next |= ((old >> 36) & 0x1FF) << 18;
+            *b = next;
+        }
+    }
+    
+    pub fn rotate_y2(&mut self) {
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next = 0;
+            // U (0-8) -> 180
+            next |= Self::rot180(old & 0x1FF);
+            // D (27-35) -> 180
+            next |= Self::rot180((old >> 27) & 0x1FF) << 27;
+            // F(18-26) <-> B(45-53)
+            next |= ((old >> 18) & 0x1FF) << 45;
+            next |= ((old >> 45) & 0x1FF) << 18;
+            // L(36-44) <-> R(9-17)
+            next |= ((old >> 36) & 0x1FF) << 9;
+            next |= ((old >> 9) & 0x1FF) << 36;
+            *b = next;
+        }
+    }
+    
+    pub fn rotate_x2(&mut self) {
+        // x2: F <-> B (flipped), U <-> D (flipped)
+        // R and L (rotated 180)
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next = 0;
+            
+            // U(0-8) -> D(27-35) (180/Flipped? Yes, U becomes D upside down (relative to Front))
+            // Standard x2 on U means: Back squares become Front squares of D. 
+            // rot180 is correct.
+            next |= Self::rot180(old & 0x1FF) << 27;
+            
+            // D(27-35) -> U(0-8) (180)
+            next |= Self::rot180((old >> 27) & 0x1FF);
+            
+            // F(18-26) -> B(45-53) (180)
+            next |= Self::rot180((old >> 18) & 0x1FF) << 45;
+            
+            // B(45-53) -> F(18-26) (180)
+            next |= Self::rot180((old >> 45) & 0x1FF) << 18;
+            
+            // R(9-17) -> R(9-17) (180)
+            next |= Self::rot180((old >> 9) & 0x1FF) << 9;
+            
+            // L(36-44) -> L(36-44) (180)
+            next |= Self::rot180((old >> 36) & 0x1FF) << 36;
+            
+            *b = next;
+        }
     }
 }

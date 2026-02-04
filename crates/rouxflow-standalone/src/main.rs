@@ -158,11 +158,12 @@ fn main() {
                 // 2. New AI Solver (Bitboard + Pruning Table)
                 println!("   -> AI Solver (Bitboard): Thinking... ");
                 let bit_cube = rouxflow_ai::BitCube::from_facelet(&scrambled_logic);
-                let (ai_sols, ai_time) = AISolver::find_fb_solutions_optimized(&bit_cube, 6, &fb_table);
-                println!("Found {} in {:?}", ai_sols.len(), ai_time);
-                for (i, sol) in ai_sols.iter().enumerate() {
-                    println!("      [AI Sol {}] {}", i + 1, sol.join(" "));
+                let (ai_sols_structs, ai_time) = AISolver::find_fb_solutions_optimized(&bit_cube, 9, &fb_table);
+                println!("Found {} optimized solutions in {:?}", ai_sols_structs.len(), ai_time);
+                for (i, sol) in ai_sols_structs.iter().enumerate() {
+                    println!("      [AI Sol {} ({})] {}", i + 1, sol.orientation_name, sol.moves.join(" "));
                 }
+                let ai_sols: Vec<Vec<String>> = ai_sols_structs.into_iter().map(|s| s.moves).collect();
 
                 optimization_solutions = ai_sols; // Use AI solutions for playback
                 

@@ -2,112 +2,161 @@ use crate::BitCube;
 use std::time::{Instant, Duration};
 use crate::Move;
 use rayon::prelude::*;
+use crate::pruning::PruningTable;
+
+pub struct Solution {
+    pub moves: Vec<String>,
+    pub orientation_name: String, // e.g. "Orange/Yellow"
+}
+
+// Colors: U=0, D=1, F=2, B=3, R=4, L=5
+const COLORS: [&str; 6] = ["White", "Yellow", "Green", "Blue", "Red", "Orange"];
+
+// Local definition of normalization operations since Move doesn't have rotations
+#[derive(Debug, Clone, Copy)]
+enum NormalizationOps {
+    Identity,
+    Y, Yp, Y2,
+    X2, X2Y, X2Yp, X2Y2
+}
+
+// Helper to get transformations that bring various Left/Down pairs to the Standard (Orange, Yellow) position.
+fn get_normalization_transforms() -> Vec<(NormalizationOps, String)> {
+    vec![
+        // --- Yellow Bottom ---
+        (NormalizationOps::Identity, "Orange/Yellow".to_string()),
+        (NormalizationOps::Y, "Blue/Yellow".to_string()),
+        (NormalizationOps::Yp, "Green/Yellow".to_string()),
+        (NormalizationOps::Y2, "Red/Yellow".to_string()),
+        
+        // --- White Bottom ---
+        (NormalizationOps::X2, "Orange/White".to_string()), 
+        (NormalizationOps::X2Y, "Blue/White".to_string()),  
+        (NormalizationOps::X2Yp, "Green/White".to_string()),
+        (NormalizationOps::X2Y2, "Red/White".to_string()),
+    ]
+}
+
+impl NormalizationOps {
+    fn apply(&self, cube: &mut BitCube) {
+        match self {
+            NormalizationOps::Identity => {},
+            NormalizationOps::Y => cube.rotate_y(),
+            NormalizationOps::Yp => cube.rotate_y_prime(),
+            NormalizationOps::Y2 => cube.rotate_y2(),
+            NormalizationOps::X2 => cube.rotate_x2(),
+            NormalizationOps::X2Y => { cube.rotate_x2(); cube.rotate_y(); },
+            NormalizationOps::X2Yp => { cube.rotate_x2(); cube.rotate_y_prime(); },
+            NormalizationOps::X2Y2 => { cube.rotate_x2(); cube.rotate_y2(); },
+        }
+    }
+}
 
 pub struct AISolver;
 
 impl AISolver {
-    pub fn find_fb_solutions(cube: &BitCube, count: usize) -> (Vec<Vec<String>>, Duration) {
+    pub fn find_fb_solutions_optimized(cube: &BitCube, max_depth: u8, table: &PruningTable) -> (Vec<Solution>, Duration) {
         let start = Instant::now();
-        let mut solutions = Vec::new();
-        println!("      [AI Search] Parallel Thinking (Rayon Enabled)...");
-
+        let transforms = get_normalization_transforms();
+        
+        let mut all_solutions: Vec<Solution> = Vec::new();
         let moves = Move::ALL;
 
-        // IDA* style search
-        for depth in 2..=8 {
-            let start_depth = Instant::now();
-            
-            // Parallelize top level and aggregate solutions AND nodes
-            let (depth_solutions, total_nodes): (Vec<Vec<Vec<Move>>>, Vec<usize>) = moves.into_par_iter()
-                .map(|first_move| {
-                    let mut local_solutions = Vec::new();
-                    let mut work_cube = cube.clone();
-                    let mut path = vec![first_move];
-                    let mut nodes = 0;
+        for depth in 1..=max_depth {
+            let found_sols: Vec<Solution> = moves.par_iter().flat_map(|&first_move| {
+                let mut local_solutions = Vec::new();
+                let mut next = cube.clone();
+                next.apply_move_enum(first_move);
+                
+                // --- Pruning Check (Virtual Rotations) ---
+                let mut best_potential = 99;
+                
+                for (trans, _) in &transforms {
+                    let mut virt = next.clone();
+                    trans.apply(&mut virt);
                     
-                    work_cube.apply_move_enum(first_move);
-                    Self::dfs_numerical(
-                        &mut work_cube, 
-                        &mut path, 
-                        depth, 
-                        &mut local_solutions, 
-                        count, 
-                        &moves, 
-                        first_move.face(), 
-                        &mut nodes,
-                        None 
-                    );
-                    (local_solutions, nodes)
-                })
-                .unzip();
-
-            let depth_nodes: usize = total_nodes.into_iter().sum();
-            let elapsed = start_depth.elapsed();
-            
-            // Add unique solutions
-            let flattened: Vec<Vec<Move>> = depth_solutions.into_iter().flatten().collect();
-            for sol in flattened {
-                let sol_str = sol.iter().map(|m| m.as_str().to_string()).collect();
-                if !solutions.contains(&sol_str) {
-                    solutions.push(sol_str);
+                    let h = table.get_dist(&virt); 
+                    if h < best_potential { best_potential = h; }
                 }
-            }
+                
+                if best_potential > (depth - 1) { return local_solutions; }
 
-            println!("      [AI Search] Depth {} finished (Nodes: {}, Solutions Found: {}, Time: {:?})", 
-                depth, depth_nodes, solutions.len(), elapsed);
+                let mut path = Vec::with_capacity(depth as usize);
+                path.push(first_move.as_str().to_string());
+                
+                Self::dfs_multi_goal(
+                    &next, 
+                    depth - 1, 
+                    &mut path, 
+                    &mut local_solutions, 
+                    table, 
+                    &transforms
+                );
+                
+                local_solutions
+            }).collect();
             
-            if solutions.len() >= count { break; }
+            if !found_sols.is_empty() {
+                return (found_sols, start.elapsed());
+            }
         }
-        
-        (solutions, start.elapsed())
+
+        (vec![], start.elapsed())
     }
 
-    pub fn find_fb_solutions_optimized(cube: &BitCube, count: usize, table: &crate::pruning::PruningTable) -> (Vec<Vec<String>>, Duration) {
-        let start = Instant::now();
-        let mut solutions = Vec::new();
-        println!("      [AI Search] Optimized Thinking (Pruning Table Enabled)...");
-
-        let moves = Move::ALL;
-
-        for depth in 2..=10 {
-            let start_depth = Instant::now();
-            let (depth_solutions, total_nodes): (Vec<Vec<Vec<Move>>>, Vec<usize>) = moves.into_par_iter()
-                .map(|first_move| {
-                    let mut local_solutions = Vec::new();
-                    let mut work_cube = cube.clone();
-                    let mut path = vec![first_move];
-                    let mut nodes = 0;
-                    
-                    work_cube.apply_move_enum(first_move);
-                    Self::dfs_numerical(
-                        &mut work_cube, 
-                        &mut path, 
-                        depth, 
-                        &mut local_solutions, 
-                        count, 
-                        &moves, 
-                        first_move.face(), 
-                        &mut nodes,
-                        Some(table)
-                    );
-                    (local_solutions, nodes)
-                })
-                .unzip();
-
-            let depth_nodes: usize = total_nodes.into_iter().sum();
-            let flattened: Vec<Vec<Move>> = depth_solutions.into_iter().flatten().collect();
-            for sol in flattened {
-                let sol_str = sol.iter().map(|m| m.as_str().to_string()).collect();
-                if !solutions.contains(&sol_str) { solutions.push(sol_str); }
-            }
-
-            println!("      [AI Search] Depth {} finished (Nodes: {}, Solutions Found: {}, Time: {:?})", 
-                depth, depth_nodes, solutions.len(), start_depth.elapsed());
-            
-            if solutions.len() >= count { break; }
-        }
+    fn dfs_multi_goal(
+        cube: &BitCube, 
+        remaining_depth: u8, 
+        path: &mut Vec<String>, 
+        solutions: &mut Vec<Solution>,
+        table: &PruningTable,
+        transforms: &Vec<(NormalizationOps, String)>
+    ) {
+        let mut best_potential = 99;
+        let mut solved_targets = Vec::new();
         
-        (solutions, start.elapsed())
+        for (trans, name) in transforms {
+            let mut virt = cube.clone();
+            trans.apply(&mut virt);
+            
+            let h = table.get_dist(&virt);
+            if h == 0 { solved_targets.push(name.clone()); }
+            if h < best_potential { best_potential = h; }
+        }
+
+        if !solved_targets.is_empty() {
+            for name in solved_targets {
+                solutions.push(Solution { moves: path.clone(), orientation_name: name });
+            }
+            return; 
+        }
+
+        if remaining_depth == 0 { return; }
+        if best_potential > remaining_depth { return; }
+
+        let last_move_str = path.last().unwrap();
+        let last_face = Self::get_face(last_move_str); 
+        
+        let moves = Move::ALL;
+        for &m in &moves {
+            let face = m.face() as usize;
+             if face == last_face { continue; }
+             if (face ^ 1 == last_face) && (face < last_face) { continue; }
+
+            let mut next = cube.clone();
+            next.apply_move_enum(m);
+            
+            path.push(m.as_str().to_string());
+            Self::dfs_multi_goal(&next, remaining_depth - 1, path, solutions, table, transforms);
+            path.pop();
+        }
+    }
+    
+    fn get_face(m: &str) -> usize {
+        match m.chars().next().unwrap() {
+            'U' => 0, 'D' => 1, 'F' => 2, 'B' => 3, 'R' => 4, 'L' => 5,
+            _ => 99 
+        }
     }
 
     fn dfs_numerical(
