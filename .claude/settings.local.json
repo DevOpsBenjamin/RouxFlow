@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(cargo build:*)",
+      "WebSearch",
+      "WebFetch(domain:tinkerman.cat)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:speedcubeshop.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:js.cubing.net)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:bluetooth.cubing.net)",
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(findstr:*)"
+    ]
+  }
+}
