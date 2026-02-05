@@ -88,14 +88,19 @@ export class CubeBridge {
         await this.processRawPacket(bytes)
     }
 
-    static async processRawPacket(bytes: Uint8Array) {
+    static async processRawPacket(bytes: Uint8Array, deviceId: string = 'web-bluetooth-device') {
         await ensureWasm()
         if (!sessionManager) return
 
+        // DEBUG: Hex log pour voir si le déchiffrement Core fonctionne
+        const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
+        console.log(`[Bridge] Raw Packet (${deviceId}): ${hex}`);
+
         // 1. Action: Vue -> Bridge -> Core (Logic Execution)
-        const eventJson = handle_ble_packet(bytes, sessionManager)
+        const eventJson = handle_ble_packet(bytes, deviceId, sessionManager)
 
         if (eventJson) {
+            console.log(`[Bridge] Core Result: ${eventJson}`);
             try {
                 // 2. Logic: Core returns an ActionRequest
                 const action = JSON.parse(eventJson)
@@ -170,7 +175,6 @@ export class CubeBridge {
         const bt = useBluetoothStore()
 
         if (isTauri) {
-            console.log('[Bridge] Starting Tauri Native Scan')
             try {
                 bt.startScan()
 
@@ -259,7 +263,9 @@ export class CubeBridge {
         if (isTauri) {
             await invoke('ble_connect', { id: device.id })
             listen('ble-packet', (event: any) => {
-                this.processRawPacket(new Uint8Array(event.payload as number[]))
+                console.log('[Bridge] Received ble-packet event from Tauri');
+                const { id, data } = event.payload;
+                this.processRawPacket(new Uint8Array(data as number[]), id)
             })
         }
     }

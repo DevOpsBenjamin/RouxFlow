@@ -59,6 +59,13 @@ onMounted(() => {
       >
         Cube Manager
       </button>
+      <button 
+        @click="ui.setMoyuDebug()" 
+        class="hover:text-red-400 transition-colors font-mono"
+        :class="{ 'text-red-400': ui.currentState === 'MoyuDebug' }"
+      >
+        MoYu Debug
+      </button>
     </nav>
 
     <div class="flex items-center gap-4">

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-export type AppState = 'Landing' | 'Home' | 'Connecting' | 'ActiveSession' | 'Analysis' | 'Profile' | 'Leaderboard' | 'SupportedCubes' | 'CubeManager'
+export type AppState = 'Landing' | 'Home' | 'Connecting' | 'ActiveSession' | 'Analysis' | 'Profile' | 'Leaderboard' | 'SupportedCubes' | 'CubeManager' | 'MoyuDebug'
 
 export const useUIStore = defineStore('ui', () => {
     const currentState = ref<AppState>('Landing')
@@ -44,6 +44,10 @@ export const useUIStore = defineStore('ui', () => {
         currentState.value = 'CubeManager'
     }
 
+    function setMoyuDebug() {
+        currentState.value = 'MoyuDebug'
+    }
+
     return {
         currentState,
         selectedSolveId,
@@ -55,6 +59,7 @@ export const useUIStore = defineStore('ui', () => {
         openProfile,
         setLeaderboard,
         setSupportedCubes,
-        setCubeManager
+        setCubeManager,
+        setMoyuDebug
     }
 })

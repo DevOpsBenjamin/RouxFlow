@@ -143,6 +143,7 @@ impl CubeState {
 }
 
 pub mod gan_v2;
+pub mod moyu;
 
 pub trait CubeProtocol {
     fn name(&self) -> &str;

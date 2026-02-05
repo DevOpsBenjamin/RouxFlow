@@ -9,6 +9,7 @@ import SupportedCubesView from './components/layout/SupportedCubesView.vue'
 import DeviceSelectionModal from './components/cube/DeviceSelectionModal.vue'
 import CubeManagerView from './components/layout/CubeManagerView.vue'
 import Navbar from './components/layout/Navbar.vue'
+import MoyuDebugger from './components/cube/MoyuDebugger.vue'
 import { useUIStore } from './stores/ui'
 import { useAuthStore } from './stores/auth'
 
@@ -45,7 +46,8 @@ watch(() => auth.isAuthenticated, (isLogged) => {
         leave-to-class="transform translate-y-4 opacity-0"
         mode="out-in"
       >
-        <LandingView v-if="ui.currentState === 'Landing'" />
+        <MoyuDebugger v-if="ui.currentState === 'MoyuDebug'" />
+        <LandingView v-else-if="ui.currentState === 'Landing'" />
         <HomeView v-else-if="ui.currentState === 'Home'" />
         <ProfileView v-else-if="ui.currentState === 'Profile'" />
         <LeaderboardView v-else-if="ui.currentState === 'Leaderboard'" />

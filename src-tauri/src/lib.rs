@@ -84,11 +84,8 @@ pub fn run() {
                 }
 
                 match init_ble().await {
-                   Ok(adapter) => {
-                       app_handle.manage(BleState { 
-                           adapter,
-                           connected_peripheral: Arc::new(Mutex::new(None)) 
-                       });
+                   Ok(ble_state) => {
+                       app_handle.manage(ble_state);
                    },
                    Err(e) => {
                        eprintln!("Failed to init BLE: {}", e);

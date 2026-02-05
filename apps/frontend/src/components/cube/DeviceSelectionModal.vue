@@ -1,12 +1,16 @@
 <script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 import { useBluetoothStore, type BluetoothDevice } from '../../stores/bluetooth'
 import { useUIStore } from '../../stores/ui'
 import { CubeBridge } from '../../services/cube/bridge'
 
 const bt = useBluetoothStore()
 const ui = useUIStore()
+let pollInterval: any = null
 
 async function selectDevice(device: BluetoothDevice) {
+  console.log('[Modal] Selecting device:', device);
   bt.isConnecting = true
   try {
     await CubeBridge.finalConnect(device)
@@ -20,6 +24,24 @@ async function selectDevice(device: BluetoothDevice) {
     bt.isConnecting = false
   }
 }
+
+onMounted(() => {
+  // Poll for devices every 1.5s
+  pollInterval = setInterval(async () => {
+    if (bt.showPicker && bt.isScanning) {
+        try {
+            const devices = await invoke('ble_list_devices') as any[]
+            bt.setDevices(devices)
+        } catch (e) {
+            console.error('[Modal] Poll failed:', e)
+        }
+    }
+  }, 1500)
+})
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval)
+})
 </script>
 
 <template>
