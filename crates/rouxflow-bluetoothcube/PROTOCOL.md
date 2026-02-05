@@ -37,7 +37,7 @@ encryption keys are defined in the `src/protocol/` directory of this crate.
 | GAN Gen3  | GAN           | AES-CBC           | `8653000a-43e6-47b7-9cb0-5fc21d4ae340`   | `gan_v3.rs`   |
 | GAN Gen4  | GAN           | AES-CBC           | `00000010-0000-fff7-fff6-fff5fff4fff0`    | `gan_v4.rs`   |
 | MoYu AI   | MoYu          | AES-CBC (alt key) | *(reuses GAN Gen2)*                      | `moyu_ai.rs`  |
-| MoYu V3   | MoYu          | AES-CBC 2-pass    | `0783b03e-7735-b5a0-1760-a305d2795cb0`   | `moyu_v3.rs`  |
+| MoYu V3   | MoYu          | AES-CBC (GAN-style) | `0783b03e-7735-b5a0-1760-a305d2795cb0`   | `moyu_v3.rs`  |
 | Giiker    | Xiaomi        | XOR/ADD table     | `0000aadb-0000-1000-8000-00805f9b34fb`   | `giiker.rs`   |
 | GoCube    | Particula     | None (plaintext)  | `6e400001-b5a3-f393-e0a9-e50e24dcca9e`   | `gocube.rs`   |
 | QiYi      | QiYi          | AES-ECB           | `0000fff0-0000-1000-8000-00805f9b34fb`   | `qiyi.rs`     |
@@ -264,11 +264,12 @@ Identical to GAN Gen2.
 
 **File:** `src/protocol/moyu_v3.rs`
 
-Native MoYu protocol with a different BLE service and a unique double-pass
-AES-CBC decryption scheme.
+Native MoYu protocol with a different BLE service. Uses the **same encryption
+as GAN Gen2** (AES-128-CBC, decrypt last-16 then first-16, MAC-salted keys)
+but with different base key/IV values and a different bit-packed packet format.
 
 ### Cubes
-- MoYu WeiLong V10 (prefix: `WCU_MY`)
+- MoYu WeiLong V10 (prefix: `WCU_MY3`)
 
 ### BLE
 | UUID | Role |
@@ -279,27 +280,17 @@ AES-CBC decryption scheme.
 
 ### Encryption
 
-AES-128-CBC with **double-pass** decryption.
+**Same as GAN Gen2:** AES-128-CBC, decrypt last 16 bytes then first 16 bytes.
 
-**Key derivation** (MAC address reversed, modulo 255):
+**Key derivation** (identical to GAN — MAC reversed, modulo 255):
 ```
 device_key[i] = (master_key[i] + mac_reversed[i]) % 255   for i in 0..6
 device_iv[i]  = (master_iv[i]  + mac_reversed[i]) % 255   for i in 0..6
 ```
 
-**Double-pass decryption:**
-1. Decrypt 16 bytes at offset **4..20** (tail) with fresh AES-CBC context
-2. Decrypt 16 bytes at offset **0..16** (head) with fresh AES-CBC context
+### Packet Format (20 bytes, bit-packed)
 
-Each pass uses its own CBC initialization (no IV chaining across passes).
-
-### Handshake
-A hello payload must be sent to the write characteristic after connecting,
-before the cube will start sending notifications.
-
-### Packet Format (20 bytes)
-
-Byte 0 (after decryption) = opcode:
+All fields are accessed as bit offsets. Byte 0 (bits 0..8) = message type:
 
 | Opcode | Event    | Description                             |
 |--------|----------|-----------------------------------------|

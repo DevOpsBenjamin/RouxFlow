@@ -1,5 +1,6 @@
 pub mod cube;
 pub mod protocol;
+pub mod codec;
 
 // Re-export core types
 pub use cube::{
@@ -12,4 +13,10 @@ pub use protocol::{
     ProtocolVersion, BleProfile, EncryptionKeys, EncryptionMethod,
     GAN_KEYS, MOYU_AI_KEYS, MOYU_V3_KEYS,
     QIYI_KEY, GIIKER_KEY_TABLE,
+};
+
+// Re-export codec types
+pub use codec::{
+    CubeProtocol, CubeEvent, CubeCommand, AngularVelocity,
+    create_protocol,
 };

@@ -4,6 +4,9 @@
 //! This is the only crate compiled as `cdylib` for wasm-pack.
 
 use wasm_bindgen::prelude::*;
+use rouxflow_bluetoothcube::codec::{self, CubeCommand, CubeEvent, CubeProtocol};
+use rouxflow_core::cube::CubeMove;
+use rouxflow_core::session::CoreAction;
 
 // ========== INIT ==========
 
@@ -12,16 +15,220 @@ pub fn wasm_init() {
     console_error_panic_hook::set_once();
 }
 
-// ========== CORE: BLE packet handling ==========
+// ========== CORE: Protocol-aware BLE packet handling ==========
 
+/// Opaque protocol handler. Created by `create_protocol()`, used by
+/// `process_packet()` and `encode_cube_command()`.
 #[wasm_bindgen]
-pub fn encode_cube_command(command_id: u8, device_id: &str, use_moyu_key: bool) -> Vec<u8> {
-    rouxflow_core::encode_cube_command(command_id, device_id, use_moyu_key)
+pub struct ProtocolHandler {
+    inner: Box<dyn CubeProtocol>,
 }
 
 #[wasm_bindgen]
+impl ProtocolHandler {
+    /// Protocol display name.
+    pub fn name(&self) -> String {
+        self.inner.name().to_string()
+    }
+
+    /// Whether this protocol's cubes support gyroscope.
+    pub fn has_gyro(&self) -> bool {
+        self.inner.has_gyro()
+    }
+
+    /// Whether this protocol requires a handshake after BLE connection.
+    pub fn requires_handshake(&self) -> bool {
+        self.inner.requires_handshake()
+    }
+
+    /// Get handshake data to send after connection, if required.
+    /// Returns null if no handshake needed.
+    pub fn handshake_data(&self) -> Option<Vec<u8>> {
+        self.inner.handshake_data()
+    }
+}
+
+/// Create a protocol handler for a given protocol name and MAC address.
+///
+/// Protocol names: "GanV1", "GanV2", "GanV3", "GanV4", "MoYuAi", "MoYuV3",
+/// "GiikerV1", "GoCube", "QiYiSmart".
+#[wasm_bindgen]
+pub fn create_protocol(protocol_name: &str, mac_address: &str) -> Result<ProtocolHandler, JsValue> {
+    let protocol = match protocol_name {
+        "GanV1" => rouxflow_bluetoothcube::ProtocolVersion::GanV1,
+        "GanV2" => rouxflow_bluetoothcube::ProtocolVersion::GanV2,
+        "GanV3" => rouxflow_bluetoothcube::ProtocolVersion::GanV3,
+        "GanV4" => rouxflow_bluetoothcube::ProtocolVersion::GanV4,
+        "MoYuAi" => rouxflow_bluetoothcube::ProtocolVersion::MoYuAi,
+        "MoYuV3" => rouxflow_bluetoothcube::ProtocolVersion::MoYuV3,
+        "GiikerV1" => rouxflow_bluetoothcube::ProtocolVersion::GiikerV1,
+        "GoCube" => rouxflow_bluetoothcube::ProtocolVersion::GoCube,
+        "QiYiSmart" => rouxflow_bluetoothcube::ProtocolVersion::QiYiSmart,
+        _ => return Err(JsValue::from_str(&format!("Unknown protocol: {}", protocol_name))),
+    };
+    Ok(ProtocolHandler {
+        inner: codec::create_protocol(protocol, mac_address),
+    })
+}
+
+/// Process a raw BLE notification packet through the protocol handler.
+///
+/// Flow: raw bytes → decrypt → decode → Vec<CubeEvent> → process each through session.
+/// Returns a JSON string of CoreAction results, or empty string if no actions.
+#[wasm_bindgen]
+pub fn process_packet(
+    protocol: &mut ProtocolHandler,
+    raw_data: &[u8],
+    session: &mut SessionManager,
+) -> String {
+    let decrypted = protocol.inner.decrypt(raw_data);
+    let events = protocol.inner.decode_event(&decrypted);
+
+    let mut actions: Vec<String> = Vec::new();
+
+    for event in events {
+        let action = handle_cube_event(&event, &mut session.inner);
+        if !action.is_empty() {
+            actions.push(action);
+        }
+    }
+
+    if actions.is_empty() {
+        String::new()
+    } else if actions.len() == 1 {
+        actions.into_iter().next().unwrap()
+    } else {
+        format!("[{}]", actions.join(","))
+    }
+}
+
+/// Encrypt and encode a cube command for sending via BLE.
+///
+/// Command names: "facelets", "hardware", "battery", "reset".
+#[wasm_bindgen]
+pub fn encode_cube_command(protocol: &ProtocolHandler, command_name: &str) -> Result<Vec<u8>, JsValue> {
+    let cmd = match command_name {
+        "facelets" => CubeCommand::RequestFacelets,
+        "hardware" => CubeCommand::RequestHardware,
+        "battery" => CubeCommand::RequestBattery,
+        "reset" => CubeCommand::RequestReset,
+        _ => return Err(JsValue::from_str(&format!("Unknown command: {}", command_name))),
+    };
+
+    match protocol.inner.create_command(cmd) {
+        Some(msg) => Ok(protocol.inner.encrypt(&msg)),
+        None => Err(JsValue::from_str("Command not supported by this protocol")),
+    }
+}
+
+/// Process a CubeEvent through the session manager.
+fn handle_cube_event(
+    event: &CubeEvent,
+    session: &mut rouxflow_core::session::SessionManager,
+) -> String {
+    match event {
+        CubeEvent::Move { face, direction, .. } => {
+            let cube_move = CubeMove {
+                face: *face,
+                amount: *direction,
+            };
+            let notation = cube_move.notation();
+            let now = chrono::Utc::now().timestamp_millis() as f64 / 1000.0;
+
+            // Try scramble validation first
+            let action = session.handle_scramble_move(&notation, now);
+            if !action.is_empty() {
+                return action;
+            }
+
+            // If not in scramble phase, emit as a plain move
+            serde_json::to_string(&CoreAction::Move(notation)).unwrap_or_default()
+        }
+        CubeEvent::Gyro { quaternion, .. } => {
+            let now = chrono::Utc::now().timestamp_millis() as f64 / 1000.0;
+            session.process_orientation(quaternion.x, quaternion.y, quaternion.z, quaternion.w, now)
+        }
+        CubeEvent::Battery { level } => {
+            // TODO: route to frontend via a BatteryUpdate action
+            format!(r#"{{"type":"Battery","data":{}}}"#, level)
+        }
+        CubeEvent::Hardware { name, sw_version, hw_version, gyro_supported } => {
+            format!(
+                r#"{{"type":"Hardware","data":{{"name":"{}","swVersion":"{}","hwVersion":"{}","gyroSupported":{}}}}}"#,
+                name, sw_version, hw_version, gyro_supported
+            )
+        }
+        CubeEvent::Facelets { cp, co, ep, eo, .. } => {
+            // Update the cube state in the session manager's internal cube
+            // For now, return the state as JSON for the frontend
+            format!(
+                r#"{{"type":"Facelets","data":{{"cp":{:?},"co":{:?},"ep":{:?},"eo":{:?}}}}}"#,
+                cp, co, ep, eo
+            )
+        }
+        CubeEvent::Disconnect => {
+            r#"{"type":"Disconnect"}"#.to_string()
+        }
+        CubeEvent::MoveHistory { moves } => {
+            // Process each recovered move
+            let mut last_action = String::new();
+            for m in moves {
+                let action = handle_cube_event(m, session);
+                if !action.is_empty() {
+                    last_action = action;
+                }
+            }
+            last_action
+        }
+        CubeEvent::RawFacelets { facelet_string } => {
+            format!(r#"{{"type":"RawFacelets","data":"{}"}}"#, facelet_string)
+        }
+        CubeEvent::WriteBack { data } => {
+            // Return write-back data as a JSON array of bytes for the TS bridge to send
+            let bytes: Vec<String> = data.iter().map(|b| b.to_string()).collect();
+            format!(r#"{{"type":"WriteBack","data":[{}]}}"#, bytes.join(","))
+        }
+    }
+}
+
+// ========== Legacy compatibility wrappers ==========
+// These maintain the old API for the bridge.ts until it's updated.
+
+/// Legacy: handle_ble_packet (delegates to protocol auto-detection).
+/// This tries GAN Gen2 with standard GAN keys as a fallback.
+#[wasm_bindgen]
 pub fn handle_ble_packet(data: &[u8], device_id: &str, session: &mut SessionManager) -> String {
-    rouxflow_core::handle_ble_packet(data, device_id, &mut session.inner)
+    // Create a temporary GAN V2 protocol with standard keys
+    let mut proto = codec::create_protocol(
+        rouxflow_bluetoothcube::ProtocolVersion::GanV2,
+        device_id,
+    );
+    let decrypted = proto.decrypt(data);
+    let events = proto.decode_event(&decrypted);
+
+    for event in &events {
+        let action = handle_cube_event(event, &mut session.inner);
+        if !action.is_empty() {
+            return action;
+        }
+    }
+
+    // Try MoYu AI keys
+    let mut proto_moyu = codec::create_protocol(
+        rouxflow_bluetoothcube::ProtocolVersion::MoYuAi,
+        device_id,
+    );
+    let decrypted_moyu = proto_moyu.decrypt(data);
+    let events_moyu = proto_moyu.decode_event(&decrypted_moyu);
+
+    for event in &events_moyu {
+        let action = handle_cube_event(event, &mut session.inner);
+        if !action.is_empty() {
+            return action;
+        }
+    }
+
+    String::new()
 }
 
 #[wasm_bindgen]

@@ -3,48 +3,41 @@
 //! Native MoYu protocol used by newer WeiLong cubes.
 //!
 //! ## Supported cubes
-//! - MoYu WeiLong V10 (BLE prefix: `WCU_MY`)
+//! - MoYu WeiLong V10 (BLE prefix: `WCU_MY3`)
 //!
 //! ## Encryption
-//! AES-128-CBC with **double-pass** decryption and MAC-salted keys.
+//! Uses the **same encryption as GAN Gen2**: AES-128-CBC with MAC-salted keys,
+//! decrypt last-16 then first-16. Different base key/IV from GAN.
 //!
-//! ### Key derivation
-//! The 6-byte MAC address is reversed, then added modulo 255 to the first
-//! 6 bytes of the master key and IV:
+//! ### Key derivation (same formula as GAN)
 //! ```text
 //! device_key[i] = (MASTER_KEY[i] + mac_reversed[i]) % 255   for i in 0..6
 //! device_iv[i]  = (MASTER_IV[i]  + mac_reversed[i]) % 255   for i in 0..6
 //! ```
 //!
-//! ### Double-pass decryption
-//! Unlike GAN (which decrypts last-then-first), MoYu V3 decrypts:
-//! 1. **Pass 1** — Decrypt 16 bytes at offset 4..20 (tail)
-//! 2. **Pass 2** — Decrypt 16 bytes at offset 0..16 (head)
-//!
-//! Each pass uses a fresh AES-CBC context (no IV chaining across passes).
-//!
-//! ## Handshake
-//! After connecting, a hello payload must be sent to the write characteristic
-//! before the cube will start sending notifications.
-//!
 //! ## Packet format
-//! 20-byte encrypted packets. The first byte (after decryption) is the opcode.
+//! 20-byte encrypted, bit-packed packets. Bits 0..8 = message type.
 //!
-//! | Opcode | Description                     |
-//! |--------|---------------------------------|
-//! | `0xA1` | Device info response            |
-//! | `0xA3` | Full cube state (facelets)      |
-//! | `0xA4` | Battery level                   |
-//! | `0xA5` | Move event                      |
-//! | `0xAB` | Gyroscope quaternion (f32 × 4)  |
+//! | Type  | Description                     |
+//! |-------|---------------------------------|
+//! | `161` | Device info (0xA1)              |
+//! | `163` | Full cube state / facelets (0xA3) |
+//! | `164` | Battery level (0xA4)            |
+//! | `165` | Move event (0xA5)               |
+//! | `171` | Gyroscope quaternion (0xAB)     |
+//!
+//! ### Move event (0xA5, bit-packed)
+//! - Bits 8..88: 5x 16-bit timestamps
+//! - Bits 88..96: move counter (u8)
+//! - Bits 96..121: 5x 5-bit moves
+//! - Move encoding: `m >> 1` → face in "FBUDLR", `m & 1` → 0=CW, 1=CCW
+//!
+//! ### State (0xA3, bit-packed)
+//! - Bits 8..152: 48x 3-bit stickers (6 faces in FBUDLR, 8 stickers each)
+//! - Bits 152..160: move counter
 //!
 //! ### Gyroscope data (0xAB)
-//! Bytes 1..17 contain four little-endian `f32` values representing the
-//! orientation quaternion `[q0, q1, q2, q3]`.
-//!
-//! ### Move event (0xA5)
-//! Face codes: `0=U, 1=D, 2=L, 3=R, 4=F, 5=B`.
-//! Direction: `1=CW, 2=CCW, 3=Double`.
+//! Bytes 1..17: four little-endian `f32` quaternion values.
 
 use super::{BleProfile, EncryptionKeys};
 

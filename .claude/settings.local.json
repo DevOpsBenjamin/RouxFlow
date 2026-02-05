@@ -20,7 +20,8 @@
       "Bash(cargo check:*)",
       "Bash(dir:*)",
       "Bash(pnpm install:*)",
-      "Bash(cargo test:*)"
+      "Bash(cargo test:*)",
+      "Bash(cargo run:*)"
     ]
   }
 }

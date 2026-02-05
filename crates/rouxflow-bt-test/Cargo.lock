@@ -172,6 +172,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-link 0.2.1",
 ]
@@ -397,6 +398,31 @@ checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
  "typenum",
  "version_check",
+]
+
+[[package]]
+name = "getrandom"
+version = "0.2.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0"
+dependencies = [
+ "cfg-if",
+ "js-sys",
+ "libc",
+ "wasi",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "getrandom"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "r-efi",
+ "wasip2",
 ]
 
 [[package]]
@@ -672,6 +698,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "r-efi"
+version = "5.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -681,19 +713,38 @@ dependencies = [
 ]
 
 [[package]]
-name = "rouxflow-bt-test"
+name = "rouxflow-bluetoothcube"
 version = "0.1.0"
 dependencies = [
  "aes",
- "btleplug",
  "cbc",
- "chrono",
  "cipher",
+ "rouxflow-core",
+ "serde",
+]
+
+[[package]]
+name = "rouxflow-bt-test"
+version = "0.1.0"
+dependencies = [
+ "btleplug",
  "futures",
  "hex",
+ "rouxflow-bluetoothcube",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "rouxflow-core"
+version = "0.1.8"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
+ "getrandom 0.2.17",
  "serde",
  "serde_json",
- "tokio",
  "uuid",
 ]
 
@@ -939,7 +990,9 @@ version = "1.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee48d38b119b0cd71fe4141b30f5ba9c7c5d9f4e7a3a8b4a674e4b6ef789976f"
 dependencies = [
+ "getrandom 0.3.4",
  "js-sys",
+ "serde_core",
  "wasm-bindgen",
 ]
 
@@ -964,6 +1017,15 @@ name = "wasi"
 version = "0.11.1+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
+
+[[package]]
+name = "wasip2"
+version = "1.0.2+wasi-0.2.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9517f9239f02c069db75e65f174b3da828fe5f5b945c4dd26bd25d89c03ebcf5"
+dependencies = [
+ "wit-bindgen",
+]
 
 [[package]]
 name = "wasm-bindgen"
@@ -1322,6 +1384,12 @@ name = "windows_x86_64_msvc"
 version = "0.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
+
+[[package]]
+name = "wit-bindgen"
+version = "0.51.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7249219f66ced02969388cf2bb044a09756a083d0fab1e566056b04d9fbcaa5"
 
 [[package]]
 name = "xml"

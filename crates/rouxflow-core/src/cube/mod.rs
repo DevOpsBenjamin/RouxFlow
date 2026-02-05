@@ -1,6 +1,6 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Face {
     U = 0, R = 1, F = 2, D = 3, L = 4, B = 5
 }
@@ -131,14 +131,3 @@ impl CubeState {
     }
 }
 
-pub mod gan_v2;
-pub mod moyu;
-
-pub trait CubeProtocol {
-    fn name(&self) -> &str;
-    fn has_gyro(&self) -> bool;
-    fn decrypt(&self, data: &[u8]) -> Result<Vec<u8>, String>;
-    fn decode_move(&self, decrypted_data: &[u8]) -> Result<CubeMove, String>;
-    fn decode_state(&self, decrypted_data: &[u8]) -> Result<CubeState, String>;
-    fn decode_orientation(&self, decrypted_data: &[u8]) -> Result<Option<Quaternion>, String>;
-}
