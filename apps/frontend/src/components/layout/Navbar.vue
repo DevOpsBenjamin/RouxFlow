@@ -3,8 +3,6 @@ import { onMounted } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import { useUIStore } from '../../stores/ui'
 import { useBluetoothStore } from '../../stores/bluetooth'
-import { isTauri } from '../../services/cube/bridge'
-
 const auth = useAuthStore()
 const ui = useUIStore()
 const bt = useBluetoothStore()
@@ -87,7 +85,7 @@ onMounted(() => {
              <div class="flex flex-col">
                <span class="text-xs font-black uppercase tracking-wider text-slate-500">Your Cubes</span>
                <button 
-                 v-if="isTauri && auth.isAuthenticated" 
+                 v-if="auth.isAuthenticated" 
                  @click="bt.sync(auth.user!.id)"
                  class="text-[9px] text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
                >

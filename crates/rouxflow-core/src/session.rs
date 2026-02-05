@@ -1,9 +1,7 @@
-use wasm_bindgen::prelude::*;
 use serde::{Serialize, Deserialize};
 use crate::cube::Quaternion;
 
-#[wasm_bindgen]
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub enum SessionType {
     Free,
     WCA,
@@ -49,18 +47,15 @@ pub enum CoreAction {
     Error(String),
 }
 
-#[wasm_bindgen]
 pub struct ScrambleValidator {
-    scramble: Vec<String>,
-    current_index: usize,
+    pub scramble: Vec<String>,
+    pub current_index: usize,
     last_move_time: f64,
-    is_invalid: bool,
+    pub is_invalid: bool,
     mistakes: Vec<String>,
 }
 
-#[wasm_bindgen]
 impl ScrambleValidator {
-    #[wasm_bindgen(constructor)]
     pub fn new(scramble_str: &str) -> Self {
         Self {
             scramble: scramble_str.split_whitespace().map(|s| s.to_string()).collect(),
@@ -117,7 +112,7 @@ impl ScrambleValidator {
 
         // 4. Otherwise, it's a mistake
         self.mistakes.push(move_str.to_string());
-        
+
         // If too many mistakes (tolerance = 1), mark invalid
         if self.mistakes.len() > 1 {
             self.is_invalid = true;
@@ -131,11 +126,10 @@ impl ScrambleValidator {
     }
 }
 
-#[wasm_bindgen]
 pub struct SessionManager {
     active_session: Option<Session>,
     scramble_validator: Option<ScrambleValidator>,
-    
+
     // Motion fields
     last_orientation: Option<Quaternion>,
     is_stable: bool,
@@ -145,9 +139,7 @@ pub struct SessionManager {
     flow_state: FlowState,
 }
 
-#[wasm_bindgen]
 impl SessionManager {
-    #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         Self {
             active_session: None,
@@ -200,7 +192,7 @@ impl SessionManager {
         let q = Quaternion { x, y, z, w };
         if let Some(last) = self.last_orientation {
             let delta = (q.x - last.x).powi(2) + (q.y - last.y).powi(2) + (q.z - last.z).powi(2) + (q.w - last.w).powi(2);
-            let threshold = 0.0001; 
+            let threshold = 0.0001;
             let moving = delta > threshold;
 
             if moving && self.is_stable {
@@ -209,7 +201,7 @@ impl SessionManager {
             } else if !moving && !self.is_stable {
                 if self.stable_since == 0.0 {
                     self.stable_since = timestamp;
-                } else if timestamp - self.stable_since > 500.0 { 
+                } else if timestamp - self.stable_since > 500.0 {
                     self.is_stable = true;
                     self.stable_since = 0.0;
                     return serde_json::to_string(&CoreAction::Putdown).unwrap_or_default();
@@ -253,12 +245,12 @@ impl SessionManager {
     pub fn handle_scramble_move(&mut self, move_str: &str, timestamp: f64) -> String {
         if let Some(v) = &mut self.scramble_validator {
             let moved = v.handle_move(move_str, timestamp);
-            
+
             if v.is_ready() && self.flow_state != FlowState::Ready {
                 self.flow_state = FlowState::Ready;
                 return serde_json::to_string(&CoreAction::FlowStateChanged(self.flow_state)).unwrap_or_default();
             }
-            
+
             if moved {
                 return serde_json::to_string(&CoreAction::Move(move_str.to_string())).unwrap_or_default();
             }
@@ -277,8 +269,6 @@ impl SessionManager {
         };
 
         self.flow_state = FlowState::Finished;
-        // This will result in TWO actions: SaveSolve and FlowStateChanged?
-        // Let's return the SaveSolve action, and UI will know it's finished.
         self.save_solve_internal(solve)
     }
 

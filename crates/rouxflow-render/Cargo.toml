@@ -6,23 +6,18 @@ authors = ["DevOpsBen"]
 rust-version = "1.77.2"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [dependencies]
 three-d = "0.17"
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
 console_error_panic_hook = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 cgmath = "0.18"
 rouxflow-core = { path = "../rouxflow-core" }
 
-[dependencies.web-sys]
-version = "0.3"
-features = [
-  "Document",
-  "Window",
-  "HtmlCanvasElement",
-  "Element"
-]
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["Document", "Window", "HtmlCanvasElement", "Element", "WebGl2RenderingContext", "Performance", "DomRect"] }
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"

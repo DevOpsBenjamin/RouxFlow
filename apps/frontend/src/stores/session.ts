@@ -17,7 +17,6 @@ export const useSessionStore = defineStore('session', () => {
         sessions.value = data
         if (data.length > 0 && !activeSessionId.value) {
             activeSessionId.value = data[0].id
-            updateBridgeContext()
         }
     }
 
@@ -25,23 +24,17 @@ export const useSessionStore = defineStore('session', () => {
         loadSessions()
     })
 
-    function updateBridgeContext() {
-        (window as any).activeSessionId = activeSessionId.value
-    }
-
     async function createSession(name: string, type: SessionType) {
         await ensureWasm()
         if (!sessionManager) return
 
-        const sessionJson = sessionManager.create_session(name || new Date().toLocaleDateString(), type as any)
+        const sessionJson = sessionManager.create_session(name || new Date().toLocaleDateString(), type)
         const session = JSON.parse(sessionJson)
 
-        // Save via bridge
         await CubeBridge.createSession(session)
 
         await loadSessions()
         activeSessionId.value = session.id
-        updateBridgeContext()
     }
 
     async function switchSession(id: string) {
@@ -52,7 +45,6 @@ export const useSessionStore = defineStore('session', () => {
         if (session) {
             sessionManager.set_active_session(JSON.stringify(session))
             activeSessionId.value = id
-            updateBridgeContext()
         }
     }
 
@@ -63,7 +55,6 @@ export const useSessionStore = defineStore('session', () => {
         const actionJson = sessionManager.record_solve(time, JSON.stringify(moves))
         const action = JSON.parse(actionJson)
 
-        // Process action via bridge (this handles database save)
         await CubeBridge.handleCoreAction(action)
     }
 

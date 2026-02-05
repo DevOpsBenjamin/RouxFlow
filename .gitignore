@@ -20,10 +20,6 @@ target/
 **/wasm/*/
 !**/wasm/**/*.ts
 
-# Tauri
-src-tauri/target/
-src-tauri/binaries/
-
 # IDEs
 .vscode/
 .idea/
@@ -33,3 +29,6 @@ src-tauri/binaries/
 # OS
 .DS_Store
 Thumbs.db
+
+# Reference material (not committed)
+ref/

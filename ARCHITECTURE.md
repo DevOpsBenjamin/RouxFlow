@@ -1,158 +1,76 @@
-# Architecture RouxFlow (Trait-Based Storage)
+# Architecture RouxFlow (PWA + WASM unifié)
 
 ## Vue d'ensemble
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        roux-core                            │
-│  ┌─────────────────┐  ┌──────────────────────────────────┐  │
-│  │ trait Storage   │  │ Logique Métier (Sessions, Moves) │  │
-│  │ - get_cubes()   │  │ - SessionManager                 │  │
-│  │ - save_cube()   │  │ - ScrambleValidator              │  │
-│  │ - delete_cube() │  │ - PhaseDetector                  │  │
-│  └─────────────────┘  └──────────────────────────────────┘  │
+│                         Browser                              │
+│  ┌─────────────┐  ┌────────────────────────────────────────┐│
+│  │ Service     │  │  Vue 3 + Pinia (UI)                    ││
+│  │ Worker      │  │  ├── CubeBridge (bridge.ts)            ││
+│  │ (Workbox)   │  │  │   └── Web Bluetooth API             ││
+│  │ Cache:      │  │  ├── Stores (auth, session, bluetooth) ││
+│  │ - assets    │  │  └── Components                        ││
+│  │ - .wasm     │  └────────────────────────────────────────┘│
+│  │ - API       │           │                                 │
+│  └─────────────┘           ▼ (single import)                │
+│  ┌──────────────────────────────────────────────────────────┐│
+│  │              rouxflow-wasm (cdylib)                       ││
+│  │  #[wasm_bindgen] wrappers — re-exports everything        ││
+│  │                                                           ││
+│  │  ┌────────────────┐  ┌────────────────────────────────┐  ││
+│  │  │ rouxflow-core  │  │ rouxflow-render                │  ││
+│  │  │ - BLE decrypt  │  │ - 3D cube (three-d + WebGL2)   │  ││
+│  │  │ - SessionMgr   │  │ - Animations                   │  ││
+│  │  │ - Phases       │  │ - Gyro rotation                │  ││
+│  │  └────────────────┘  └────────────────────────────────┘  ││
+│  │  ┌─────────────────────┐  ┌───────────────────────────┐  ││
+│  │  │ rouxflow-            │  │ rouxflow-storage          │  ││
+│  │  │ bluetoothcube       │  │ - IndexedDB (rexie)       │  ││
+│  │  │ - 28 cube models    │  │ - Supabase REST (reqwest) │  ││
+│  │  │ - 9 protocols       │  │ - Sync (offline-first)    │  ││
+│  │  │ - UUIDs & keys      │  │ - HMAC signing (TODO)     │  ││
+│  │  └─────────────────────┘  └───────────────────────────┘  ││
+│  └──────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────┘
-           │                              │
-           ▼                              ▼
-┌──────────────────────┐      ┌──────────────────────┐
-│ roux-storage-sqlite  │      │ roux-storage-cloud   │
-│ impl Storage for     │      │ impl Storage for     │
-│ SqliteStorage        │      │ SupabaseStorage      │
-│ (rusqlite)           │      │ (reqwest)            │
-└──────────────────────┘      └──────────────────────┘
-           │                              │
-           ▼                              ▼
-┌──────────────────────┐      ┌──────────────────────┐
-│     src-tauri        │      │     WASM (Web)       │
-│ Appelle SQLite +     │      │ Appelle Cloud        │
-│ Cloud pour sync      │      │ directement          │
-└──────────────────────┘      └──────────────────────┘
 ```
 
-## Le Trait `Storage` (roux-core)
+## Flux de données
 
-```rust
-// crates/roux-core/src/storage.rs
-use async_trait::async_trait;
-
-#[async_trait]
-pub trait Storage: Send + Sync {
-    async fn get_cubes(&self, user_id: &str) -> Result<Vec<Cube>, StorageError>;
-    async fn save_cube(&self, cube: &Cube) -> Result<(), StorageError>;
-    async fn delete_cube(&self, id: &str) -> Result<(), StorageError>;
-    
-    // Sessions
-    async fn get_sessions(&self, user_id: &str) -> Result<Vec<Session>, StorageError>;
-    async fn save_session(&self, session: &Session) -> Result<(), StorageError>;
-    async fn save_solve(&self, session_id: &str, solve: &Solve) -> Result<(), StorageError>;
-}
+### Connexion BLE
+```
+Web Bluetooth requestDevice() → GATT connect → startNotifications
+    → characteristicvaluechanged event
+    → CubeBridge.processRawPacket(bytes, deviceId)
+    → WASM handle_ble_packet(data, deviceId, session)
+    → Retourne CoreAction JSON (Move, Pickup, FlowStateChanged, etc.)
+    → CubeBridge.handleCoreAction() → met à jour les stores Pinia
 ```
 
-## Implémentation SQLite (roux-storage-sqlite)
+### Storage (offline-first)
+```
+Écriture:
+    CubeBridge.saveCube() → WasmStorageManager.save_cube_json()
+    → StorageManager.save_cube()
+    → 1. IndexedDB (local, toujours)
+    → 2. Supabase REST (best-effort, si réseau dispo)
 
-```rust
-// crates/roux-storage-sqlite/src/lib.rs
-use roux_core::{Storage, Cube, StorageError};
-use rusqlite::Connection;
-
-pub struct SqliteStorage {
-    conn: Connection,
-}
-
-#[async_trait]
-impl Storage for SqliteStorage {
-    async fn get_cubes(&self, user_id: &str) -> Result<Vec<Cube>, StorageError> {
-        // SELECT * FROM cubes WHERE user_id = ?
-    }
-    // ...
-}
+Lecture:
+    CubeBridge.getCubes() → WasmStorageManager.get_cubes_json()
+    → StorageManager.get_cubes()
+    → IndexedDB (toujours local-first)
 ```
 
-## Implémentation Cloud (roux-storage-cloud)
+## Crates Rust
 
-```rust
-// crates/roux-storage-cloud/src/lib.rs
-use roux_core::{Storage, Cube, StorageError};
-
-pub struct SupabaseStorage {
-    url: String,
-    key: String,
-    client: reqwest::Client,
-}
-
-#[async_trait]
-impl Storage for SupabaseStorage {
-    async fn get_cubes(&self, user_id: &str) -> Result<Vec<Cube>, StorageError> {
-        // GET /rest/v1/cubes?user_id=eq.{user_id}
-    }
-    // ...
-}
-```
-
-## Synchronisation (src-tauri)
-
-```rust
-// src-tauri/src/sync.rs
-use roux_core::Storage;
-
-pub async fn sync_cubes<L: Storage, R: Storage>(
-    local: &L, 
-    remote: &R, 
-    user_id: &str
-) -> Result<(), SyncError> {
-    let local_cubes = local.get_cubes(user_id).await?;
-    let remote_cubes = remote.get_cubes(user_id).await?;
-    
-    // Merge strategy: Remote wins for conflicts
-    for cube in remote_cubes {
-        if !local_cubes.contains(&cube) {
-            local.save_cube(&cube).await?;
-        }
-    }
-    
-    // Push local-only to remote
-    for cube in local_cubes {
-        if !remote_cubes.contains(&cube) {
-            remote.save_cube(&cube).await?;
-        }
-    }
-    
-    Ok(())
-}
-```
-
-## Bridge TypeScript (Simplifié)
-
-```typescript
-// bridge.ts
-const tauriDriver = {
-    getCubes: (userId) => invoke('storage_get_cubes', { userId }),
-    saveCube: (cube) => invoke('storage_save_cube', { cube }),
-}
-
-const wasmDriver = {
-    getCubes: (userId) => wasmCloudStorage.get_cubes(userId),
-    saveCube: (cube) => wasmCloudStorage.save_cube(cube),
-}
-
-export class CubeBridge {
-    static getCubes(userId: string) {
-        return isTauri ? tauriDriver.getCubes(userId) : wasmDriver.getCubes(userId)
-    }
-}
-```
-
-## Structure des Crates
-
-```
-crates/
-├── roux-core/           # Traits + Logique Métier
-│   └── src/
-│       ├── lib.rs
-│       ├── storage.rs   # trait Storage
-│       └── session.rs   # SessionManager
-├── roux-storage-sqlite/ # impl Storage (rusqlite)
-│   └── src/lib.rs
-└── roux-storage-cloud/  # impl Storage (reqwest) → WASM
-    └── src/lib.rs
-```
+| Crate | Type | Description |
+|-------|------|-------------|
+| `rouxflow-wasm` | `cdylib` | Point d'entrée WASM unique. Re-exporte tout via `#[wasm_bindgen]` |
+| `rouxflow-core` | `rlib` | Logique cube pure Rust : protocole BLE, sessions, phases |
+| `rouxflow-render` | `rlib` | Rendu 3D (three-d + WebGL2), boucle rAF |
+| `rouxflow-bluetoothcube` | `rlib` | Registre de 28 cubes, 9 protocoles, UUIDs BLE |
+| `rouxflow-storage` | `rlib` | IndexedDB + Supabase + sync (WASM only) |
+| `rouxflow-ai` | `rlib` | Solveur Roux (futur) |
+| `rouxflow-bitboard` | `rlib` | Représentation binaire (expérimental) |
+| `rouxflow-bt-test` | `bin` | Outil de test BLE (dev) |
+| `rouxflow-standalone` | `bin` | Utilitaires de test (dev) |

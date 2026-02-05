@@ -15,34 +15,10 @@ export const useAuthStore = defineStore('auth', () => {
         return user.value.user_metadata?.display_name || user.value.user_metadata?.full_name || user.value.email || 'User'
     })
 
-    // Initialize auth state
     async function init() {
         loading.value = true
 
         try {
-            // Handle initial deep link if app was opened with one
-            if (window.__TAURI__) {
-                const { onOpenUrl } = await import('@tauri-apps/plugin-deep-link')
-                await onOpenUrl((urls) => {
-                    console.log('Received deep link urls:', urls)
-                    const firstUrl = urls[0]
-                    if (firstUrl) {
-                        handleDeepLink(firstUrl)
-                    }
-                })
-
-                // Also listen for links sent from a second instance (single-instance plugin)
-                const { listen } = await import('@tauri-apps/api/event')
-                await listen<string[]>('deep-link://new-url', (event) => {
-                    console.log('Received deep link from second instance:', event.payload)
-                    if (event.payload && event.payload.length > 0) {
-                        // On Windows, event.payload[0] is often the exe path, [1] is the URL
-                        const url = event.payload.find(arg => arg.startsWith('rouxflow://'))
-                        if (url) handleDeepLink(url)
-                    }
-                })
-            }
-
             // Get current session
             const { data: { session: currentSession } } = await supabase.auth.getSession()
             session.value = currentSession
@@ -60,94 +36,24 @@ export const useAuthStore = defineStore('auth', () => {
         loading.value = false
     }
 
-    async function handleDeepLink(url: string) {
-        if (!url.startsWith('rouxflow://')) return
-
-        console.log('Handling RouxFlow deep link:', url)
-        const urlObj = new URL(url.replace('rouxflow://', 'http://localhost/'))
-        const hash = urlObj.hash.substring(1) // remove #
-
-        if (hash) {
-            const { data, error } = await supabase.auth.setSession({
-                access_token: new URLSearchParams(hash).get('access_token') || '',
-                refresh_token: new URLSearchParams(hash).get('refresh_token') || '',
-            })
-            if (error) console.error('Error setting session from deep link:', error)
-            else {
-                console.log('Session set successfully from deep link')
-                user.value = data.user
-                session.value = data.session
-            }
-        }
-    }
-
     async function signInWithGoogle() {
-        console.log('auth.signInWithGoogle called')
-        const isTauri = !!(window as any).__TAURI_INTERNALS__ || !!(window as any).__TAURI__
-        const redirectUrl = isTauri ? 'rouxflow://auth-callback' : window.location.origin
-
         const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: redirectUrl,
-                skipBrowserRedirect: isTauri
-            }
-        })
-        if (error) {
-            console.error('Supabase OAuth error:', error)
-            throw error
-        }
-
-        console.log('Supabase OAuth response data:', data)
-
-        // IMPORTANT: Only manually open in browser if we are in Tauri
-        // On Web, Supabase handles the redirect automatically when skipBrowserRedirect is false
-        if (isTauri && data?.url) {
-            console.log('Tauri environment detected, opening system browser:', data.url)
-            await openInBrowser(data.url)
-        }
-    }
-
-    async function signInWithDiscord() {
-        console.log('auth.signInWithDiscord called')
-        const isTauri = !!(window as any).__TAURI_INTERNALS__ || !!(window as any).__TAURI__
-        const redirectUrl = isTauri ? 'rouxflow://auth-callback' : window.location.origin
-
-        const { data, error } = await supabase.auth.signInWithOAuth({
-            provider: 'discord',
-            options: {
-                redirectTo: redirectUrl,
-                skipBrowserRedirect: isTauri
+                redirectTo: window.location.origin
             }
         })
         if (error) throw error
-
-        if (isTauri && data?.url) {
-            await openInBrowser(data.url)
-        }
     }
 
-    async function openInBrowser(url: string) {
-        console.log('openInBrowser called with:', url)
-
-        // Robust check for Tauri (v1 or v2)
-        const isTauri = !!(window as any).__TAURI_INTERNALS__ || !!(window as any).__TAURI__
-        console.log('Is Tauri environment detected:', isTauri)
-
-        if (isTauri) {
-            try {
-                console.log('Attempting to use Tauri shell plugin...')
-                const { open } = await import('@tauri-apps/plugin-shell')
-                await open(url)
-                console.log('Tauri shell.open successful')
-            } catch (err) {
-                console.error('Tauri shell plugin failed, falling back to window.open:', err)
-                window.open(url, '_blank')
+    async function signInWithDiscord() {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: 'discord',
+            options: {
+                redirectTo: window.location.origin
             }
-        } else {
-            console.log('Non-Tauri environment, using window.open')
-            window.open(url, '_blank')
-        }
+        })
+        if (error) throw error
     }
 
     async function signInWithEmail(email: string, password: string) {

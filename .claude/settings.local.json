@@ -16,7 +16,11 @@
       "WebFetch(domain:bluetooth.cubing.net)",
       "Bash(curl:*)",
       "Bash(python:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(cargo check:*)",
+      "Bash(dir:*)",
+      "Bash(pnpm install:*)",
+      "Bash(cargo test:*)"
     ]
   }
 }

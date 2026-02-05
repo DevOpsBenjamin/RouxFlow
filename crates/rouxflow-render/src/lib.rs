@@ -1,13 +1,13 @@
 use three_d::*;
 #[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-#[cfg(target_arch = "wasm32")]
 use std::rc::Rc;
 #[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 
 // CGMath types used by three-d
 #[cfg(target_arch = "wasm32")]
@@ -40,25 +40,25 @@ fn setup_models(context: &Context) -> Vec<(Gm<Mesh, ColorMaterial>, Vector3<f32>
     // - Spacing = 2.0 means centers are at -2, 0, 2.
     // - cubie_size = 0.95 means actual width is 2.0 * 0.95 = 1.9.
     // - Resulting gap = spacing (2.0) - width (1.9) = 0.1.
-    let cubie_size = 0.95;   
-    let spacing = 2.0;      
-    
+    let cubie_size = 0.95;
+    let spacing = 2.0;
+
     // Create base cube mesh (Size 2, centered at origin)
     let mut cpu_mesh = CpuMesh::cube();
-    
+
     // Just scale it down slightly to create the gap
     cpu_mesh.transform(&Mat4::from_scale(cubie_size)).unwrap();
 
     let mut models = Vec::new();
-    
+
     // Black color for the cubie bodies
     let _cubie_body_color = Srgba::new(20, 20, 20, 255);
-    
+
     // Sticker properties
     let sticker_scale = 0.8; // Sticker takes 80% of cubie face
     let sticker_thickness = 0.02; // Very thin
     let _sticker_offset = 0.96; // Just outside the 0.95 cubie surface
-    
+
     // Create 27 cubies in 3x3x3 grid
     for x in -1..=1 {
         for y in -1..=1 {
@@ -68,9 +68,9 @@ fn setup_models(context: &Context) -> Vec<(Gm<Mesh, ColorMaterial>, Vector3<f32>
                     y as f32 * spacing,
                     z as f32 * spacing
                 );
-                
+
                 // 1. ADD CUBIE BODIES
-                let body_color = Srgba::new(45, 45, 45, 255); 
+                let body_color = Srgba::new(45, 45, 45, 255);
                 let mut body = Gm::new(
                     Mesh::new(context, &cpu_mesh),
                     ColorMaterial::new(
@@ -104,8 +104,8 @@ fn setup_models(context: &Context) -> Vec<(Gm<Mesh, ColorMaterial>, Vector3<f32>
     ];
 
     for (name, color) in faces {
-        for row in -1..=1 { 
-            for col in -1..=1 { 
+        for row in -1..=1 {
+            for col in -1..=1 {
                 let sticker_pos = match name {
                     "U" => vec3(col as f32 * spacing, off, row as f32 * spacing),
                     "D" => vec3(col as f32 * spacing, -off, -row as f32 * spacing),
@@ -122,7 +122,7 @@ fn setup_models(context: &Context) -> Vec<(Gm<Mesh, ColorMaterial>, Vector3<f32>
                     if name == "U" || name == "D" { t_half } else { s_half },
                     if name == "F" || name == "B" { t_half } else { s_half },
                 )).unwrap();
-                
+
                 let s_gm = Gm::new(
                     Mesh::new(context, &s_mesh),
                     ColorMaterial::new(context, &CpuMaterial { albedo: color, roughness: 0.2, ..Default::default() }),
@@ -131,7 +131,7 @@ fn setup_models(context: &Context) -> Vec<(Gm<Mesh, ColorMaterial>, Vector3<f32>
             }
         }
     }
-    
+
     models
 }
 
@@ -146,17 +146,17 @@ pub enum AnimType {
 pub struct RenderState {
     models: Vec<(Gm<Mesh, ColorMaterial>, Vector3<f32>)>,
     pub display_rotation: cgmath::Quaternion<f32>,
-    
+
     // Animation State
     anim_type: AnimType,
     anim_target_angle: f32, // target angle (e.g. 90, -90, 180)
     anim_progress: f32, // 0.0 to 1.0
     anim_axis: char,
     anim_duration_secs: f32, // how long the animation should take
-    
+
     // Pending state (applied after animation ends)
     pub(crate) pending_facelets: Option<Vec<u8>>,
-    
+
     pub camera: Camera,
     pub control: OrbitControl,
     pub ambient_light: AmbientLight,
@@ -169,7 +169,7 @@ impl RenderState {
     pub fn new(context: &Context, viewport: Viewport) -> Self {
         let models = setup_models(context);
         let identity = cgmath::Quaternion::new(1.0, 0.0, 0.0, 0.0);
-        
+
         let camera = Camera::new_perspective(
             viewport,
             vec3(11.0, 6.0, 7.0), // User's preferred orbit view
@@ -179,13 +179,13 @@ impl RenderState {
             0.1,
             100.0,
         );
-        
+
         let control = OrbitControl::new(camera.target().clone(), 0.1, 100.0);
-        
+
         let ambient_light = AmbientLight::new(context, 0.4, Srgba::WHITE);
         let directional_light = DirectionalLight::new(context, 1.0, Srgba::WHITE, &vec3(1.0, -1.0, -1.0));
         let directional_light_2 = DirectionalLight::new(context, 0.6, Srgba::WHITE, &vec3(-1.0, 1.0, 1.0));
-        
+
         RenderState {
             models,
             display_rotation: identity,
@@ -202,7 +202,7 @@ impl RenderState {
             directional_light_2,
         }
     }
-    
+
     /// Trigger a visual rotation animation for ANY move
     /// duration_secs: how long the animation should take
     pub fn trigger_move_anim(&mut self, move_str: &str, duration_secs: f32) {
@@ -286,12 +286,12 @@ impl RenderState {
     pub fn set_viewport(&mut self, viewport: Viewport) {
         self.camera.set_viewport(viewport);
     }
-    
+
     /// Handle input events (mouse, keyboard)
     pub fn handle_events(&mut self, events: &mut [Event]) {
         self.control.handle_events(&mut self.camera, events);
     }
-    
+
     /// Legacy method - now just queues state
     pub fn update_cube_state(&mut self, facelets: &[u8], orientation: Option<(f32, f32, f32, f32)>) {
         if let Some((x, y, z, w)) = orientation {
@@ -299,7 +299,7 @@ impl RenderState {
         }
         self.queue_new_state(facelets);
     }
-    
+
     /// Render one frame
     pub fn render_frame(&mut self, screen: &RenderTarget, delta_time: f32) {
         use cgmath::Rotation3;
@@ -337,10 +337,10 @@ impl RenderState {
 
         let global_rot_mat = Mat4::from(self.display_rotation);
         let anim_rot_mat = Mat4::from(anim_rot);
-        
+
         screen.clear(ClearState::color_and_depth(0.25, 0.25, 0.28, 1.0, 1.0));
         let lights: &[&dyn Light] = &[&self.ambient_light, &self.directional_light, &self.directional_light_2];
-        
+
         for (model, pos) in &mut self.models {
             let mut final_transform = global_rot_mat;
 
@@ -377,27 +377,28 @@ impl RenderState {
 }
 
 // ========== WASM API (for web) ==========
+// These are public functions callable from rouxflow-wasm entry point.
+
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
 pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
-    
+
     // Get canvas element
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas_element = document
         .get_element_by_id(&canvas_id)
         .ok_or("Canvas not found")?
         .dyn_into::<web_sys::HtmlCanvasElement>()?;
-    
+
     // Create WebGL2 context manually
     let webgl_context = canvas_element
         .get_context("webgl2")?
         .ok_or("Failed to get webgl2 context")?
         .dyn_into::<web_sys::WebGl2RenderingContext>()?;
-    
+
     // Wrap in glow Context (three-d's low-level GL abstraction via context module)
     let glow_context = three_d::context::Context::from_webgl2_context(webgl_context);
-    
+
     // Wrap in three-d Context
     let context = Context::from_gl_context(std::sync::Arc::new(glow_context))
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
@@ -420,15 +421,15 @@ pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
 
     // Setup autonomous render loop
     let loop_state_rc = STATE.with(|s| s.clone());
-    
+
     // Render loop closure
     let f = Rc::new(RefCell::new(None::<Closure<dyn FnMut()>>));
     let g = f.clone();
-    
+
     let canvas_for_loop = canvas_element.clone();
     let context_for_loop = context.clone();
     let mut last_time = web_sys::window().unwrap().performance().unwrap().now();
-    
+
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
         let now = web_sys::window().unwrap().performance().unwrap().now();
         let delta_time = ((now - last_time) / 1000.0) as f32;
@@ -439,7 +440,7 @@ pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
         let dpr = web_sys::window().unwrap().device_pixel_ratio();
         let canvas_width = (rect.width() * dpr) as u32;
         let canvas_height = (rect.height() * dpr) as u32;
-        
+
         // Update viewport
         let viewport = Viewport {
             x: 0,
@@ -448,31 +449,30 @@ pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
             height: canvas_height,
         };
         render_state.set_viewport(viewport);
-        
+
         // Read rotation and facelets from state
         let (display_rotation, facelets) = loop_state_rc.borrow().as_ref()
             .map(|s| (s.display_rotation, s.facelets.clone()))
             .unwrap_or((Quaternion::new(1.0, 0.0, 0.0, 0.0), Vec::new()));
-        
+
         render_state.update_cube_state(&facelets, None);
         render_state.display_rotation = display_rotation;
-        
+
         // Render target
         let target = RenderTarget::screen(&context_for_loop, canvas_width, canvas_height);
         render_state.render_frame(&target, delta_time);
-        
+
         // Continue loop
         request_animation_frame(f.borrow().as_ref().unwrap());
     }) as Box<dyn FnMut()>));
-    
+
     // Start the loop
     request_animation_frame(g.borrow().as_ref().unwrap());
-    
+
     Ok(())
 }
 
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
 pub fn set_gyro_enabled(enabled: bool) {
     STATE.with(|s| {
         if let Some(state) = s.borrow_mut().as_mut() {
@@ -488,7 +488,6 @@ pub fn set_gyro_enabled(enabled: bool) {
 }
 
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
 pub fn update_render_state(facelets: Vec<u8>, x: f32, y: f32, z: f32, w: f32) {
     STATE.with(|s| {
         if let Some(state) = s.borrow_mut().as_mut() {
@@ -500,7 +499,6 @@ pub fn update_render_state(facelets: Vec<u8>, x: f32, y: f32, z: f32, w: f32) {
 }
 
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
 pub fn reset_gyro() {
     STATE.with(|s| {
         if let Some(state) = s.borrow_mut().as_mut() {

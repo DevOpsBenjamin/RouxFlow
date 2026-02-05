@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
 import { useBluetoothStore, type BluetoothDevice } from '../../stores/bluetooth'
 import { useUIStore } from '../../stores/ui'
 import { CubeBridge } from '../../services/cube/bridge'
 
 const bt = useBluetoothStore()
 const ui = useUIStore()
-let pollInterval: any = null
 
 async function selectDevice(device: BluetoothDevice) {
   console.log('[Modal] Selecting device:', device);
@@ -24,28 +21,10 @@ async function selectDevice(device: BluetoothDevice) {
     bt.isConnecting = false
   }
 }
-
-onMounted(() => {
-  // Poll for devices every 1.5s
-  pollInterval = setInterval(async () => {
-    if (bt.showPicker && bt.isScanning) {
-        try {
-            const devices = await invoke('ble_list_devices') as any[]
-            bt.setDevices(devices)
-        } catch (e) {
-            console.error('[Modal] Poll failed:', e)
-        }
-    }
-  }, 1500)
-})
-
-onUnmounted(() => {
-  if (pollInterval) clearInterval(pollInterval)
-})
 </script>
 
 <template>
-  <Transition 
+  <Transition
     enter-active-class="transition duration-500 ease-out"
     enter-from-class="opacity-0 scale-95"
     enter-to-class="opacity-100 scale-100"
@@ -64,8 +43,8 @@ onUnmounted(() => {
             </p>
           </div>
           <div class="flex gap-[1vw]">
-             <button 
-               @click="CubeBridge.connect()" 
+             <button
+               @click="CubeBridge.connect()"
                :disabled="bt.isScanning"
                class="text-indigo-400 hover:text-indigo-300 text-[1.5vmin] font-bold uppercase disabled:opacity-30"
              >
@@ -83,17 +62,17 @@ onUnmounted(() => {
                <p class="text-slate-400 font-bold text-[2vmin]">{{ bt.isScanning ? 'Searching for cubes...' : 'No devices found' }}</p>
                <p class="text-slate-600 text-[1.4vmin] max-w-[20vw] mx-auto">Make sure your Bluetooth is ON and your cube is awake.</p>
              </div>
-             <button 
-               v-if="!bt.isScanning" 
+             <button
+               v-if="!bt.isScanning"
                @click="CubeBridge.connect()"
                class="mt-[2vh] px-[4vw] py-[1.5vh] rounded-[2vmin] bg-slate-800 text-white text-[1.8vmin] hover:bg-slate-700 transition-all"
              >
                Try Again
              </button>
           </div>
-          
-          <button 
-            v-for="device in bt.scannedDevices" 
+
+          <button
+            v-for="device in bt.scannedDevices"
             :key="device.id"
             @click="selectDevice(device)"
             :disabled="bt.isConnecting"

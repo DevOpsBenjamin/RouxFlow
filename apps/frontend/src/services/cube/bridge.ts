@@ -1,24 +1,23 @@
-import init, { handle_ble_packet, SessionManager } from '../../wasm/rouxflow-core/rouxflow_core'
-import { SupabaseStorage } from '../../wasm/rouxflow-storage-cloud/rouxflow_storage_cloud'
+import init, {
+    handle_ble_packet,
+    encode_cube_command,
+    SessionManager,
+    WasmStorageManager,
+    init_renderer,
+    set_gyro_enabled,
+    update_render_state,
+    reset_gyro,
+    find_cube_by_ble_name,
+    all_scan_service_uuids,
+    all_scan_name_prefixes,
+} from '../../wasm/rouxflow/rouxflow_wasm'
 import { useTimerStore } from '../../stores/timer'
 import { useSessionStore } from '../../stores/session'
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
 import type { SavedCube } from '../../stores/bluetooth'
 
 let wasmInitialized = false
 export let sessionManager: SessionManager | null = null
-export let cloudStorage: SupabaseStorage | null = null
-
-// Platform detection
-export const isTauri = !!(window as any).__TAURI_INTERNALS__
-
-async function getSupabaseConfig() {
-    return {
-        url: import.meta.env.VITE_SUPABASE_URL,
-        key: import.meta.env.VITE_SUPABASE_ANON_KEY
-    }
-}
+let storageManager: WasmStorageManager | null = null
 
 export async function ensureWasm() {
     if (!wasmInitialized) {
@@ -28,58 +27,29 @@ export async function ensureWasm() {
     }
 }
 
-// --- DRIVERS (Internal Implementation) ---
-
-const tauriDriver = {
-    async getCubes(userId: string | null) {
-        const res = await invoke<string>('db_get_cubes', { userId })
-        return JSON.parse(res) as SavedCube[]
-    },
-    async saveCube(cube: SavedCube) {
-        await invoke('db_save_cube', { cubeJson: JSON.stringify(cube) })
-    },
-    async deleteCube(id: string) {
-        await invoke('db_delete_cube', { id })
-    },
-    async syncCubes(userId: string) {
-        const config = await getSupabaseConfig()
-        await invoke('db_sync_cubes', {
-            userId,
-            url: config.url,
-            key: config.key
-        })
-    },
-    async getSessions() {
-        const json = await invoke('db_get_sessions') as string
-        return JSON.parse(json)
-    },
-    async createSession(session: any) {
-        await invoke('db_create_session', { sessionJson: JSON.stringify(session) })
+async function getStorage(): Promise<WasmStorageManager> {
+    await ensureWasm()
+    if (!storageManager) {
+        const url = import.meta.env.VITE_SUPABASE_URL || ''
+        const key = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+        storageManager = await new WasmStorageManager(
+            url || undefined,
+            key || undefined
+        )
     }
+    return storageManager
 }
 
-const wasmDriver = {
-    async getClient() {
-        await ensureWasm()
-        if (!cloudStorage) {
-            const config = await getSupabaseConfig()
-            cloudStorage = new SupabaseStorage(config.url, config.key)
-        }
-        return cloudStorage
-    },
-    async getCubes(userId: string) {
-        const client = await this.getClient()
-        const json = await client.get_cubes_json(userId)
-        return JSON.parse(json) as SavedCube[]
-    },
-    async saveCube(cube: SavedCube) {
-        const client = await this.getClient()
-        await client.save_cube_json(JSON.stringify(cube))
-    },
-    async deleteCube(id: string, userId: string) {
-        const client = await this.getClient()
-        await client.delete_cube_json(id, userId)
-    }
+// Re-export render functions for components
+export {
+    init_renderer,
+    set_gyro_enabled,
+    update_render_state,
+    reset_gyro,
+    encode_cube_command,
+    find_cube_by_ble_name,
+    all_scan_service_uuids,
+    all_scan_name_prefixes,
 }
 
 export class CubeBridge {
@@ -92,20 +62,15 @@ export class CubeBridge {
         await ensureWasm()
         if (!sessionManager) return
 
-        // DEBUG: Hex log pour voir si le déchiffrement Core fonctionne
-        const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
-        console.log(`[Bridge] Raw Packet (${deviceId}): ${hex}`);
+        const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ')
+        console.log(`[Bridge] Raw Packet (${deviceId}): ${hex}`)
 
-        // 1. Action: Vue -> Bridge -> Core (Logic Execution)
         const eventJson = handle_ble_packet(bytes, deviceId, sessionManager)
 
         if (eventJson) {
-            console.log(`[Bridge] Core Result: ${eventJson}`);
+            console.log(`[Bridge] Core Result: ${eventJson}`)
             try {
-                // 2. Logic: Core returns an ActionRequest
                 const action = JSON.parse(eventJson)
-
-                // 3. Execution: Bridge executes the result
                 await this.handleCoreAction(action)
             } catch (e) {
                 console.error('Failed to parse Core event', e)
@@ -125,26 +90,22 @@ export class CubeBridge {
                 } else if (action.data === 'Finished') {
                     timer.stopTimer()
                 }
-                break;
-            case 'SaveSolve':
-                // Bridge delegates to Storage Implementation
-                if (isTauri) {
-                    await invoke('db_save_solve', {
-                        sessionId: (window as any).activeSessionId,
-                        solveJson: JSON.stringify(action.data)
-                    })
-                    await sessionStore.loadSessions()
-                } else {
-                    // Web API fallback here
-                    console.log('[Web] Would save solve via API:', action.data)
-                }
-                break;
-            case 'DemoteSession':
-                if (isTauri) {
-                    await invoke('db_demote_session', { id: action.data })
+                break
+            case 'SaveSolve': {
+                const storage = await getStorage()
+                const activeId = sessionStore.activeSessionId
+                if (activeId) {
+                    await storage.save_solve_json(activeId, JSON.stringify(action.data))
                     await sessionStore.loadSessions()
                 }
-                break;
+                break
+            }
+            case 'DemoteSession': {
+                const storage = await getStorage()
+                await storage.demote_session(action.data)
+                await sessionStore.loadSessions()
+                break
+            }
             case 'Pickup':
                 if (timer.flowState === 'Ready') {
                     await ensureWasm()
@@ -152,140 +113,90 @@ export class CubeBridge {
                     if (actionJson) this.handleCoreAction(JSON.parse(actionJson))
                 }
                 timer.handleEvent('pickup')
-                break;
+                break
             case 'Putdown':
                 if (timer.flowState === 'Solving') {
                     const actionJson = sessionManager?.record_solve(timer.time, JSON.stringify(timer.currentMoves))
                     if (actionJson) this.handleCoreAction(JSON.parse(actionJson))
                 }
                 timer.handleEvent('putdown')
-                break;
+                break
             case 'Move':
                 timer.handleEvent('move', action.data)
-                break;
+                break
             case 'Error':
                 console.error('Core logic error:', action.data)
-                break;
+                break
         }
     }
 
-    // Bluetooth abstraction
+    // Web Bluetooth connection
     static async connect(): Promise<string> {
-        const { useBluetoothStore } = await import('../../stores/bluetooth')
-        const bt = useBluetoothStore()
+        await ensureWasm()
+        const serviceUuids = all_scan_service_uuids()
 
-        if (isTauri) {
-            try {
-                bt.startScan()
+        // Build filters from known cube name prefixes
+        const prefixes = all_scan_name_prefixes()
+        const nameFilters = prefixes.map((p: string) => ({ namePrefix: p }))
 
-                // First check if Bluetooth adapter is available
-                // We do this AFTER starting scan UI so the error can be shown in the modal
-                await invoke('ble_check_available')
+        const device = await (navigator as any).bluetooth.requestDevice({
+            filters: nameFilters.length > 0 ? nameFilters : [{ services: [serviceUuids[0]] }],
+            optionalServices: serviceUuids
+        })
 
-                await invoke('ble_scan')
-
-                // Timeout after 10 seconds of scanning
-                const timeoutId = setTimeout(() => {
-                    if (bt.isScanning && bt.scannedDevices.length === 0) {
-                        bt.stopScan()
-                    }
-                }, 10000)
-
-                // Poll for devices every 2 seconds while scanner is up
-                const pollInterval = setInterval(async () => {
-                    if (!bt.showPicker) {
-                        clearInterval(pollInterval)
-                        clearTimeout(timeoutId)
-                        return
-                    }
-                    try {
-                        const devices: any = await invoke('ble_list_devices')
-                        bt.setDevices(devices)
-
-                        // If devices found, we can stop the automatic "no devices" timeout
-                        if (devices.length > 0) {
-                            clearTimeout(timeoutId)
-                        }
-                    } catch (e) {
-                        console.error('Scan polling failed', e)
-                    }
-                }, 2000)
-
-                return 'Scanning...'
-            } catch (e: any) {
-                const errorMessage = typeof e === 'string' ? e : (e.message || 'Bluetooth initialization failed')
-                bt.setError(errorMessage)
-                throw e
-            }
-        } else {
-            // Web Bluetooth
-            const GAN_SERVICE_UUID = '0000fe51-0000-1000-8000-00805f9b34fb'
-            const GAN_CHARACTERISTIC_UUID = '0000fe52-0000-1000-8000-00805f9b34fb'
-
-            const device = await (navigator as any).bluetooth.requestDevice({
-                filters: [{ services: [GAN_SERVICE_UUID] }],
-                optionalServices: [GAN_SERVICE_UUID]
-            })
-
-            const server = await device.gatt?.connect()
-            const service = await server?.getPrimaryService(GAN_SERVICE_UUID)
-            const characteristic = await service?.getCharacteristic(GAN_CHARACTERISTIC_UUID)
-
-            await characteristic?.startNotifications()
-            characteristic?.addEventListener('characteristicvaluechanged', (event: any) => {
-                const value = event.target.value
-                this.processPacket(value)
-            })
-
-            return device.name || 'Smart Cube'
-        }
-    }
-
-    static async getSessions(): Promise<any[]> {
-        if (isTauri) return tauriDriver.getSessions()
-        return []
-    }
-
-    static async createSession(session: any) {
-        if (isTauri) return tauriDriver.createSession(session)
-    }
-
-    static handleSyncEvent(callback: (devices: any[]) => void) {
-        if (isTauri) {
-            listen('ble-devices', (event: any) => {
-                callback(event.payload)
-            })
-        }
+        return device.name || 'Smart Cube'
     }
 
     static async finalConnect(device: any): Promise<void> {
         await ensureWasm()
-        if (isTauri) {
-            await invoke('ble_connect', { id: device.id })
-            listen('ble-packet', (event: any) => {
-                console.log('[Bridge] Received ble-packet event from Tauri');
-                const { id, data } = event.payload;
-                this.processRawPacket(new Uint8Array(data as number[]), id)
-            })
-        }
+
+        // Look up the cube definition from its BLE name
+        const cubeDef = device.name ? find_cube_by_ble_name(device.name) : null
+        const serviceUuid = cubeDef?.serviceUuid || '0000fe51-0000-1000-8000-00805f9b34fb'
+        const charUuid = cubeDef?.stateCharacteristic || '0000fe52-0000-1000-8000-00805f9b34fb'
+
+        const server = await device.gatt?.connect()
+        const service = await server?.getPrimaryService(serviceUuid)
+        const characteristic = await service?.getCharacteristic(charUuid)
+
+        await characteristic?.startNotifications()
+        characteristic?.addEventListener('characteristicvaluechanged', (event: any) => {
+            const value = event.target.value
+            this.processPacket(value)
+        })
+    }
+
+    // --- Storage operations (delegated to WASM StorageManager) ---
+
+    static async getSessions(): Promise<any[]> {
+        const storage = await getStorage()
+        const json = await storage.get_sessions_json()
+        return JSON.parse(json)
+    }
+
+    static async createSession(session: any) {
+        const storage = await getStorage()
+        await storage.create_session_json(JSON.stringify(session))
     }
 
     static async getCubes(userId: string | null = null): Promise<SavedCube[]> {
-        if (isTauri) return tauriDriver.getCubes(userId)
-        if (userId) return wasmDriver.getCubes(userId)
-        return []
+        const storage = await getStorage()
+        const json = await storage.get_cubes_json(userId ?? undefined)
+        return JSON.parse(json)
     }
 
     static async saveCube(cube: SavedCube) {
-        return isTauri ? tauriDriver.saveCube(cube) : (cube.user_id ? wasmDriver.saveCube(cube) : null)
+        const storage = await getStorage()
+        await storage.save_cube_json(JSON.stringify(cube))
     }
 
     static async deleteCube(id: string, userId: string | null = null) {
-        return isTauri ? tauriDriver.deleteCube(id) : (userId ? wasmDriver.deleteCube(id, userId) : null)
+        const storage = await getStorage()
+        await storage.delete_cube(id, userId || '')
     }
 
     static async syncCubes(userId: string) {
-        if (isTauri) return tauriDriver.syncCubes(userId)
-        console.log('[Bridge] Sync not needed on Web')
+        const storage = await getStorage()
+        await storage.sync_cubes(userId)
     }
 }

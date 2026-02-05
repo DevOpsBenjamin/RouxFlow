@@ -1,13 +1,10 @@
 use serde::{Serialize, Deserialize};
-use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Face {
     U = 0, R = 1, F = 2, D = 3, L = 4, B = 5
 }
 
-#[wasm_bindgen]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct CubeMove {
     pub face: Face,
@@ -28,7 +25,6 @@ impl CubeMove {
     }
 }
 
-#[wasm_bindgen]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Quaternion {
     pub x: f32,
@@ -37,7 +33,6 @@ pub struct Quaternion {
     pub w: f32,
 }
 
-#[wasm_bindgen]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum MotionState {
     Stable = 0,
@@ -47,24 +42,20 @@ pub enum MotionState {
 pub mod facelet;
 pub mod roux;
 
-#[wasm_bindgen]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CubeState {
     pub(crate) stickers: Vec<u8>,
     pub orientation: Option<Quaternion>,
     pub motion: MotionState,
     #[serde(skip)]
-    #[wasm_bindgen(skip)]
     pub logic: facelet::FaceletCube,
 }
 
-#[wasm_bindgen]
 impl CubeState {
     /// Create a solved cube state
-    #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         CubeState {
-            stickers: vec![0x01; 20], 
+            stickers: vec![0x01; 20],
             orientation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
             motion: MotionState::Stable,
             logic: facelet::FaceletCube::new(),
@@ -105,7 +96,6 @@ impl CubeState {
     }
 
     /// Get all 54 facelet colors as a flat array of bytes (0-5)
-    #[wasm_bindgen(getter)]
     pub fn facelets(&self) -> Vec<u8> {
         self.logic.facelets.iter().map(|&c| c as u8).collect()
     }
@@ -125,7 +115,6 @@ impl CubeState {
         true
     }
 
-    #[wasm_bindgen(getter)]
     pub fn stickers(&self) -> Vec<u8> {
         self.stickers.clone()
     }
@@ -136,7 +125,7 @@ impl CubeState {
     pub fn find_fb_solutions(&self, count: usize) -> (Vec<Vec<String>>, std::time::Duration) {
         roux::RouxSolver::find_fb_solutions(&self.logic, count)
     }
-    
+
     pub fn invert_moves(moves: &[String]) -> Vec<String> {
         roux::RouxSolver::invert_moves(moves)
     }

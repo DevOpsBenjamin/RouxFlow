@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { ensureWasm, init_renderer } from '../../services/cube/bridge'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const isLoaded = ref(false)
@@ -16,18 +17,15 @@ onMounted(async () => {
   const dpr = window.devicePixelRatio || 1
   canvasRef.value.width = Math.round(rect.width * dpr)
   canvasRef.value.height = Math.round(rect.height * dpr)
-  
+
   console.log(`[Cube3D] Initial canvas size: ${canvasRef.value.width}x${canvasRef.value.height} (CSS: ${rect.width}x${rect.height}, DPR: ${dpr})`)
 
   try {
-    // Dynamic import of the WASM module
-    const wasm = await import('../../wasm/rouxflow-render/rouxflow_render.js')
-    await wasm.default() 
-
+    await ensureWasm()
     const canvasId = canvasRef.value.id
-    
+
     try {
-        wasm.init_renderer(canvasId)
+        init_renderer(canvasId)
     } catch (e: any) {
         // winit throws this error on the web to break control flow and start the loop
         if (typeof e === 'string' && e.includes("Using exceptions for control flow")) {
@@ -39,7 +37,7 @@ onMounted(async () => {
              throw e
         }
     }
-    
+
     isLoaded.value = true
   } catch (e) {
       console.error("Failed to load 3D engine:", e)
@@ -49,13 +47,13 @@ onMounted(async () => {
 
 <template>
   <div class="cube-container relative">
-    <canvas 
-      ref="canvasRef" 
-      id="roux-render-canvas" 
+    <canvas
+      ref="canvasRef"
+      id="roux-render-canvas"
       class="w-full h-full block touch-none"
       oncontextmenu="return false;"
     ></canvas>
-    
+
     <!-- Loading overlay if needed -->
     <div v-if="!isLoaded" class="absolute inset-0 flex items-center justify-center bg-black/50 text-white transform transition-opacity duration-500">
       Loading 3D Engine...
@@ -66,6 +64,6 @@ onMounted(async () => {
 <style scoped>
 .cube-container {
   /* Minimal styles, detailed sizing handled by parent */
-  min-height: 300px; 
+  min-height: 300px;
 }
 </style>

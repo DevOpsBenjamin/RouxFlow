@@ -1,6 +1,8 @@
 {
-	"devDependencies": {
-		"@tauri-apps/cli": "^2.9.6",
-		"@tauri-apps/api": "^2.9.1"
-	}
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter frontend dev",
+    "build": "pnpm --filter frontend build",
+    "build:wasm": "pnpm --filter frontend run build:wasm"
+  }
 }
