@@ -1,19 +1,17 @@
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
-import { cubeManager } from '../services/cube/bridge'
+import { cm_get_current_time_ms, cm_is_timer_running, cm_get_flow_state, cm_get_timer_state } from '../services/cube/bridge'
 
 export const useTimerStore = defineStore('timer', () => {
-    // Query WASM for timer state
-    const time = computed(() => cubeManager?.get_current_time_ms() ?? 0)
+    // Query WASM for timer state (free functions, safe to call before init — returns defaults)
+    const time = computed(() => cm_get_current_time_ms())
 
-    const isRunning = computed(() => cubeManager?.is_timer_running() ?? false)
+    const isRunning = computed(() => cm_is_timer_running())
 
     const flowState = computed(() => {
-        if (!cubeManager) return 'Idle'
-        const flowStateJson = cubeManager.get_flow_state()
+        const flowStateJson = cm_get_flow_state()
         if (!flowStateJson) return 'Idle'
         try {
-            // FlowState is returned as a JSON string
             return JSON.parse(flowStateJson)
         } catch {
             return 'Idle'
@@ -21,8 +19,7 @@ export const useTimerStore = defineStore('timer', () => {
     })
 
     const currentMoves = computed(() => {
-        if (!cubeManager) return []
-        const timerStateJson = cubeManager.get_timer_state()
+        const timerStateJson = cm_get_timer_state()
         if (!timerStateJson) return []
         try {
             const state = JSON.parse(timerStateJson)

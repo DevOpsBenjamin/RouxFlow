@@ -62,10 +62,10 @@ function onInput(event: Event) {
   >
     <div
       v-if="show"
-      class="fixed inset-0 z-[110] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4"
+      class="fixed inset-0 z-[110] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
       @click.self="handleCancel"
     >
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full shadow-2xl">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
         <div class="text-center space-y-4 mb-6">
           <div class="w-16 h-16 mx-auto rounded-full bg-indigo-500/10 flex items-center justify-center">
             <svg class="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -1,51 +1,47 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useBluetoothStore, type SavedCube } from '../../stores/bluetooth'
-import { useAuthStore } from '../../stores/auth'
-import { reset_gyro } from '../../services/cube/bridge'
-import { logger } from '../../utils/logger'
+import { ref } from 'vue'
+import { useBluetoothStore } from '../../stores/bluetooth'
 
 const bt = useBluetoothStore()
-const auth = useAuthStore()
 const showCubeManager = ref(false)
-const savedCubes = ref<SavedCube[]>([])
+const showDropdown = ref(false)
 
-async function handleConnect() {
+function handleConnect() {
   if (bt.isConnected) {
-    // Already connected - open cube manager
     showCubeManager.value = true
+  } else if (bt.savedCubes.length > 0) {
+    showDropdown.value = !showDropdown.value
   } else {
-    // Not connected - trigger connection flow
-    await bt.startScan()
+    bt.startScan()
   }
 }
 
-async function loadSavedCubes() {
-  try {
-    savedCubes.value = await bt.loadSavedCubes(auth.user?.id || null)
-  } catch (e) {
-    logger.error('Failed to load saved cubes:', e)
-  }
+function closeDropdown() {
+  showDropdown.value = false
+}
+
+async function handleReconnect(cube: typeof bt.savedCubes[number]) {
+  showDropdown.value = false
+  await bt.reconnectCube(cube)
+}
+
+async function handleNewScan() {
+  showDropdown.value = false
+  await bt.startScan()
 }
 
 async function handleDeleteCube(id: string, userId: string | null) {
   await bt.deleteCube(id, userId)
-  await loadSavedCubes()
 }
-
-// Load saved cubes on mount
-onMounted(() => {
-  loadSavedCubes()
-})
 
 defineExpose({ showCubeManager })
 </script>
 
 <template>
-  <div>
-    <!-- Not Connected: Big "Connect a Cube" Button -->
+  <div class="relative">
+    <!-- Not Connected, No Saved Cubes: Big "Connect a Cube" Button -->
     <button
-      v-if="!bt.isConnected && savedCubes.length === 0"
+      v-if="!bt.isConnected && bt.savedCubes.length === 0"
       @click="handleConnect"
       :disabled="bt.isConnecting"
       class="group relative px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm shadow-lg shadow-indigo-500/30 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
@@ -65,22 +61,74 @@ defineExpose({ showCubeManager })
       </span>
     </button>
 
-    <!-- Has Saved Cubes but Not Connected: Reconnect Button -->
-    <button
-      v-else-if="!bt.isConnected && savedCubes.length > 0"
-      @click="handleConnect"
-      :disabled="bt.isConnecting"
-      class="group px-5 py-2.5 rounded-xl bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500/50 text-white font-semibold text-sm transition-all flex items-center gap-3"
-    >
-      <div class="flex items-center gap-2">
-        <div class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-        <span v-if="!bt.isConnecting">No Cube Connected</span>
-        <span v-else>Connecting...</span>
-      </div>
-      <svg class="w-4 h-4 text-slate-400 group-hover:text-indigo-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-      </svg>
-    </button>
+    <!-- Not Connected, Has Saved Cubes: Dropdown Button -->
+    <div v-else-if="!bt.isConnected && bt.savedCubes.length > 0">
+      <button
+        @click="handleConnect"
+        :disabled="bt.isConnecting"
+        class="group px-5 py-2.5 rounded-xl bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500/50 text-white font-semibold text-sm transition-all flex items-center gap-3"
+      >
+        <div class="flex items-center gap-2">
+          <div class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+          <span v-if="!bt.isConnecting">No Cube Connected</span>
+          <span v-else>Connecting...</span>
+        </div>
+        <svg class="w-4 h-4 text-slate-400 group-hover:text-indigo-400 transition-all" :class="{ 'rotate-180': showDropdown }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      <!-- Dropdown Menu -->
+      <Transition
+        enter-active-class="transition duration-150 ease-out"
+        enter-from-class="opacity-0 -translate-y-1"
+        enter-to-class="opacity-100 translate-y-0"
+        leave-active-class="transition duration-100 ease-in"
+        leave-from-class="opacity-100 translate-y-0"
+        leave-to-class="opacity-0 -translate-y-1"
+      >
+        <div
+          v-if="showDropdown"
+          class="absolute right-0 top-full mt-2 w-72 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl shadow-black/50 z-50 overflow-hidden"
+        >
+          <!-- Saved Cubes -->
+          <div class="p-1">
+            <button
+              v-for="cube in bt.savedCubes"
+              :key="cube.id"
+              @click="handleReconnect(cube)"
+              class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-indigo-500/10 transition-colors group/item"
+            >
+              <div class="flex items-center gap-3">
+                <svg class="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-semibold text-white truncate">{{ cube.name }}</p>
+                  <p class="text-xs text-slate-500 font-mono">{{ cube.mac_address }}</p>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          <!-- Divider -->
+          <div class="border-t border-slate-800"></div>
+
+          <!-- Scan for New -->
+          <div class="p-1">
+            <button
+              @click="handleNewScan"
+              class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-800 transition-colors flex items-center gap-3"
+            >
+              <svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              <span class="text-sm text-slate-300">Scan for New Cube</span>
+            </button>
+          </div>
+        </div>
+      </Transition>
+    </div>
 
     <!-- Connected: Cube Status Bar (clickable) -->
     <button
@@ -94,7 +142,7 @@ defineExpose({ showCubeManager })
       </div>
 
       <div class="flex items-center gap-2 text-xs text-slate-400 group-hover:text-slate-300 transition-colors">
-        <span v-if="bt.deviceInfo?.battery_level" class="flex items-center gap-1">
+        <span v-if="bt.deviceInfo?.battery_level != null" class="flex items-center gap-1">
           🔋 {{ bt.deviceInfo.battery_level }}%
         </span>
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -102,6 +150,13 @@ defineExpose({ showCubeManager })
         </svg>
       </div>
     </button>
+
+    <!-- Dropdown Backdrop (click to close) -->
+    <div
+      v-if="showDropdown"
+      @click="closeDropdown"
+      class="fixed inset-0 z-40"
+    ></div>
 
     <!-- Cube Manager Drawer -->
     <Teleport to="body">
@@ -134,108 +189,44 @@ defineExpose({ showCubeManager })
           </div>
 
           <!-- Content -->
-          <div class="flex-1 overflow-y-auto p-6 space-y-6">
-            <!-- Current Cube Info -->
+          <div class="flex-1 overflow-y-auto p-6 space-y-4">
+            <!-- Connected Cube Summary -->
             <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-              <div class="flex items-start justify-between mb-3">
-                <div>
-                  <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wide">Connected Cube</h3>
-                  <p class="text-lg font-bold text-white mt-1">{{ bt.connectedDeviceName || 'Unknown' }}</p>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50"></div>
+                  <div>
+                    <p class="text-lg font-bold text-white">{{ bt.connectedDeviceName || 'Unknown' }}</p>
+                    <p v-if="bt.deviceInfo?.battery_level" class="text-xs text-slate-400">Battery: {{ bt.deviceInfo.battery_level }}%</p>
+                  </div>
                 </div>
-                <div class="w-2 h-2 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50 mt-2"></div>
-              </div>
-
-              <div class="space-y-2 text-sm">
-                <div class="flex justify-between text-slate-400">
-                  <span>Protocol</span>
-                  <span class="text-white font-mono">{{ bt.deviceInfo?.protocol_name || 'Unknown' }}</span>
-                </div>
-                <div class="flex justify-between text-slate-400">
-                  <span>MAC Address</span>
-                  <span class="text-white font-mono text-xs">{{ bt.deviceInfo?.mac_address || 'Unknown' }}</span>
-                </div>
-                <div v-if="bt.deviceInfo?.battery_level" class="flex justify-between text-slate-400">
-                  <span>Battery</span>
-                  <span class="text-white font-semibold">{{ bt.deviceInfo.battery_level }}%</span>
-                </div>
-                <div class="flex justify-between text-slate-400">
-                  <span>Gyroscope</span>
-                  <span :class="bt.deviceInfo?.has_gyro ? 'text-emerald-400' : 'text-slate-500'">
-                    {{ bt.deviceInfo?.has_gyro ? '✓ Supported' : '✗ Not Available' }}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Gyro Controls (if supported) -->
-            <div v-if="bt.deviceInfo?.has_gyro" class="space-y-3">
-              <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wide">Gyroscope</h3>
-
-              <div class="bg-indigo-500/10 rounded-xl p-4 border border-indigo-500/20">
-                <p class="text-sm text-slate-300 mb-3">
-                  Reset the gyroscope orientation to match your physical cube position.
-                </p>
                 <button
-                  @click="() => { try { reset_gyro(); logger.info('Gyro reset'); } catch(e) { logger.error('Gyro reset failed', e); } }"
-                  class="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+                  @click="async () => { await bt.disconnect(); showCubeManager = false }"
+                  class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 hover:text-red-300 text-xs font-semibold transition-colors"
                 >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Reset Gyro Orientation
+                  Disconnect
                 </button>
               </div>
             </div>
 
-            <!-- Disconnect Button -->
-            <div class="pt-4 border-t border-slate-800">
-              <button
-                @click="async () => { await bt.disconnect(); showCubeManager = false }"
-                class="w-full py-2.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 text-red-400 hover:text-red-300 font-semibold text-sm transition-colors"
-              >
-                Disconnect Cube
-              </button>
-            </div>
-
-            <!-- More Actions Menu -->
-            <details class="group/menu">
-              <summary class="flex items-center justify-between p-3 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 cursor-pointer transition-colors list-none">
-                <span class="text-sm font-semibold text-slate-300">More Actions</span>
-                <svg class="w-4 h-4 text-slate-400 transition-transform group-open/menu:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </summary>
-
-              <div class="mt-2 space-y-2 pl-3">
-                <button
-                  @click="bt.startScan()"
-                  class="w-full text-left p-3 rounded-lg hover:bg-slate-800/50 text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-2"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Connect Another Cube
-                </button>
-
-                <button
-                  v-if="savedCubes.length > 1"
-                  class="w-full text-left p-3 rounded-lg hover:bg-slate-800/50 text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-2"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                  </svg>
-                  Switch Cube
-                </button>
-              </div>
-            </details>
+            <!-- Quick Actions -->
+            <button
+              @click="bt.startScan()"
+              class="w-full text-left p-3 rounded-xl hover:bg-slate-800/50 border border-slate-800 text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-3"
+            >
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Connect Another Cube
+            </button>
 
             <!-- Saved Cubes List -->
-            <div v-if="savedCubes.length > 0" class="space-y-3">
-              <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wide">Saved Cubes ({{ savedCubes.length }})</h3>
+            <div v-if="bt.savedCubes.length > 0" class="space-y-3">
+              <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wide">Saved Cubes ({{ bt.savedCubes.length }})</h3>
 
               <div class="space-y-2">
                 <div
-                  v-for="cube in savedCubes"
+                  v-for="cube in bt.savedCubes"
                   :key="cube.id"
                   class="p-3 rounded-lg bg-slate-800/30 border border-slate-700/50 hover:border-slate-700 transition-colors"
                 >

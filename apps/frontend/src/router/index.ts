@@ -1,5 +1,5 @@
 import { createRouter, createMemoryHistory } from 'vue-router'
-import { cubeManager } from '../services/cube/bridge'
+import { cm_is_connected } from '../services/cube/bridge'
 
 const routes = [
   {
@@ -53,12 +53,7 @@ const router = createRouter({
 })
 
 router.beforeEach((to, _from, next) => {
-  // Routes that require cube connection
-  // User must have a cube connected to access Session and CubeManager pages
-  // Note: Guest users are allowed to connect cubes and join sessions
-  // Authentication is handled by Supabase, and guest mode is considered valid
-  if (to.meta.requiresCube && !cubeManager?.is_connected()) {
-    // Redirect to home if trying to access cube-required page without connection
+  if (to.meta.requiresCube && !cm_is_connected()) {
     next({ name: 'Home' })
     return
   }

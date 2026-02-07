@@ -15,7 +15,7 @@ async function handleSignOut() {
 }
 
 onMounted(() => {
-  bt.loadSavedCubes(auth.user?.id)
+  bt.loadSavedCubes(auth.user?.id ?? null)
 })
 </script>
 

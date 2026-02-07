@@ -16,10 +16,10 @@ app.use(router)
 const auth = useAuthStore(pinia)
 auth.init()
 
-// Initialize WASM on app load (not lazy)
-ensureWasm().then(() => {
-  console.log('[Main] WASM initialized')
-})
-
-app.mount('#app')
+async function start() {
+    await ensureWasm()
+    console.log('[Main] WASM initialized')
+    app.mount('#app')
+}
+start()
 

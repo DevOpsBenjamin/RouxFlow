@@ -126,7 +126,7 @@ impl ProtocolVersion {
 
     /// Whether this protocol requires a handshake after BLE connection.
     pub fn requires_handshake(&self) -> bool {
-        matches!(self, Self::MoYuV3 | Self::QiYiSmart)
+        matches!(self, Self::QiYiSmart)
     }
 
     /// Whether this protocol supports move history recovery.

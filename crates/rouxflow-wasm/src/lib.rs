@@ -3,6 +3,7 @@
 //! Re-exports from: rouxflow-core, rouxflow-render, rouxflow-bluetoothcube, rouxflow-storage.
 //! This is the only crate compiled as `cdylib` for wasm-pack.
 
+use std::cell::{Cell, RefCell};
 use wasm_bindgen::prelude::*;
 use rouxflow_bluetoothcube::codec::{self, CubeCommand, CubeEvent, CubeProtocol};
 use rouxflow_core::cube::CubeMove;
@@ -346,44 +347,43 @@ pub fn reset_gyro() {
 
 // ========== BLUETOOTHCUBE: cube registry ==========
 
+/// Find cube definition by BLE name. Returns JSON string or empty string if not found.
+/// Avoids wasm_bindgen JsValue/Reflect alloc churn that corrupts dlmalloc.
 #[wasm_bindgen]
-pub fn find_cube_by_ble_name(device_name: &str) -> JsValue {
-    match rouxflow_bluetoothcube::find_cube_by_ble_name(device_name) {
+pub fn find_cube_by_ble_name(device_name: String) -> String {
+    match rouxflow_bluetoothcube::find_cube_by_ble_name(&device_name) {
         Some(cube) => {
-            // Return a simple JS object with the fields the frontend needs
-            let obj = js_sys::Object::new();
-            js_sys::Reflect::set(&obj, &"name".into(), &cube.name.into()).unwrap();
-            js_sys::Reflect::set(&obj, &"manufacturer".into(), &format!("{:?}", cube.manufacturer).into()).unwrap();
-            js_sys::Reflect::set(&obj, &"protocol".into(), &format!("{:?}", cube.protocol).into()).unwrap();
-
             let has_gyro = cube.features.contains(&rouxflow_bluetoothcube::CubeFeature::Gyroscope);
-            js_sys::Reflect::set(&obj, &"hasGyro".into(), &has_gyro.into()).unwrap();
-
             let profile = cube.protocol.ble_profile();
-            js_sys::Reflect::set(&obj, &"serviceUuid".into(), &profile.service_uuid.into()).unwrap();
-            js_sys::Reflect::set(&obj, &"stateCharacteristic".into(), &profile.state_characteristic.into()).unwrap();
-            js_sys::Reflect::set(&obj, &"commandCharacteristic".into(), &profile.command_characteristic.into()).unwrap();
-
-            obj.into()
+            format!(
+                r#"{{"name":"{}","manufacturer":"{:?}","protocol":"{:?}","hasGyro":{},"serviceUuid":"{}","stateCharacteristic":"{}","commandCharacteristic":"{}"}}"#,
+                cube.name,
+                cube.manufacturer,
+                cube.protocol,
+                has_gyro,
+                profile.service_uuid,
+                profile.state_characteristic,
+                profile.command_characteristic,
+            )
         }
-        None => JsValue::NULL,
+        None => String::new(),
     }
 }
 
+/// Get all scan service UUIDs as JSON array string.
 #[wasm_bindgen]
-pub fn all_scan_service_uuids() -> Vec<String> {
-    rouxflow_bluetoothcube::all_scan_service_uuids()
-        .into_iter()
-        .map(|s| s.to_string())
-        .collect()
+pub fn all_scan_service_uuids() -> String {
+    let uuids = rouxflow_bluetoothcube::all_scan_service_uuids();
+    let parts: Vec<String> = uuids.iter().map(|s| format!("\"{}\"", s)).collect();
+    format!("[{}]", parts.join(","))
 }
 
+/// Get all scan name prefixes as JSON array string.
 #[wasm_bindgen]
-pub fn all_scan_name_prefixes() -> Vec<String> {
-    rouxflow_bluetoothcube::all_scan_name_prefixes()
-        .into_iter()
-        .map(|s| s.to_string())
-        .collect()
+pub fn all_scan_name_prefixes() -> String {
+    let prefixes = rouxflow_bluetoothcube::all_scan_name_prefixes();
+    let parts: Vec<String> = prefixes.iter().map(|s| format!("\"{}\"", s)).collect();
+    format!("[{}]", parts.join(","))
 }
 
 // ========== STORAGE: StorageManager ==========
@@ -473,31 +473,74 @@ impl WasmStorageManager {
     }
 }
 
-// ========== WASM CubeManager: Unified State Manager ==========
+// ========== WASM CubeManager: thread_local state ==========
+//
+// State lives in thread_local! so borrows are scoped to .with() closures and
+// can never leak across the JS↔WASM boundary. This prevents the "recursive use
+// of an object" / "RefCell already borrowed" errors caused by reentrancy
+// (e.g., a WASM call triggers a Vue reactive update that calls back into WASM).
+//
+// Same proven pattern as rouxflow-render's STATE thread_local.
 
-/// WasmCubeManager - Unified state manager that wraps CubeManager and handles protocol
-#[wasm_bindgen]
-pub struct WasmCubeManager {
+struct CubeManagerState {
     inner: rouxflow_core::CubeManager,
     protocol: Option<Box<dyn CubeProtocol>>,
 }
 
+thread_local! {
+    static CM_STATE: RefCell<Option<CubeManagerState>> = RefCell::new(None);
+    static IN_WASM_CALL: Cell<bool> = Cell::new(false);
+}
+
+/// Debug guard: detect reentrancy. Panics with a clear message identifying
+/// which method was re-entered, so we can find the exact reentrant call path.
+fn enter_wasm(label: &str) {
+    IN_WASM_CALL.with(|flag| {
+        if flag.get() {
+            panic!("REENTRANT WASM CALL detected in: {}", label);
+        }
+        flag.set(true);
+    });
+}
+
+fn exit_wasm() {
+    IN_WASM_CALL.with(|flag| flag.set(false));
+}
+
+// ========== Free functions: no struct, no WasmRefCell, no borrow corruption ==========
+//
+// Why free functions instead of a struct?
+// wasm-bindgen wraps every #[wasm_bindgen] struct in a WasmRefCell with a
+// 4-byte borrow counter on the WASM heap. For small/ZST structs, dlmalloc
+// can recycle that allocation for string arguments. The borrow-count
+// increment then corrupts the first byte of whichever string landed at
+// the same address (observed: "MoYuV3" → "NoYuV3", +1 on first byte).
+//
+// Free functions eliminate the struct entirely — no heap allocation,
+// no borrow counter, no possible corruption. State lives in CM_STATE
+// thread_local, accessed only via scoped .with() closures.
+
+/// Initialize the CubeManager state. Call once at startup.
 #[wasm_bindgen]
-impl WasmCubeManager {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        Self {
+pub fn cm_init() {
+    CM_STATE.with(|s| {
+        *s.borrow_mut() = Some(CubeManagerState {
             inner: rouxflow_core::CubeManager::new(),
             protocol: None,
-        }
-    }
+        });
+    });
+}
 
-    // ========== Connection Management ==========
+// ========== Connection Management ==========
 
-    /// Connect to a cube with specified protocol
-    pub fn connect(&mut self, device_name: &str, mac_address: &str, protocol_name: &str) -> Result<(), JsValue> {
-        // Create protocol handler
-        let protocol_version = match protocol_name {
+#[wasm_bindgen]
+pub fn cm_connect(device_name: String, mac_address: String, protocol_name: String) -> Result<(), JsValue> {
+    enter_wasm("cm_connect");
+    let result = CM_STATE.with(|s| {
+        let mut state = s.borrow_mut();
+        let st = state.as_mut().ok_or_else(|| JsValue::from_str("CubeManager not initialized"))?;
+
+        let protocol_version = match protocol_name.as_str() {
             "GanV1" => rouxflow_bluetoothcube::ProtocolVersion::GanV1,
             "GanV2" => rouxflow_bluetoothcube::ProtocolVersion::GanV2,
             "GanV3" => rouxflow_bluetoothcube::ProtocolVersion::GanV3,
@@ -510,44 +553,62 @@ impl WasmCubeManager {
             _ => return Err(JsValue::from_str(&format!("Unknown protocol: {}", protocol_name))),
         };
 
-        let protocol = codec::create_protocol(protocol_version, mac_address);
+        let protocol = codec::create_protocol(protocol_version, &mac_address);
         let has_gyro = protocol.has_gyro();
-
-        self.protocol = Some(protocol);
-        self.inner.connect(
-            device_name.to_string(),
-            mac_address.to_string(),
-            protocol_name.to_string(),
-            has_gyro,
-        );
+        st.protocol = Some(protocol);
+        st.inner.connect(device_name, mac_address, protocol_name, has_gyro);
 
         Ok(())
-    }
+    });
+    exit_wasm();
+    result
+}
 
-    pub fn disconnect(&mut self) {
-        self.inner.disconnect();
-        self.protocol = None;
-    }
+#[wasm_bindgen]
+pub fn cm_disconnect() {
+    enter_wasm("cm_disconnect");
+    CM_STATE.with(|s| {
+        if let Some(st) = s.borrow_mut().as_mut() {
+            st.inner.disconnect();
+            st.protocol = None;
+        }
+    });
+    exit_wasm();
+}
 
-    pub fn is_connected(&self) -> bool {
-        self.inner.is_connected()
-    }
+#[wasm_bindgen]
+pub fn cm_is_connected() -> bool {
+    CM_STATE.with(|s| {
+        s.borrow().as_ref().map_or(false, |st| st.inner.is_connected())
+    })
+}
 
-    pub fn get_device_info(&self) -> Option<String> {
-        self.inner.get_device_info_json()
-    }
+#[wasm_bindgen]
+pub fn cm_get_device_info() -> Option<String> {
+    CM_STATE.with(|s| {
+        s.borrow().as_ref().and_then(|st| st.inner.get_device_info_json())
+    })
+}
 
-    // ========== BLE Packet Processing ==========
+// ========== BLE Packet Processing ==========
 
-    /// Process a raw BLE packet through the protocol handler and update state
-    /// Returns JSON array of CoreActions
-    pub fn process_ble_packet(&mut self, raw_data: &[u8], timestamp: f64) -> String {
-        let protocol = match &mut self.protocol {
+/// Process a raw BLE packet through the protocol handler and update state.
+/// Returns JSON array of CoreActions.
+#[wasm_bindgen]
+pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
+    enter_wasm("cm_process_ble_packet");
+    let result = CM_STATE.with(|s| {
+        let mut state = s.borrow_mut();
+        let st = match state.as_mut() {
+            Some(st) => st,
+            None => return String::new(),
+        };
+
+        let protocol = match st.protocol.as_mut() {
             Some(p) => p,
             None => return String::new(),
         };
 
-        // Decrypt and decode
         let decrypted = protocol.decrypt(raw_data);
         let events = protocol.decode_event(&decrypted);
 
@@ -562,15 +623,12 @@ impl WasmCubeManager {
                     };
                     let notation = cube_move.notation();
 
-                    // Update cube state
-                    self.inner.record_move(notation.clone());
+                    st.inner.record_move(notation.clone());
 
-                    // Try scramble validation first
-                    let action = self.inner.handle_scramble_move(&notation, timestamp);
+                    let action = st.inner.handle_scramble_move(&notation, timestamp);
                     if !action.is_empty() {
                         actions.push(action);
                     } else {
-                        // If not in scramble phase, emit as a plain move
                         let action_json = serde_json::to_string(&CoreAction::Move(notation))
                             .unwrap_or_default();
                         if !action_json.is_empty() {
@@ -579,16 +637,14 @@ impl WasmCubeManager {
                     }
                 }
                 CubeEvent::Gyro { quaternion, .. } => {
-                    // Update orientation state
-                    self.inner.update_orientation(
+                    st.inner.update_orientation(
                         quaternion.x,
                         quaternion.y,
                         quaternion.z,
                         quaternion.w,
                     );
 
-                    // Process through session manager for pickup/putdown detection
-                    let action = self.inner.get_session_manager_mut().process_orientation(
+                    let action = st.inner.get_session_manager_mut().process_orientation(
                         quaternion.x,
                         quaternion.y,
                         quaternion.z,
@@ -600,21 +656,24 @@ impl WasmCubeManager {
                     }
                 }
                 CubeEvent::Battery { level } => {
-                    self.inner.update_battery(*level);
-                    let action = format!(r#"{{"type":"Battery","data":{}}}"#, level);
-                    actions.push(action);
+                    st.inner.update_battery(*level);
+                    actions.push(format!(r#"{{"type":"Battery","data":{}}}"#, level));
+                }
+                CubeEvent::Hardware { name, sw_version, hw_version, gyro_supported } => {
+                    st.inner.update_hardware(sw_version.clone(), hw_version.clone());
+                    actions.push(format!(
+                        r#"{{"type":"Hardware","data":{{"name":"{}","swVersion":"{}","hwVersion":"{}","gyroSupported":{}}}}}"#,
+                        name, sw_version, hw_version, gyro_supported
+                    ));
                 }
                 CubeEvent::Facelets { cp, co, ep, eo, .. } => {
-                    // For now, just return as action - TODO: update cube state properly
-                    let action = format!(
+                    actions.push(format!(
                         r#"{{"type":"Facelets","data":{{"cp":{:?},"co":{:?},"ep":{:?},"eo":{:?}}}}}"#,
                         cp, co, ep, eo
-                    );
-                    actions.push(action);
+                    ));
                 }
                 _ => {
-                    // Handle other events via the legacy handler
-                    let action = handle_cube_event(&event, self.inner.get_session_manager_mut());
+                    let action = handle_cube_event(&event, st.inner.get_session_manager_mut());
                     if !action.is_empty() {
                         actions.push(action);
                     }
@@ -629,14 +688,21 @@ impl WasmCubeManager {
         } else {
             format!("[{}]", actions.join(","))
         }
-    }
+    });
+    exit_wasm();
+    result
+}
 
-    /// Encode a command using the current protocol
-    pub fn encode_command(&self, command_name: &str) -> Result<Vec<u8>, JsValue> {
-        let protocol = self.protocol.as_ref()
+/// Encode a command using the current protocol. Returns JSON array of bytes.
+#[wasm_bindgen]
+pub fn cm_encode_command(command_name: String) -> Result<String, JsValue> {
+    CM_STATE.with(|s| {
+        let state = s.borrow();
+        let st = state.as_ref().ok_or_else(|| JsValue::from_str("CubeManager not initialized"))?;
+        let protocol = st.protocol.as_ref()
             .ok_or_else(|| JsValue::from_str("No protocol configured"))?;
 
-        let cmd = match command_name {
+        let cmd = match command_name.as_str() {
             "facelets" => CubeCommand::RequestFacelets,
             "hardware" => CubeCommand::RequestHardware,
             "battery" => CubeCommand::RequestBattery,
@@ -645,99 +711,202 @@ impl WasmCubeManager {
         };
 
         match protocol.create_command(cmd) {
-            Some(msg) => Ok(protocol.encrypt(&msg)),
+            Some(msg) => {
+                let encrypted = protocol.encrypt(&msg);
+                let parts: Vec<String> = encrypted.iter().map(|b| b.to_string()).collect();
+                Ok(format!("[{}]", parts.join(",")))
+            }
             None => Err(JsValue::from_str("Command not supported by this protocol")),
         }
-    }
+    })
+}
 
-    // ========== Cube State Queries ==========
+// ========== Cube State Queries ==========
 
-    pub fn get_cube_state(&self) -> String {
-        self.inner.get_cube_state_json()
-    }
+#[wasm_bindgen]
+pub fn cm_get_cube_state() -> String {
+    CM_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(|| "{}".to_string(), |st| st.inner.get_cube_state_json())
+    })
+}
 
-    pub fn get_orientation(&self) -> Vec<f32> {
-        self.inner.get_orientation().to_vec()
-    }
+#[wasm_bindgen]
+pub fn cm_get_orientation() -> String {
+    CM_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(
+            || "[0,0,0,1]".to_string(),
+            |st| {
+                let o = st.inner.get_orientation();
+                format!("[{},{},{},{}]", o[0], o[1], o[2], o[3])
+            },
+        )
+    })
+}
 
-    pub fn get_facelets(&self) -> Vec<u8> {
-        self.inner.get_facelets().to_vec()
-    }
+#[wasm_bindgen]
+pub fn cm_get_facelets() -> String {
+    CM_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(
+            || "[]".to_string(),
+            |st| {
+                let f = st.inner.get_facelets();
+                let parts: Vec<String> = f.iter().map(|b| b.to_string()).collect();
+                format!("[{}]", parts.join(","))
+            },
+        )
+    })
+}
 
-    // ========== Timer Management ==========
+// ========== Timer Management ==========
 
-    pub fn start_timer(&mut self, timestamp: f64) {
-        self.inner.start_timer(timestamp);
-    }
+#[wasm_bindgen]
+pub fn cm_start_timer(timestamp: f64) {
+    enter_wasm("cm_start_timer");
+    CM_STATE.with(|s| {
+        if let Some(st) = s.borrow_mut().as_mut() {
+            st.inner.start_timer(timestamp);
+        }
+    });
+    exit_wasm();
+}
 
-    pub fn stop_timer(&mut self, timestamp: f64) {
-        self.inner.stop_timer(timestamp);
-    }
+#[wasm_bindgen]
+pub fn cm_stop_timer(timestamp: f64) {
+    enter_wasm("cm_stop_timer");
+    CM_STATE.with(|s| {
+        if let Some(st) = s.borrow_mut().as_mut() {
+            st.inner.stop_timer(timestamp);
+        }
+    });
+    exit_wasm();
+}
 
-    pub fn update_timer(&mut self, timestamp: f64) {
-        self.inner.update_timer(timestamp);
-    }
+#[wasm_bindgen]
+pub fn cm_update_timer(timestamp: f64) {
+    CM_STATE.with(|s| {
+        if let Some(st) = s.borrow_mut().as_mut() {
+            st.inner.update_timer(timestamp);
+        }
+    });
+}
 
-    pub fn get_timer_state(&self) -> String {
-        self.inner.get_timer_state_json()
-    }
+#[wasm_bindgen]
+pub fn cm_get_timer_state() -> String {
+    CM_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(|| "{}".to_string(), |st| st.inner.get_timer_state_json())
+    })
+}
 
-    pub fn is_timer_running(&self) -> bool {
-        self.inner.is_timer_running()
-    }
+#[wasm_bindgen]
+pub fn cm_is_timer_running() -> bool {
+    CM_STATE.with(|s| {
+        s.borrow().as_ref().map_or(false, |st| st.inner.is_timer_running())
+    })
+}
 
-    pub fn get_current_time_ms(&self) -> u64 {
-        self.inner.get_current_time_ms()
-    }
+#[wasm_bindgen]
+pub fn cm_get_current_time_ms() -> u64 {
+    CM_STATE.with(|s| {
+        s.borrow().as_ref().map_or(0, |st| st.inner.get_current_time_ms())
+    })
+}
 
-    // ========== Session Management ==========
+// ========== Session Management ==========
 
-    pub fn get_flow_state(&self) -> String {
-        self.inner.get_flow_state()
-    }
+#[wasm_bindgen]
+pub fn cm_get_flow_state() -> String {
+    CM_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(|| "\"Idle\"".to_string(), |st| st.inner.get_flow_state())
+    })
+}
 
-    pub fn set_active_session(&mut self, session_json: &str) {
-        self.inner.set_active_session(session_json);
-    }
+#[wasm_bindgen]
+pub fn cm_set_active_session(session_json: &str) {
+    CM_STATE.with(|s| {
+        if let Some(st) = s.borrow_mut().as_mut() {
+            st.inner.set_active_session(session_json);
+        }
+    });
+}
 
-    pub fn create_session(&mut self, session_json: &str) {
-        self.inner.create_session(session_json);
-    }
+#[wasm_bindgen]
+pub fn cm_create_session(session_json: &str) {
+    CM_STATE.with(|s| {
+        if let Some(st) = s.borrow_mut().as_mut() {
+            st.inner.create_session(session_json);
+        }
+    });
+}
 
-    pub fn start_scramble(&mut self, scramble: &str) -> String {
-        self.inner.start_scramble(scramble)
-    }
+#[wasm_bindgen]
+pub fn cm_start_scramble(scramble: &str) -> String {
+    CM_STATE.with(|s| {
+        s.borrow_mut().as_mut().map_or_else(String::new, |st| st.inner.start_scramble(scramble))
+    })
+}
 
-    pub fn handle_scramble_move(&mut self, move_str: &str) -> String {
-        let timestamp = js_sys::Date::now() / 1000.0;
-        self.inner.handle_scramble_move(move_str, timestamp)
-    }
+#[wasm_bindgen]
+pub fn cm_handle_scramble_move(move_str: &str) -> String {
+    let timestamp = js_sys::Date::now() / 1000.0;
+    CM_STATE.with(|s| {
+        s.borrow_mut().as_mut().map_or_else(String::new, |st| {
+            st.inner.handle_scramble_move(move_str, timestamp)
+        })
+    })
+}
 
-    pub fn set_solving(&mut self) -> String {
-        let timestamp = js_sys::Date::now() / 1000.0;
-        self.inner.set_solving(timestamp)
-    }
+#[wasm_bindgen]
+pub fn cm_set_solving() -> String {
+    let timestamp = js_sys::Date::now() / 1000.0;
+    CM_STATE.with(|s| {
+        s.borrow_mut().as_mut().map_or_else(String::new, |st| st.inner.set_solving(timestamp))
+    })
+}
 
-    pub fn record_solve(&mut self, time_ms: u32, moves_json: &str) -> String {
-        let timestamp = js_sys::Date::now() / 1000.0;
-        self.inner.record_solve(timestamp, time_ms, moves_json)
-    }
+#[wasm_bindgen]
+pub fn cm_record_solve(time_ms: u32, moves_json: &str) -> String {
+    let timestamp = js_sys::Date::now() / 1000.0;
+    CM_STATE.with(|s| {
+        s.borrow_mut().as_mut().map_or_else(String::new, |st| {
+            st.inner.record_solve(timestamp, time_ms, moves_json)
+        })
+    })
+}
 
-    // ========== MAC Address Validation ==========
+// ========== MAC Address Validation ==========
 
-    /// Check if we need to prompt user for MAC address
-    /// Returns true if protocol needs MAC AND device_id is not valid MAC format
-    pub fn needs_mac_input(device_id: &str, protocol: &str) -> bool {
-        rouxflow_core::CubeManager::needs_mac_input(device_id, protocol)
-    }
+// ========== Protocol Queries ==========
 
-    /// Check if a protocol requires MAC address for encryption
-    pub fn protocol_requires_mac(protocol: &str) -> bool {
-        rouxflow_core::CubeManager::protocol_requires_mac(protocol)
-    }
+#[wasm_bindgen]
+pub fn cm_needs_mac_input(device_id: &str, protocol: &str) -> bool {
+    rouxflow_core::CubeManager::needs_mac_input(device_id, protocol)
+}
 
-    /// Check if device_id is a valid MAC address format
-    pub fn is_valid_mac_format(device_id: &str) -> bool {
-        rouxflow_core::CubeManager::is_valid_mac_format(device_id)
-    }
+#[wasm_bindgen]
+pub fn cm_requires_handshake() -> bool {
+    CM_STATE.with(|s| {
+        s.borrow().as_ref()
+            .and_then(|st| st.protocol.as_ref())
+            .map_or(false, |p| p.requires_handshake())
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_handshake_data() -> Vec<u8> {
+    CM_STATE.with(|s| {
+        s.borrow().as_ref()
+            .and_then(|st| st.protocol.as_ref())
+            .and_then(|p| p.handshake_data())
+            .unwrap_or_default()
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_protocol_requires_mac(protocol: &str) -> bool {
+    rouxflow_core::CubeManager::protocol_requires_mac(protocol)
+}
+
+#[wasm_bindgen]
+pub fn cm_is_valid_mac_format(device_id: &str) -> bool {
+    rouxflow_core::CubeManager::is_valid_mac_format(device_id)
 }

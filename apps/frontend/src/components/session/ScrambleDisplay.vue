@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useSessionStore } from '../../stores/session'
 import { useTimerStore } from '../../stores/timer'
-import { cubeManager } from '../../services/cube/bridge'
+import { cm_start_scramble } from '../../services/cube/bridge'
 
 const props = defineProps<{
   scramble: string
@@ -18,19 +18,14 @@ const scrambleLen = ref(0)
 const isWCAMode = computed(() => sessionStore.activeSession?.session_type === 'WCA')
 
 function updateState() {
-  if (!cubeManager) return
-  // TODO: Add these methods to cubeManager or get from flow state
-  // For now, just check flow state
   const flowState = timer.flowState
   isReady.value = flowState === 'Ready'
-  isInvalid.value = false // TODO: Implement scramble validation
-  // scrambleIndex and scrambleLen would need to be added to WASM
+  isInvalid.value = false
 }
 
 // Reset when scramble changes
 watch(() => props.scramble, () => {
-  if (!cubeManager) return
-  cubeManager.start_scramble(props.scramble)
+  cm_start_scramble(props.scramble)
   updateState()
 })
 

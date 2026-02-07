@@ -29,8 +29,12 @@ getrandom = { version = "0.2", features = ["js"] }
 [dependencies.web-sys]
 version = "0.3"
 features = [
+  "console",
   "Document",
   "Window",
   "HtmlCanvasElement",
   "Element",
 ]
+
+[profile.release]
+lto = true

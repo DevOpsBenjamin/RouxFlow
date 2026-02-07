@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { ensureWasm, init_renderer, update_render_state, cubeManager } from '../../services/cube/bridge'
+import { ensureWasm, init_renderer, update_render_state, cm_get_facelets, cm_get_orientation, cm_is_timer_running, cm_update_timer } from '../../services/cube/bridge'
 import { logger } from '../../utils/logger'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -8,22 +8,19 @@ const isLoaded = ref(false)
 let rafHandle: number | null = null
 
 function renderLoop() {
-  if (!cubeManager) {
-    rafHandle = requestAnimationFrame(renderLoop)
-    return
-  }
-
-  // Query WASM for latest state
-  const facelets = cubeManager.get_facelets()
-  const [x, y, z, w] = cubeManager.get_orientation()
+  // Query WASM for latest state (returns JSON strings to avoid Vec alloc churn)
+  const facelets = new Uint8Array(JSON.parse(cm_get_facelets()))
+  // TODO: gyro orientation disabled — causes rendering issues, needs investigation
+  // const [x, y, z, w] = JSON.parse(cm_get_orientation())
+  const [x, y, z, w] = [0, 0, 0, 1] // identity quaternion
 
   // Update WASM render state
   update_render_state(facelets, x, y, z, w)
 
   // Timer update (WASM calculates time)
-  if (cubeManager.is_timer_running()) {
+  if (cm_is_timer_running()) {
     const timestamp = performance.now() / 1000.0
-    cubeManager.update_timer(timestamp)
+    cm_update_timer(timestamp)
   }
 
   rafHandle = requestAnimationFrame(renderLoop)

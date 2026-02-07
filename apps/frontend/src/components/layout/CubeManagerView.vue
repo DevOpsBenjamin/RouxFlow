@@ -17,7 +17,7 @@ function resetGyro() {
 }
 
 const isGyroSupported = computed(() => {
-  return bt.deviceInfo?.features?.gyro ?? false
+  return bt.deviceInfo?.has_gyro ?? false
 })
 
 </script>
@@ -46,12 +46,12 @@ const isGyroSupported = computed(() => {
           <div class="absolute bottom-0 left-0 right-0 p-[3vmin] z-20 flex justify-between items-end">
              <div>
                <h2 class="text-[3vmin] font-black text-white leading-none">{{ bt.deviceInfo?.name || 'Connected Cube' }}</h2>
-               <div class="text-[1.5vmin] text-indigo-400 font-mono mt-1 opacity-80">{{ bt.deviceInfo?.address || 'UNKNOWN MAC' }}</div>
+               <div class="text-[1.5vmin] text-indigo-400 font-mono mt-1 opacity-80">{{ bt.deviceInfo?.mac_address || 'UNKNOWN MAC' }}</div>
              </div>
              <div class="text-right">
                 <div class="text-[1.2vmin] font-bold uppercase tracking-widest text-slate-500 mb-1">Protocol</div>
                 <div class="px-3 py-1 bg-white/10 rounded-full text-[1.5vmin] text-white font-bold backdrop-blur-md">
-                  {{ bt.deviceInfo?.protocol || 'Unknown' }}
+                  {{ bt.deviceInfo?.protocol_name || 'Unknown' }}
                 </div>
              </div>
           </div>
@@ -89,13 +89,28 @@ const isGyroSupported = computed(() => {
           <!-- Hardware Info -->
           <div class="bg-slate-900/40 backdrop-blur-xl rounded-[2.5vmin] p-[3vmin] border border-white/5 flex-1">
              <h3 class="text-[1.8vmin] font-bold text-slate-400 mb-[2vh] uppercase tracking-wider">Hardware Stats</h3>
-             
+
              <div class="space-y-[1.5vh]">
                 <div class="flex justify-between items-center p-[1.5vmin] rounded-[1.5vmin] bg-white/5">
                    <span class="text-[1.4vmin] text-slate-500">Battery</span>
-                   <span class="text-[1.4vmin] font-bold text-emerald-400">84%</span>
+                   <span class="text-[1.4vmin] font-bold" :class="bt.deviceInfo?.battery_level != null ? 'text-emerald-400' : 'text-slate-600'">
+                     {{ bt.deviceInfo?.battery_level != null ? bt.deviceInfo.battery_level + '%' : 'Polling...' }}
+                   </span>
                 </div>
-                <!-- Add more stats here later -->
+                <div class="flex justify-between items-center p-[1.5vmin] rounded-[1.5vmin] bg-white/5">
+                   <span class="text-[1.4vmin] text-slate-500">Firmware</span>
+                   <span class="text-[1.4vmin] font-mono text-white">{{ bt.deviceInfo?.sw_version || '--' }}</span>
+                </div>
+                <div class="flex justify-between items-center p-[1.5vmin] rounded-[1.5vmin] bg-white/5">
+                   <span class="text-[1.4vmin] text-slate-500">Hardware</span>
+                   <span class="text-[1.4vmin] font-mono text-white">{{ bt.deviceInfo?.hw_version || '--' }}</span>
+                </div>
+                <div class="flex justify-between items-center p-[1.5vmin] rounded-[1.5vmin] bg-white/5">
+                   <span class="text-[1.4vmin] text-slate-500">Gyroscope</span>
+                   <span class="text-[1.4vmin] font-bold" :class="bt.deviceInfo?.has_gyro ? 'text-emerald-400' : 'text-slate-600'">
+                     {{ bt.deviceInfo?.has_gyro ? 'Supported' : 'Not Available' }}
+                   </span>
+                </div>
              </div>
           </div>
 

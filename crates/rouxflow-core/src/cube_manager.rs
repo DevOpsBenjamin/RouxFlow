@@ -15,6 +15,8 @@ pub struct DeviceInfo {
     pub protocol_name: String,
     pub has_gyro: bool,
     pub battery_level: Option<u8>,
+    pub sw_version: Option<String>,
+    pub hw_version: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,6 +87,8 @@ impl CubeManager {
             protocol_name,
             has_gyro,
             battery_level: None,
+            sw_version: None,
+            hw_version: None,
         });
     }
 
@@ -117,6 +121,13 @@ impl CubeManager {
         self.cube_state.battery_level = Some(level);
         if let Some(device_info) = &mut self.device_info {
             device_info.battery_level = Some(level);
+        }
+    }
+
+    pub fn update_hardware(&mut self, sw_version: String, hw_version: String) {
+        if let Some(device_info) = &mut self.device_info {
+            device_info.sw_version = Some(sw_version);
+            device_info.hw_version = Some(hw_version);
         }
     }
 
