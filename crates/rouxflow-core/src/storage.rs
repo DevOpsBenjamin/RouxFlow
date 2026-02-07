@@ -33,10 +33,9 @@ impl From<String> for StorageError {
 use async_trait::async_trait;
 
 /// Trait defining storage operations for cubes and sessions.
-/// Implemented by SQLite (Tauri) and Supabase (Cloud/WASM).
-#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
-pub trait Storage: Send + Sync {
+/// Pure Rust trait without thread safety bounds (WASM-compatible, single-threaded).
+#[async_trait(?Send)]
+pub trait Storage {
     // Cubes
     async fn get_cubes(&self, user_id: Option<&str>) -> Result<Vec<Cube>, StorageError>;
     async fn save_cube(&self, cube: &Cube) -> Result<(), StorageError>;

@@ -31,8 +31,8 @@ function initDecoder(mac: string) {
   const iv = [...BASE_IV]
   
   for (let i = 0; i < 6; i++) {
-    key[i] = (key[i] + macBytes[5 - i]) % 255
-    iv[i] = (iv[i] + macBytes[5 - i]) % 255
+    key[i] = (key[i]! + macBytes[5 - i]!) % 255
+    iv[i] = (iv[i]! + macBytes[5 - i]!) % 255
   }
   
   aesKey = CryptoJS.lib.WordArray.create(new Uint8Array(key) as any)
@@ -51,7 +51,7 @@ function decrypt(data: Uint8Array): Uint8Array {
   const words = decrypted.words
   const result = []
   for (let i = 0; i < data.length; i++) {
-     const w = words[Math.floor(i/4)]
+     const w = words[Math.floor(i/4)]!
      const b = (w >>> (24 - (i%4)*8)) & 0xff
      result.push(b)
   }

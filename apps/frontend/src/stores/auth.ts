@@ -37,7 +37,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     async function signInWithGoogle() {
-        const { data, error } = await supabase.auth.signInWithOAuth({
+        const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
                 redirectTo: window.location.origin
@@ -47,7 +47,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     async function signInWithDiscord() {
-        const { data, error } = await supabase.auth.signInWithOAuth({
+        const { error } = await supabase.auth.signInWithOAuth({
             provider: 'discord',
             options: {
                 redirectTo: window.location.origin

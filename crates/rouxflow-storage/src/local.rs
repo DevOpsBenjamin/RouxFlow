@@ -76,11 +76,11 @@ impl Storage for LocalStorage {
         let store = tx.store("cubes")
             .map_err(|e| StorageError { message: format!("Store error: {:?}", e) })?;
 
-        let all = store.get_all(None, None, None, None).await
+        let all = store.get_all(None, None).await
             .map_err(|e| StorageError { message: format!("GetAll error: {:?}", e) })?;
 
         let mut cubes: Vec<Cube> = Vec::new();
-        for (_key, value) in all {
+        for value in all {
             if let Ok(cube) = from_js::<Cube>(value) {
                 match user_id {
                     Some(uid) => {
@@ -115,7 +115,7 @@ impl Storage for LocalStorage {
         let store = tx.store("cubes")
             .map_err(|e| StorageError { message: format!("Store error: {:?}", e) })?;
 
-        store.delete(&JsValue::from_str(id)).await
+        store.delete(JsValue::from_str(id)).await
             .map_err(|e| StorageError { message: format!("Delete error: {:?}", e) })?;
 
         tx.done().await
@@ -131,15 +131,15 @@ impl Storage for LocalStorage {
         let solve_store = tx.store("solves")
             .map_err(|e| StorageError { message: format!("Store error: {:?}", e) })?;
 
-        let all_sessions = session_store.get_all(None, None, None, None).await
+        let all_sessions = session_store.get_all(None, None).await
             .map_err(|e| StorageError { message: format!("GetAll error: {:?}", e) })?;
 
-        let all_solves = solve_store.get_all(None, None, None, None).await
+        let all_solves = solve_store.get_all(None, None).await
             .map_err(|e| StorageError { message: format!("GetAll error: {:?}", e) })?;
 
         // Parse all solves into a lookup by session_id
         let mut solve_map: std::collections::HashMap<String, Vec<Solve>> = std::collections::HashMap::new();
-        for (_key, value) in all_solves {
+        for value in all_solves {
             if let Ok(record) = from_js::<SolveRecord>(value) {
                 let moves: Vec<String> = serde_json::from_str(&record.moves).unwrap_or_default();
                 let solve = Solve {
@@ -154,7 +154,7 @@ impl Storage for LocalStorage {
         }
 
         let mut sessions = Vec::new();
-        for (_key, value) in all_sessions {
+        for value in all_sessions {
             if let Ok(record) = from_js::<SessionRecord>(value) {
                 let session_type = if record.session_type == "WCA" {
                     SessionType::WCA
@@ -228,7 +228,7 @@ impl Storage for LocalStorage {
         let store = tx.store("sessions")
             .map_err(|e| StorageError { message: format!("Store error: {:?}", e) })?;
 
-        let existing = store.get(&JsValue::from_str(session_id)).await
+        let existing = store.get(JsValue::from_str(session_id)).await
             .map_err(|e| StorageError { message: format!("Get error: {:?}", e) })?;
 
         if let Some(value) = existing {

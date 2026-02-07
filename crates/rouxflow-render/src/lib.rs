@@ -1,16 +1,16 @@
+//! 3D cube rendering for RouxFlow using three-d and web-sys.
+//!
+//! This crate is WASM-only (uses browser APIs). Dependency gating in Cargo.toml
+//! ensures it only compiles for wasm32 targets.
+
 use three_d::*;
-#[cfg(target_arch = "wasm32")]
 use std::rc::Rc;
-#[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
 
-#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
-#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 // CGMath types used by three-d
-#[cfg(target_arch = "wasm32")]
 struct SharedState {
     raw_rotation: Quaternion<f32>,
     rotation_offset: Quaternion<f32>,
@@ -20,13 +20,11 @@ struct SharedState {
 }
 
 // Thread-local global state to allow access across the WASM boundary
-#[cfg(target_arch = "wasm32")]
 thread_local! {
     static STATE: Rc<RefCell<Option<SharedState>>> = Rc::new(RefCell::new(None));
 }
 
 // Helper to setup requestAnimationFrame
-#[cfg(target_arch = "wasm32")]
 fn request_animation_frame(f: &Closure<dyn FnMut()>) {
     web_sys::window()
         .unwrap()
@@ -379,7 +377,6 @@ impl RenderState {
 // ========== WASM API (for web) ==========
 // These are public functions callable from rouxflow-wasm entry point.
 
-#[cfg(target_arch = "wasm32")]
 pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
 
@@ -472,7 +469,6 @@ pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
     Ok(())
 }
 
-#[cfg(target_arch = "wasm32")]
 pub fn set_gyro_enabled(enabled: bool) {
     STATE.with(|s| {
         if let Some(state) = s.borrow_mut().as_mut() {
@@ -487,7 +483,6 @@ pub fn set_gyro_enabled(enabled: bool) {
     });
 }
 
-#[cfg(target_arch = "wasm32")]
 pub fn update_render_state(facelets: Vec<u8>, x: f32, y: f32, z: f32, w: f32) {
     STATE.with(|s| {
         if let Some(state) = s.borrow_mut().as_mut() {
@@ -498,7 +493,6 @@ pub fn update_render_state(facelets: Vec<u8>, x: f32, y: f32, z: f32, w: f32) {
     });
 }
 
-#[cfg(target_arch = "wasm32")]
 pub fn reset_gyro() {
     STATE.with(|s| {
         if let Some(state) = s.borrow_mut().as_mut() {

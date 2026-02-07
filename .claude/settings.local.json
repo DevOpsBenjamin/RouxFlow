@@ -21,7 +21,12 @@
       "Bash(dir:*)",
       "Bash(pnpm install:*)",
       "Bash(cargo test:*)",
-      "Bash(cargo run:*)"
+      "Bash(cargo run:*)",
+      "Bash(pnpm --filter frontend exec vue-tsc:*)",
+      "Bash(pnpm --filter frontend run build:wasm:*)",
+      "Bash(pnpm exec vue-tsc:*)",
+      "Bash(pnpm --filter frontend run build:*)",
+      "Bash(sort:*)"
     ]
   }
 }
