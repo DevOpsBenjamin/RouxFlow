@@ -4,7 +4,6 @@ import TimerDisplay from '../timer/TimerDisplay.vue'
 import SplitStats from '../session/SplitStats.vue'
 import MoveList from '../session/MoveList.vue'
 import SyncStatus from '../cube/SyncStatus.vue'
-import BluetoothManager from '../cube/BluetoothManager.vue'
 import SessionPicker from '../session/SessionPicker.vue'
 import ScrambleDisplay from '../session/ScrambleDisplay.vue'
 import BluetoothRequired from '../cube/BluetoothRequired.vue'
@@ -37,7 +36,6 @@ const isWCAMode = computed(() => sessionStore.activeSession?.session_type === 'W
         <!-- Top Bar -->
         <div class="flex justify-between items-center h-[8vh] px-[2vw]">
           <SessionPicker class="scale-[1.2] origin-left" />
-          <BluetoothManager class="scale-[1.2] origin-right" />
         </div>
 
         <!-- Main Content Area: Responsive Grid -->

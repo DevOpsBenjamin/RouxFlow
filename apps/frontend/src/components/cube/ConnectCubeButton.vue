@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useBluetoothStore } from '../../stores/bluetooth'
+import { ref, onMounted } from 'vue'
+import { useBluetoothStore, type SavedCube } from '../../stores/bluetooth'
+import { useAuthStore } from '../../stores/auth'
 import { reset_gyro } from '../../services/cube/bridge'
 import { logger } from '../../utils/logger'
 
 const bt = useBluetoothStore()
+const auth = useAuthStore()
 const showCubeManager = ref(false)
+const savedCubes = ref<SavedCube[]>([])
 
 async function handleConnect() {
   if (bt.isConnected) {
@@ -17,6 +20,24 @@ async function handleConnect() {
   }
 }
 
+async function loadSavedCubes() {
+  try {
+    savedCubes.value = await bt.loadSavedCubes(auth.user?.id || null)
+  } catch (e) {
+    logger.error('Failed to load saved cubes:', e)
+  }
+}
+
+async function handleDeleteCube(id: string, userId: string | null) {
+  await bt.deleteCube(id, userId)
+  await loadSavedCubes()
+}
+
+// Load saved cubes on mount
+onMounted(() => {
+  loadSavedCubes()
+})
+
 defineExpose({ showCubeManager })
 </script>
 
@@ -24,7 +45,7 @@ defineExpose({ showCubeManager })
   <div>
     <!-- Not Connected: Big "Connect a Cube" Button -->
     <button
-      v-if="!bt.isConnected && bt.savedCubes.length === 0"
+      v-if="!bt.isConnected && savedCubes.length === 0"
       @click="handleConnect"
       :disabled="bt.isConnecting"
       class="group relative px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm shadow-lg shadow-indigo-500/30 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
@@ -46,7 +67,7 @@ defineExpose({ showCubeManager })
 
     <!-- Has Saved Cubes but Not Connected: Reconnect Button -->
     <button
-      v-else-if="!bt.isConnected && bt.savedCubes.length > 0"
+      v-else-if="!bt.isConnected && savedCubes.length > 0"
       @click="handleConnect"
       :disabled="bt.isConnecting"
       class="group px-5 py-2.5 rounded-xl bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500/50 text-white font-semibold text-sm transition-all flex items-center gap-3"
@@ -197,7 +218,7 @@ defineExpose({ showCubeManager })
                 </button>
 
                 <button
-                  v-if="bt.savedCubes.length > 1"
+                  v-if="savedCubes.length > 1"
                   class="w-full text-left p-3 rounded-lg hover:bg-slate-800/50 text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-2"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -209,12 +230,12 @@ defineExpose({ showCubeManager })
             </details>
 
             <!-- Saved Cubes List -->
-            <div v-if="bt.savedCubes.length > 0" class="space-y-3">
-              <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wide">Saved Cubes ({{ bt.savedCubes.length }})</h3>
+            <div v-if="savedCubes.length > 0" class="space-y-3">
+              <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wide">Saved Cubes ({{ savedCubes.length }})</h3>
 
               <div class="space-y-2">
                 <div
-                  v-for="cube in bt.savedCubes"
+                  v-for="cube in savedCubes"
                   :key="cube.id"
                   class="p-3 rounded-lg bg-slate-800/30 border border-slate-700/50 hover:border-slate-700 transition-colors"
                 >
@@ -224,7 +245,7 @@ defineExpose({ showCubeManager })
                       <p class="text-xs text-slate-500 font-mono">{{ cube.mac_address }}</p>
                     </div>
                     <button
-                      @click="bt.deleteCube(cube.id, cube.user_id)"
+                      @click="handleDeleteCube(cube.id, cube.user_id)"
                       class="p-1.5 rounded hover:bg-red-500/10 text-slate-600 hover:text-red-400 transition-colors"
                       title="Forget this cube"
                     >

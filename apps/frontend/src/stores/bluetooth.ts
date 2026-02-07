@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { cubeManager, connect, finalizeConnection, disconnect as bridgeDisconnect, getCubes, saveCube as bridgeSaveCube, deleteCube as bridgeDeleteCube, syncCubes as bridgeSyncCubes } from '../services/cube/bridge'
 import { logger } from '../utils/logger'
+import { useAuthStore } from './auth'
 
 export interface SavedCube {
     id: string
@@ -19,12 +20,15 @@ export interface BluetoothDevice {
 }
 
 export const useBluetoothStore = defineStore('bluetooth', () => {
-    const savedCubes = ref<SavedCube[]>([])
+    // UI state only
     const showPicker = ref(false)
     const error = ref<string | null>(null)
     const isConnecting = ref(false)
+    const showMacInput = ref(false)
+    const pendingConnection = ref<{ device: any; cubeDef: any } | null>(null)
 
-    // Query WASM for cube connection state
+    // ========== Query WASM for all state ==========
+
     const isConnected = computed(() => cubeManager?.is_connected() ?? false)
 
     const connectedDeviceName = computed(() => {
@@ -61,15 +65,89 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
         return cubeManager.get_facelets()
     })
 
+    // ========== Connection Flow (Browser API only) ==========
+
     async function startScan() {
         isConnecting.value = true
         showPicker.value = true
         error.value = null
 
         try {
+            // Browser API: show Web Bluetooth picker
             const { device, cubeDef } = await connect()
-            await finalizeConnection(device, cubeDef)
+
+            // Ask WASM: do we need MAC input?
+            const needsMacInput = cubeManager?.needs_mac_input(device.id || '', cubeDef.protocol) ?? false
+
+            if (needsMacInput) {
+                // Load saved cubes to check for saved MAC
+                const auth = useAuthStore()
+                const savedCubes = await getCubes(auth.user?.id || null)
+
+                // Check if we have this cube saved with a MAC
+                const savedCube = savedCubes.find(
+                    cube => cube.name === device.name && cube.device_type === cubeDef.protocol
+                )
+
+                if (savedCube && savedCube.mac_address) {
+                    // Use saved MAC - proceed with connection
+                    logger.info(`Using saved MAC for ${device.name}`)
+                    await finalizeConnection(device, cubeDef, savedCube.mac_address)
+                    logger.info(`Connected to ${device.name}`)
+                    showPicker.value = false
+                    return
+                }
+
+                // Need to ask for MAC address
+                logger.warn(`Protocol ${cubeDef.protocol} requires MAC address, but auto-detection failed`)
+                pendingConnection.value = { device, cubeDef }
+                showMacInput.value = true
+                showPicker.value = false
+                isConnecting.value = false
+                return
+            }
+
+            // Don't need MAC - proceed with connection
+            await finalizeConnection(device, cubeDef, device.id)
             logger.info(`Connected to ${device.name}`)
+            showPicker.value = false
+        } catch (e: any) {
+            logger.error('Connection failed:', e)
+            error.value = e.message || 'Connection failed'
+            showPicker.value = false
+        } finally {
+            if (!showMacInput.value) {
+                isConnecting.value = false
+            }
+        }
+    }
+
+    async function submitMacAddress(macAddress: string) {
+        if (!pendingConnection.value) return
+
+        isConnecting.value = true
+        showMacInput.value = false
+        showPicker.value = true
+
+        try {
+            const { device, cubeDef } = pendingConnection.value
+            await finalizeConnection(device, cubeDef, macAddress)
+            logger.info(`Connected to ${device.name} with provided MAC`)
+
+            // Save cube with MAC to offline storage
+            const auth = useAuthStore()
+            const cubeId = `${device.name}_${Date.now()}`
+            await bridgeSaveCube({
+                id: cubeId,
+                user_id: auth.user?.id || null,
+                name: device.name || 'Unknown Cube',
+                device_type: cubeDef.protocol,
+                mac_address: macAddress,
+                created_at: Date.now()
+            })
+            logger.info(`Saved cube ${device.name} with MAC to offline storage`)
+
+            pendingConnection.value = null
         } catch (e: any) {
             logger.error('Connection failed:', e)
             error.value = e.message || 'Connection failed'
@@ -77,6 +155,12 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
             isConnecting.value = false
             showPicker.value = false
         }
+    }
+
+    function cancelMacInput() {
+        showMacInput.value = false
+        pendingConnection.value = null
+        error.value = 'Connection cancelled - MAC address required'
     }
 
     function setError(msg: string) {
@@ -88,12 +172,14 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
         await bridgeDisconnect()
     }
 
-    // DB Operations
+    // ========== Storage Operations (delegate to WASM via bridge) ==========
+
     async function loadSavedCubes(userId: string | null = null) {
         try {
-            savedCubes.value = await getCubes(userId)
+            return await getCubes(userId)
         } catch (e) {
             logger.error('Failed to load saved cubes:', e)
+            return []
         }
     }
 
@@ -104,7 +190,6 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
         }
         try {
             await bridgeSaveCube(newCube)
-            await loadSavedCubes(cube.user_id)
         } catch (e) {
             logger.error('Failed to save cube:', e)
             throw e
@@ -114,7 +199,6 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
     async function deleteCube(id: string, userId: string | null = null) {
         try {
             await bridgeDeleteCube(id, userId)
-            await loadSavedCubes(userId)
         } catch (e) {
             logger.error('Failed to delete cube:', e)
         }
@@ -123,25 +207,31 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
     async function sync(userId: string) {
         try {
             await bridgeSyncCubes(userId)
-            await loadSavedCubes(userId)
         } catch (e) {
             logger.error('Failed to sync cubes:', e)
         }
     }
 
     return {
-        savedCubes,
+        // UI state
+        showPicker,
+        showMacInput,
+        pendingConnection,
+        error,
         isConnecting,
+        // WASM state queries
         isConnected,
         connectedDeviceName,
         deviceInfo,
         orientation,
         facelets,
-        showPicker,
-        error,
+        // Actions (browser APIs + WASM calls)
         startScan,
+        submitMacAddress,
+        cancelMacInput,
         setError,
         disconnect,
+        // Storage operations
         loadSavedCubes,
         saveCube,
         deleteCube,

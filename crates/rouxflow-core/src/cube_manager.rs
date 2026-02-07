@@ -214,6 +214,37 @@ impl CubeManager {
         self.stop_timer(timestamp);
         self.session_manager.record_solve(time_ms, moves_json)
     }
+
+    // ========== MAC Address Validation ==========
+
+    /// Check if a protocol requires MAC address for encryption
+    pub fn protocol_requires_mac(protocol: &str) -> bool {
+        matches!(protocol, "MoYuAi" | "MoYuV3" | "GanV2" | "GanV3" | "GanV4")
+    }
+
+    /// Check if device_id is a valid MAC address format (XX:XX:XX:XX:XX:XX)
+    pub fn is_valid_mac_format(device_id: &str) -> bool {
+        if device_id.len() != 17 {
+            return false;
+        }
+
+        let parts: Vec<&str> = device_id.split(':').collect();
+        if parts.len() != 6 {
+            return false;
+        }
+
+        parts.iter().all(|part| {
+            part.len() == 2 && part.chars().all(|c| c.is_ascii_hexdigit())
+        })
+    }
+
+    /// Determine if we need to prompt user for MAC address
+    /// Returns true if:
+    /// 1. Protocol requires MAC for encryption, AND
+    /// 2. Device ID is not a valid MAC address
+    pub fn needs_mac_input(device_id: &str, protocol: &str) -> bool {
+        Self::protocol_requires_mac(protocol) && !Self::is_valid_mac_format(device_id)
+    }
 }
 
 impl Default for CubeManager {

@@ -51,7 +51,7 @@ export {
 
 /// Single BLE event listener that forwards packets to WASM
 function blePacketHandler(event: Event) {
-    const target = event.target as BluetoothRemoteGATTCharacteristic
+    const target = event.target as unknown as BluetoothRemoteGATTCharacteristic
     const value = target.value
     if (!value || !cubeManager) return
 
@@ -82,7 +82,6 @@ function blePacketHandler(event: Event) {
 async function handleCoreAction(action: any) {
     switch (action.type) {
         case 'SaveSolve': {
-            const storage = await getStorage()
             // Get active session from somewhere - for now we'll need to store this
             // This is a limitation we'll address in the refactor
             // For now, skip the save if we don't have a session ID
@@ -127,21 +126,20 @@ export async function connect(): Promise<{ device: BluetoothDevice; cubeDef: any
     logger.info(`Selected device: ${device.name} (${device.id})`)
 
     // Look up the cube definition from its BLE name
-    const cubeDefJson = device.name ? find_cube_by_ble_name(device.name) : null
+    const cubeDef = device.name ? find_cube_by_ble_name(device.name) : null
 
-    if (!cubeDefJson) {
+    if (!cubeDef) {
         logger.error(`No cube definition found for: ${device.name}`)
         throw new Error(`Unknown cube: ${device.name}. Please ensure your cube is supported.`)
     }
 
-    const cubeDef = JSON.parse(cubeDefJson)
     logger.debug('Cube definition loaded:', cubeDef)
 
     return { device, cubeDef }
 }
 
 /// Finalize connection and set up BLE listener
-export async function finalizeConnection(device: BluetoothDevice, cubeDef: any): Promise<void> {
+export async function finalizeConnection(device: BluetoothDevice, cubeDef: any, macAddress: string): Promise<void> {
     if (!cubeManager) {
         throw new Error('WASM not initialized')
     }
@@ -151,8 +149,8 @@ export async function finalizeConnection(device: BluetoothDevice, cubeDef: any):
     const serviceUuid = cubeDef.serviceUuid
     const charUuid = cubeDef.stateCharacteristic
     const protocolName = cubeDef.protocol
-    const macAddress = device.id || 'unknown-mac'
 
+    logger.debug(`MAC Address: ${macAddress}`)
     logger.debug(`Connecting to GATT service ${serviceUuid}, characteristic ${charUuid}`)
 
     try {

@@ -722,4 +722,22 @@ impl WasmCubeManager {
         let timestamp = js_sys::Date::now() / 1000.0;
         self.inner.record_solve(timestamp, time_ms, moves_json)
     }
+
+    // ========== MAC Address Validation ==========
+
+    /// Check if we need to prompt user for MAC address
+    /// Returns true if protocol needs MAC AND device_id is not valid MAC format
+    pub fn needs_mac_input(device_id: &str, protocol: &str) -> bool {
+        rouxflow_core::CubeManager::needs_mac_input(device_id, protocol)
+    }
+
+    /// Check if a protocol requires MAC address for encryption
+    pub fn protocol_requires_mac(protocol: &str) -> bool {
+        rouxflow_core::CubeManager::protocol_requires_mac(protocol)
+    }
+
+    /// Check if device_id is a valid MAC address format
+    pub fn is_valid_mac_format(device_id: &str) -> bool {
+        rouxflow_core::CubeManager::is_valid_mac_format(device_id)
+    }
 }

@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import DeviceSelectionModal from './components/cube/DeviceSelectionModal.vue'
+import MacAddressInputModal from './components/cube/MacAddressInputModal.vue'
 import Navbar from './components/layout/Navbar.vue'
 import OfflineIndicator from './components/ui/OfflineIndicator.vue'
 import { useAuthStore } from './stores/auth'
+import { useBluetoothStore } from './stores/bluetooth'
 import { watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
+const bt = useBluetoothStore()
 const router = useRouter()
 
 // Auto-navigate to home after login
@@ -20,6 +23,12 @@ watch(() => auth.isAuthenticated, (isLogged) => {
 <template>
   <div class="h-[100dvh] bg-slate-950 text-slate-50 flex flex-col font-sans selection:bg-indigo-500/30 overflow-hidden">
     <DeviceSelectionModal />
+    <MacAddressInputModal
+      :show="bt.showMacInput"
+      :deviceName="bt.pendingConnection?.device?.name || 'Unknown Cube'"
+      @submit="bt.submitMacAddress"
+      @cancel="bt.cancelMacInput"
+    />
     <OfflineIndicator />
 
     <!-- Show Navbar if NOT on Landing -->
