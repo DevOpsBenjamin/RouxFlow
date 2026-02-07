@@ -111,21 +111,31 @@ export async function connect(): Promise<{ device: BluetoothDevice; cubeDef: any
     await ensureWasm()
     const serviceUuids = all_scan_service_uuids()
 
+    logger.debug('Available service UUIDs:', serviceUuids)
+
     // Build filters from known cube name prefixes
     const prefixes = all_scan_name_prefixes()
     const nameFilters = prefixes.map((p: string) => ({ namePrefix: p }))
+
+    logger.debug('Name prefixes for scanning:', prefixes)
 
     const device = await (navigator as any).bluetooth.requestDevice({
         filters: nameFilters.length > 0 ? nameFilters : [{ services: [serviceUuids[0]] }],
         optionalServices: serviceUuids
     })
 
-    // Look up the cube definition from its BLE name
-    const cubeDef = device.name ? find_cube_by_ble_name(device.name) : null
+    logger.info(`Selected device: ${device.name} (${device.id})`)
 
-    if (!cubeDef) {
-        throw new Error(`Unknown cube: ${device.name}`)
+    // Look up the cube definition from its BLE name
+    const cubeDefJson = device.name ? find_cube_by_ble_name(device.name) : null
+
+    if (!cubeDefJson) {
+        logger.error(`No cube definition found for: ${device.name}`)
+        throw new Error(`Unknown cube: ${device.name}. Please ensure your cube is supported.`)
     }
+
+    const cubeDef = JSON.parse(cubeDefJson)
+    logger.debug('Cube definition loaded:', cubeDef)
 
     return { device, cubeDef }
 }
@@ -136,34 +146,54 @@ export async function finalizeConnection(device: BluetoothDevice, cubeDef: any):
         throw new Error('WASM not initialized')
     }
 
+    logger.debug('Cube definition:', cubeDef)
+
     const serviceUuid = cubeDef.serviceUuid
     const charUuid = cubeDef.stateCharacteristic
     const protocolName = cubeDef.protocol
     const macAddress = device.id || 'unknown-mac'
 
-    // Connect GATT
-    const server = await device.gatt?.connect()
-    const service = await server?.getPrimaryService(serviceUuid)
-    const characteristic = await service?.getCharacteristic(charUuid)
+    logger.debug(`Connecting to GATT service ${serviceUuid}, characteristic ${charUuid}`)
 
-    if (!characteristic) {
-        throw new Error('Failed to get BLE characteristic')
+    try {
+        // Connect GATT
+        const server = await device.gatt?.connect()
+        if (!server) {
+            throw new Error('Failed to connect to GATT server')
+        }
+        logger.debug('GATT server connected')
+
+        const service = await server.getPrimaryService(serviceUuid)
+        logger.debug('GATT service obtained')
+
+        const characteristic = await service.getCharacteristic(charUuid)
+        logger.debug('GATT characteristic obtained')
+
+        if (!characteristic) {
+            throw new Error('Failed to get BLE characteristic')
+        }
+
+        // Remove old listener if exists
+        if (bleCharacteristic) {
+            bleCharacteristic.removeEventListener('characteristicvaluechanged', blePacketHandler)
+        }
+
+        // Set up new listener
+        await characteristic.startNotifications()
+        logger.debug('Notifications started')
+
+        characteristic.addEventListener('characteristicvaluechanged', blePacketHandler)
+        bleCharacteristic = characteristic
+
+        // Connect in WASM
+        cubeManager.connect(device.name || 'Unknown Cube', macAddress, protocolName)
+
+        logger.info(`Connected to ${device.name} (${protocolName})`)
+    } catch (error) {
+        logger.error('GATT connection error:', error)
+        logger.error(`Device: ${device.name}, Service: ${serviceUuid}, Char: ${charUuid}`)
+        throw error
     }
-
-    // Remove old listener if exists
-    if (bleCharacteristic) {
-        bleCharacteristic.removeEventListener('characteristicvaluechanged', blePacketHandler)
-    }
-
-    // Set up new listener
-    await characteristic.startNotifications()
-    characteristic.addEventListener('characteristicvaluechanged', blePacketHandler)
-    bleCharacteristic = characteristic
-
-    // Connect in WASM
-    cubeManager.connect(device.name || 'Unknown Cube', macAddress, protocolName)
-
-    logger.info(`Connected to ${device.name} (${protocolName})`)
 }
 
 /// Disconnect from cube
