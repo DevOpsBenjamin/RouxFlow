@@ -26,7 +26,8 @@
       "Bash(pnpm --filter frontend run build:wasm:*)",
       "Bash(pnpm exec vue-tsc:*)",
       "Bash(pnpm --filter frontend run build:*)",
-      "Bash(sort:*)"
+      "Bash(sort:*)",
+      "Bash(pnpm add:*)"
     ]
   }
 }

@@ -1,9 +1,33 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { ensureWasm, init_renderer } from '../../services/cube/bridge'
+import { onMounted, onUnmounted, ref } from 'vue'
+import { ensureWasm, init_renderer, update_render_state, cubeManager } from '../../services/cube/bridge'
+import { logger } from '../../utils/logger'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const isLoaded = ref(false)
+let rafHandle: number | null = null
+
+function renderLoop() {
+  if (!cubeManager) {
+    rafHandle = requestAnimationFrame(renderLoop)
+    return
+  }
+
+  // Query WASM for latest state
+  const facelets = cubeManager.get_facelets()
+  const [x, y, z, w] = cubeManager.get_orientation()
+
+  // Update WASM render state
+  update_render_state(facelets, x, y, z, w)
+
+  // Timer update (WASM calculates time)
+  if (cubeManager.is_timer_running()) {
+    const timestamp = performance.now() / 1000.0
+    cubeManager.update_timer(timestamp)
+  }
+
+  rafHandle = requestAnimationFrame(renderLoop)
+}
 
 onMounted(async () => {
   if (!canvasRef.value) return
@@ -18,7 +42,7 @@ onMounted(async () => {
   canvasRef.value.width = Math.round(rect.width * dpr)
   canvasRef.value.height = Math.round(rect.height * dpr)
 
-  console.log(`[Cube3D] Initial canvas size: ${canvasRef.value.width}x${canvasRef.value.height} (CSS: ${rect.width}x${rect.height}, DPR: ${dpr})`)
+  logger.debug(`Initial canvas size: ${canvasRef.value.width}x${canvasRef.value.height} (CSS: ${rect.width}x${rect.height}, DPR: ${dpr})`)
 
   try {
     await ensureWasm()
@@ -29,18 +53,28 @@ onMounted(async () => {
     } catch (e: any) {
         // winit throws this error on the web to break control flow and start the loop
         if (typeof e === 'string' && e.includes("Using exceptions for control flow")) {
-             console.log("[RouxRenderer] Loop started successfully (caught control flow exception)")
+             logger.info("Loop started successfully (caught control flow exception)")
         } else if (e instanceof Error && e.message.includes("Using exceptions for control flow")) {
-             console.log("[RouxRenderer] Loop started successfully (caught control flow exception)")
+             logger.info("Loop started successfully (caught control flow exception)")
         } else {
-             console.error("[RouxRenderer] Initialization error:", e)
+             logger.error("Initialization error:", e)
              throw e
         }
     }
 
     isLoaded.value = true
+
+    // Start render loop - THE ONLY RAF LOOP IN THE APP
+    rafHandle = requestAnimationFrame(renderLoop)
   } catch (e) {
-      console.error("Failed to load 3D engine:", e)
+      logger.error("Failed to load 3D engine:", e)
+  }
+})
+
+onUnmounted(() => {
+  if (rafHandle !== null) {
+    cancelAnimationFrame(rafHandle)
+    rafHandle = null
   }
 })
 </script>

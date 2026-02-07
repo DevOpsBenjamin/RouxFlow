@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { CubeBridge } from '../services/cube/bridge'
+import { ref, computed } from 'vue'
+import { cubeManager, connect, finalizeConnection, disconnect as bridgeDisconnect, getCubes, saveCube as bridgeSaveCube, deleteCube as bridgeDeleteCube, syncCubes as bridgeSyncCubes } from '../services/cube/bridge'
+import { logger } from '../utils/logger'
 
 export interface SavedCube {
     id: string
@@ -18,48 +19,81 @@ export interface BluetoothDevice {
 }
 
 export const useBluetoothStore = defineStore('bluetooth', () => {
-    const scannedDevices = ref<BluetoothDevice[]>([])
     const savedCubes = ref<SavedCube[]>([])
-    const isScanning = ref(false)
-    const isConnecting = ref(false)
-    const isConnected = ref(false)
-    const connectedDeviceName = ref<string | null>(null)
     const showPicker = ref(false)
     const error = ref<string | null>(null)
+    const isConnecting = ref(false)
 
-    function setDevices(devices: BluetoothDevice[]) {
-        scannedDevices.value = devices
-    }
+    // Query WASM for cube connection state
+    const isConnected = computed(() => cubeManager?.is_connected() ?? false)
 
-    function startScan() {
-        if (!isScanning.value) {
-            console.log('[Store] Starting scan...');
-            isScanning.value = true
+    const connectedDeviceName = computed(() => {
+        if (!cubeManager) return null
+        const deviceInfoJson = cubeManager.get_device_info()
+        if (!deviceInfoJson) return null
+        try {
+            const info = JSON.parse(deviceInfoJson)
+            return info.name || null
+        } catch {
+            return null
         }
+    })
+
+    const deviceInfo = computed(() => {
+        if (!cubeManager) return null
+        const deviceInfoJson = cubeManager.get_device_info()
+        if (!deviceInfoJson) return null
+        try {
+            return JSON.parse(deviceInfoJson)
+        } catch {
+            return null
+        }
+    })
+
+    const orientation = computed(() => {
+        if (!cubeManager) return { x: 0, y: 0, z: 0, w: 1 }
+        const [x, y, z, w] = cubeManager.get_orientation()
+        return { x, y, z, w }
+    })
+
+    const facelets = computed(() => {
+        if (!cubeManager) return new Array(54).fill(0)
+        return cubeManager.get_facelets()
+    })
+
+    async function startScan() {
+        isConnecting.value = true
         showPicker.value = true
         error.value = null
-        CubeBridge.connect().catch(e => {
-            console.error('[Store] Scan initiation failed:', e);
-            setError(e.message || 'Scan failed');
-        });
-    }
 
-    function stopScan() {
-        isScanning.value = false
+        try {
+            const { device, cubeDef } = await connect()
+            await finalizeConnection(device, cubeDef)
+            logger.info(`Connected to ${device.name}`)
+        } catch (e: any) {
+            logger.error('Connection failed:', e)
+            error.value = e.message || 'Connection failed'
+        } finally {
+            isConnecting.value = false
+            showPicker.value = false
+        }
     }
 
     function setError(msg: string) {
         error.value = msg
-        isScanning.value = false
         isConnecting.value = false
+    }
+
+    async function disconnect() {
+        await bridgeDisconnect()
     }
 
     // DB Operations
     async function loadSavedCubes(userId: string | null = null) {
         try {
-            savedCubes.value = await CubeBridge.getCubes(userId)
+            savedCubes.value = await getCubes(userId)
         } catch (e) {
-            console.error('Failed to load saved cubes:', e)
+            logger.error('Failed to load saved cubes:', e)
         }
     }
 
@@ -69,72 +103,48 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
             created_at: Date.now()
         }
         try {
-            await CubeBridge.saveCube(newCube)
+            await bridgeSaveCube(newCube)
             await loadSavedCubes(cube.user_id)
         } catch (e) {
-            console.error('Failed to save cube:', e)
+            logger.error('Failed to save cube:', e)
             throw e
         }
     }
 
     async function deleteCube(id: string, userId: string | null = null) {
         try {
-            await CubeBridge.deleteCube(id, userId)
+            await bridgeDeleteCube(id, userId)
             await loadSavedCubes(userId)
         } catch (e) {
-            console.error('Failed to delete cube:', e)
+            logger.error('Failed to delete cube:', e)
         }
     }
 
     async function sync(userId: string) {
         try {
-            await CubeBridge.syncCubes(userId)
+            await bridgeSyncCubes(userId)
             await loadSavedCubes(userId)
         } catch (e) {
-            console.error('Failed to sync cubes:', e)
+            logger.error('Failed to sync cubes:', e)
         }
     }
 
-    const connectedDeviceInfo = ref<{ name: string; address: string; protocol: string; features?: { gyro: boolean } } | null>(null)
-    const orientation = ref({ x: 0, y: 0, z: 0, w: 1 })
-    const facelets = ref<number[]>(new Array(54).fill(0))
-
-    function setOrientation(x: number, y: number, z: number, w: number) {
-        orientation.value = { x, y, z, w }
-    }
-
-    function setFacelets(newFacelets: number[]) {
-        facelets.value = newFacelets
-    }
-
-    function disconnect() {
-        isConnected.value = false
-        connectedDeviceName.value = null
-        connectedDeviceInfo.value = null
-    }
-
     return {
-        scannedDevices,
         savedCubes,
-        isScanning,
         isConnecting,
         isConnected,
         connectedDeviceName,
-        deviceInfo: connectedDeviceInfo,
+        deviceInfo,
         orientation,
         facelets,
         showPicker,
         error,
-        setDevices,
         startScan,
-        stopScan,
         setError,
-        setOrientation,
-        setFacelets,
+        disconnect,
         loadSavedCubes,
         saveCube,
         deleteCube,
-        disconnect,
         sync
     }
 })

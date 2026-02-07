@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useUIStore } from '../../stores/ui'
+import { useRouter } from 'vue-router'
 import { useTimerStore } from '../../stores/timer'
 import { computed } from 'vue'
 
@@ -7,7 +7,7 @@ const props = defineProps<{
   solveId?: string
 }>()
 
-const ui = useUIStore()
+const router = useRouter()
 const timer = useTimerStore()
 
 // Use real data from the timer store for the last solve
@@ -37,8 +37,8 @@ function formatTime(ms: number) {
         <h2 class="text-[5vmin] font-black italic text-white tracking-tight leading-none">SOLVE ANALYSIS</h2>
         <p class="text-slate-500 font-mono text-[1.5vmin] mt-[1vh] uppercase tracking-widest">{{ solve.id }}</p>
       </div>
-      <button 
-        @click="ui.setActiveSession()"
+      <button
+        @click="router.push({ name: 'Session' })"
         class="p-[2vmin] bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-[2vmin] transition-all text-[2vmin]"
       >
         ← Back to Session

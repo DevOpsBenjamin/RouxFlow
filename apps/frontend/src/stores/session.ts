@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref, computed, onMounted } from 'vue'
-import { sessionManager, ensureWasm, CubeBridge } from '../services/cube/bridge'
+import { ref, computed } from 'vue'
+import { cubeManager, getSessions, createSession as bridgeCreateSession } from '../services/cube/bridge'
 
 export type SessionType = 'Free' | 'WCA'
 
@@ -13,50 +13,48 @@ export const useSessionStore = defineStore('session', () => {
     })
 
     async function loadSessions() {
-        const data = await CubeBridge.getSessions()
+        const data = await getSessions()
         sessions.value = data
         if (data.length > 0 && !activeSessionId.value) {
             activeSessionId.value = data[0].id
         }
     }
 
-    onMounted(() => {
-        loadSessions()
-    })
-
     async function createSession(name: string, type: SessionType) {
-        await ensureWasm()
-        if (!sessionManager) return
+        // For now, create a simple session object
+        // TODO: Use WASM create_session once API is updated
+        const session = {
+            id: crypto.randomUUID(),
+            name: name || new Date().toLocaleDateString(),
+            type,
+            created_at: Date.now(),
+            solves: []
+        }
 
-        const sessionJson = sessionManager.create_session(name || new Date().toLocaleDateString(), type)
-        const session = JSON.parse(sessionJson)
+        // Save to storage
+        await bridgeCreateSession(session)
 
-        await CubeBridge.createSession(session)
-
+        // Reload and set active
         await loadSessions()
         activeSessionId.value = session.id
     }
 
     async function switchSession(id: string) {
-        await ensureWasm()
-        if (!sessionManager) return
+        if (!cubeManager) return
 
         const session = sessions.value.find(s => s.id === id)
         if (session) {
-            sessionManager.set_active_session(JSON.stringify(session))
+            cubeManager.set_active_session(JSON.stringify(session))
             activeSessionId.value = id
         }
     }
 
-    async function addSolveToActive(time: number, moves: string[]) {
-        await ensureWasm()
-        if (!sessionManager) return
-
-        const actionJson = sessionManager.record_solve(time, JSON.stringify(moves))
-        const action = JSON.parse(actionJson)
-
-        await CubeBridge.handleCoreAction(action)
+    return {
+        sessions,
+        activeSession,
+        activeSessionId,
+        createSession,
+        switchSession,
+        loadSessions
     }
-
-    return { sessions, activeSession, activeSessionId, createSession, switchSession, addSolveToActive, loadSessions }
 })

@@ -1,7 +1,5 @@
 import init, {
-    handle_ble_packet,
-    encode_cube_command,
-    SessionManager,
+    WasmCubeManager,
     WasmStorageManager,
     init_renderer,
     set_gyro_enabled,
@@ -11,18 +9,18 @@ import init, {
     all_scan_service_uuids,
     all_scan_name_prefixes,
 } from '../../wasm/rouxflow/rouxflow_wasm'
-import { useTimerStore } from '../../stores/timer'
-import { useSessionStore } from '../../stores/session'
+import { logger } from '../../utils/logger'
 import type { SavedCube } from '../../stores/bluetooth'
 
 let wasmInitialized = false
-export let sessionManager: SessionManager | null = null
+export let cubeManager: WasmCubeManager | null = null
 let storageManager: WasmStorageManager | null = null
+let bleCharacteristic: BluetoothRemoteGATTCharacteristic | null = null
 
 export async function ensureWasm() {
     if (!wasmInitialized) {
         await init()
-        sessionManager = new SessionManager()
+        cubeManager = new WasmCubeManager()
         wasmInitialized = true
     }
 }
@@ -46,157 +44,177 @@ export {
     set_gyro_enabled,
     update_render_state,
     reset_gyro,
-    encode_cube_command,
     find_cube_by_ble_name,
     all_scan_service_uuids,
     all_scan_name_prefixes,
 }
 
-export class CubeBridge {
-    static async processPacket(dataView: DataView) {
-        const bytes = new Uint8Array(dataView.buffer)
-        await this.processRawPacket(bytes)
-    }
+/// Single BLE event listener that forwards packets to WASM
+function blePacketHandler(event: Event) {
+    const target = event.target as BluetoothRemoteGATTCharacteristic
+    const value = target.value
+    if (!value || !cubeManager) return
 
-    static async processRawPacket(bytes: Uint8Array, deviceId: string = 'web-bluetooth-device') {
-        await ensureWasm()
-        if (!sessionManager) return
+    const bytes = new Uint8Array(value.buffer)
+    const timestamp = performance.now() / 1000.0
 
-        const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ')
-        console.log(`[Bridge] Raw Packet (${deviceId}): ${hex}`)
+    const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ')
+    logger.debug(`BLE Packet: ${hex}`)
 
-        const eventJson = handle_ble_packet(bytes, deviceId, sessionManager)
+    // Forward to WASM CubeManager
+    const actionsJson = cubeManager.process_ble_packet(bytes, timestamp)
 
-        if (eventJson) {
-            console.log(`[Bridge] Core Result: ${eventJson}`)
-            try {
-                const action = JSON.parse(eventJson)
-                await this.handleCoreAction(action)
-            } catch (e) {
-                console.error('Failed to parse Core event', e)
+    if (actionsJson) {
+        logger.debug(`Core Actions: ${actionsJson}`)
+        try {
+            // Parse single action or array of actions
+            const actions = actionsJson.startsWith('[') ? JSON.parse(actionsJson) : [JSON.parse(actionsJson)]
+            for (const action of actions) {
+                handleCoreAction(action)
             }
+        } catch (e) {
+            logger.error('Failed to parse Core actions', e)
         }
     }
+}
 
-    static async handleCoreAction(action: any) {
-        const timer = useTimerStore()
-        const sessionStore = useSessionStore()
-
-        switch (action.type) {
-            case 'FlowStateChanged':
-                timer.flowState = action.data
-                if (action.data === 'Solving') {
-                    timer.startTimer()
-                } else if (action.data === 'Finished') {
-                    timer.stopTimer()
-                }
-                break
-            case 'SaveSolve': {
-                const storage = await getStorage()
-                const activeId = sessionStore.activeSessionId
-                if (activeId) {
-                    await storage.save_solve_json(activeId, JSON.stringify(action.data))
-                    await sessionStore.loadSessions()
-                }
-                break
-            }
-            case 'DemoteSession': {
-                const storage = await getStorage()
-                await storage.demote_session(action.data)
-                await sessionStore.loadSessions()
-                break
-            }
-            case 'Pickup':
-                if (timer.flowState === 'Ready') {
-                    await ensureWasm()
-                    const actionJson = sessionManager?.set_solving()
-                    if (actionJson) this.handleCoreAction(JSON.parse(actionJson))
-                }
-                timer.handleEvent('pickup')
-                break
-            case 'Putdown':
-                if (timer.flowState === 'Solving') {
-                    const actionJson = sessionManager?.record_solve(timer.time, JSON.stringify(timer.currentMoves))
-                    if (actionJson) this.handleCoreAction(JSON.parse(actionJson))
-                }
-                timer.handleEvent('putdown')
-                break
-            case 'Move':
-                timer.handleEvent('move', action.data)
-                break
-            case 'Error':
-                console.error('Core logic error:', action.data)
-                break
+/// Handle side effects from Core actions (storage writes only)
+async function handleCoreAction(action: any) {
+    switch (action.type) {
+        case 'SaveSolve': {
+            const storage = await getStorage()
+            // Get active session from somewhere - for now we'll need to store this
+            // This is a limitation we'll address in the refactor
+            // For now, skip the save if we don't have a session ID
+            logger.debug('SaveSolve action received', action.data)
+            // TODO: Implement once we have session management in place
+            break
         }
+        case 'DemoteSession': {
+            const storage = await getStorage()
+            await storage.demote_session(action.data)
+            logger.debug('Session demoted', action.data)
+            break
+        }
+        case 'Error':
+            logger.error('Core logic error:', action.data)
+            break
+        default:
+            // Other actions are handled by WASM state updates
+            logger.debug('Action processed by WASM:', action.type)
+            break
+    }
+}
+
+/// Connect to a cube via Web Bluetooth
+export async function connect(): Promise<{ device: BluetoothDevice; cubeDef: any }> {
+    await ensureWasm()
+    const serviceUuids = all_scan_service_uuids()
+
+    // Build filters from known cube name prefixes
+    const prefixes = all_scan_name_prefixes()
+    const nameFilters = prefixes.map((p: string) => ({ namePrefix: p }))
+
+    const device = await (navigator as any).bluetooth.requestDevice({
+        filters: nameFilters.length > 0 ? nameFilters : [{ services: [serviceUuids[0]] }],
+        optionalServices: serviceUuids
+    })
+
+    // Look up the cube definition from its BLE name
+    const cubeDef = device.name ? find_cube_by_ble_name(device.name) : null
+
+    if (!cubeDef) {
+        throw new Error(`Unknown cube: ${device.name}`)
     }
 
-    // Web Bluetooth connection
-    static async connect(): Promise<string> {
-        await ensureWasm()
-        const serviceUuids = all_scan_service_uuids()
+    return { device, cubeDef }
+}
 
-        // Build filters from known cube name prefixes
-        const prefixes = all_scan_name_prefixes()
-        const nameFilters = prefixes.map((p: string) => ({ namePrefix: p }))
-
-        const device = await (navigator as any).bluetooth.requestDevice({
-            filters: nameFilters.length > 0 ? nameFilters : [{ services: [serviceUuids[0]] }],
-            optionalServices: serviceUuids
-        })
-
-        return device.name || 'Smart Cube'
+/// Finalize connection and set up BLE listener
+export async function finalizeConnection(device: BluetoothDevice, cubeDef: any): Promise<void> {
+    if (!cubeManager) {
+        throw new Error('WASM not initialized')
     }
 
-    static async finalConnect(device: any): Promise<void> {
-        await ensureWasm()
+    const serviceUuid = cubeDef.serviceUuid
+    const charUuid = cubeDef.stateCharacteristic
+    const protocolName = cubeDef.protocol
+    const macAddress = device.id || 'unknown-mac'
 
-        // Look up the cube definition from its BLE name
-        const cubeDef = device.name ? find_cube_by_ble_name(device.name) : null
-        const serviceUuid = cubeDef?.serviceUuid || '0000fe51-0000-1000-8000-00805f9b34fb'
-        const charUuid = cubeDef?.stateCharacteristic || '0000fe52-0000-1000-8000-00805f9b34fb'
+    // Connect GATT
+    const server = await device.gatt?.connect()
+    const service = await server?.getPrimaryService(serviceUuid)
+    const characteristic = await service?.getCharacteristic(charUuid)
 
-        const server = await device.gatt?.connect()
-        const service = await server?.getPrimaryService(serviceUuid)
-        const characteristic = await service?.getCharacteristic(charUuid)
-
-        await characteristic?.startNotifications()
-        characteristic?.addEventListener('characteristicvaluechanged', (event: any) => {
-            const value = event.target.value
-            this.processPacket(value)
-        })
+    if (!characteristic) {
+        throw new Error('Failed to get BLE characteristic')
     }
 
-    // --- Storage operations (delegated to WASM StorageManager) ---
-
-    static async getSessions(): Promise<any[]> {
-        const storage = await getStorage()
-        const json = await storage.get_sessions_json()
-        return JSON.parse(json)
+    // Remove old listener if exists
+    if (bleCharacteristic) {
+        bleCharacteristic.removeEventListener('characteristicvaluechanged', blePacketHandler)
     }
 
-    static async createSession(session: any) {
-        const storage = await getStorage()
-        await storage.create_session_json(JSON.stringify(session))
+    // Set up new listener
+    await characteristic.startNotifications()
+    characteristic.addEventListener('characteristicvaluechanged', blePacketHandler)
+    bleCharacteristic = characteristic
+
+    // Connect in WASM
+    cubeManager.connect(device.name || 'Unknown Cube', macAddress, protocolName)
+
+    logger.info(`Connected to ${device.name} (${protocolName})`)
+}
+
+/// Disconnect from cube
+export async function disconnect(): Promise<void> {
+    if (bleCharacteristic) {
+        try {
+            bleCharacteristic.removeEventListener('characteristicvaluechanged', blePacketHandler)
+            await bleCharacteristic.stopNotifications()
+        } catch (e) {
+            logger.warn('Error stopping BLE notifications', e)
+        }
+        bleCharacteristic = null
     }
 
-    static async getCubes(userId: string | null = null): Promise<SavedCube[]> {
-        const storage = await getStorage()
-        const json = await storage.get_cubes_json(userId ?? undefined)
-        return JSON.parse(json)
+    if (cubeManager) {
+        cubeManager.disconnect()
     }
 
-    static async saveCube(cube: SavedCube) {
-        const storage = await getStorage()
-        await storage.save_cube_json(JSON.stringify(cube))
-    }
+    logger.info('Disconnected from cube')
+}
 
-    static async deleteCube(id: string, userId: string | null = null) {
-        const storage = await getStorage()
-        await storage.delete_cube(id, userId || '')
-    }
+// --- Storage operations (delegated to WASM StorageManager) ---
 
-    static async syncCubes(userId: string) {
-        const storage = await getStorage()
-        await storage.sync_cubes(userId)
-    }
+export async function getSessions(): Promise<any[]> {
+    const storage = await getStorage()
+    const json = await storage.get_sessions_json()
+    return JSON.parse(json)
+}
+
+export async function createSession(session: any) {
+    const storage = await getStorage()
+    await storage.create_session_json(JSON.stringify(session))
+}
+
+export async function getCubes(userId: string | null = null): Promise<SavedCube[]> {
+    const storage = await getStorage()
+    const json = await storage.get_cubes_json(userId ?? undefined)
+    return JSON.parse(json)
+}
+
+export async function saveCube(cube: SavedCube) {
+    const storage = await getStorage()
+    await storage.save_cube_json(JSON.stringify(cube))
+}
+
+export async function deleteCube(id: string, userId: string | null = null) {
+    const storage = await getStorage()
+    await storage.delete_cube(id, userId || '')
+}
+
+export async function syncCubes(userId: string) {
+    const storage = await getStorage()
+    await storage.sync_cubes(userId)
 }

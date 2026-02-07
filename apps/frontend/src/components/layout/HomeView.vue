@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { useUIStore } from '../../stores/ui'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 
-const ui = useUIStore()
+const router = useRouter()
 const auth = useAuthStore()
 
 function startTraining() {
-  ui.setActiveSession()
+  router.push({ name: 'Session' })
 }
 </script>
 

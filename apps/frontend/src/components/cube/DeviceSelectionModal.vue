@@ -1,113 +1,115 @@
 <script setup lang="ts">
-import { useBluetoothStore, type BluetoothDevice } from '../../stores/bluetooth'
-import { useUIStore } from '../../stores/ui'
-import { CubeBridge } from '../../services/cube/bridge'
+import { useBluetoothStore } from '../../stores/bluetooth'
 
 const bt = useBluetoothStore()
-const ui = useUIStore()
 
-async function selectDevice(device: BluetoothDevice) {
-  console.log('[Modal] Selecting device:', device);
-  bt.isConnecting = true
-  try {
-    await CubeBridge.finalConnect(device)
-    bt.isConnected = true
-    bt.connectedDeviceName = device.name
+function closeModal() {
+  if (!bt.isConnecting) {
     bt.showPicker = false
-    ui.setActiveSession()
-  } catch (e: any) {
-    bt.setError(e.message || 'Failed to connect')
-  } finally {
-    bt.isConnecting = false
   }
 }
 </script>
 
 <template>
+  <!-- Simple modal showing connection status -->
+  <!-- Web Bluetooth API shows its own device picker, so we just show loading/error states -->
   <Transition
-    enter-active-class="transition duration-500 ease-out"
+    enter-active-class="transition duration-300 ease-out"
     enter-from-class="opacity-0 scale-95"
     enter-to-class="opacity-100 scale-100"
-    leave-active-class="transition duration-300 ease-in"
+    leave-active-class="transition duration-200 ease-in"
     leave-from-class="opacity-100 scale-100"
     leave-to-class="opacity-0 scale-95"
   >
-    <div v-if="bt.showPicker" class="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-[5vmin]">
-      <div class="bg-slate-900 border border-slate-800 rounded-[4vmin] p-[6vmin] max-w-[50vw] w-full shadow-2xl flex flex-col gap-[4vh]">
-        <header class="flex justify-between items-start border-b border-slate-800 pb-[2vh]">
+    <div
+      v-if="bt.showPicker"
+      class="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4"
+      @click.self="closeModal"
+    >
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full shadow-2xl">
+        <!-- Connecting State -->
+        <div v-if="bt.isConnecting" class="text-center space-y-6">
+          <div class="relative w-20 h-20 mx-auto">
+            <svg
+              class="w-20 h-20 animate-spin text-indigo-500"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+
           <div>
-            <h2 class="text-[3vmin] font-black italic text-white tracking-tighter uppercase leading-none">Select Cube</h2>
-            <p class="text-[1.2vmin] text-slate-500 font-bold uppercase tracking-widest mt-2 flex items-center gap-2">
-              <span v-if="bt.isScanning" class="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
-              {{ bt.isScanning ? 'Scanning for cubes...' : 'Scan Paused' }}
+            <h3 class="text-xl font-bold text-white mb-2">Connecting to Cube</h3>
+            <p class="text-sm text-slate-400">
+              Please wait while we establish connection...
             </p>
           </div>
-          <div class="flex gap-[1vw]">
-             <button
-               @click="CubeBridge.connect()"
-               :disabled="bt.isScanning"
-               class="text-indigo-400 hover:text-indigo-300 text-[1.5vmin] font-bold uppercase disabled:opacity-30"
-             >
-               {{ bt.isScanning ? 'Scanning...' : 'Refresh' }}
-             </button>
-             <button @click="bt.showPicker = false" class="text-slate-500 hover:text-white transition-colors text-[2vmin]">✕</button>
-          </div>
-        </header>
 
-        <!-- Device List -->
-        <div class="flex-1 overflow-y-auto max-h-[50vh] pr-[2vmin] space-y-[2vh]">
-          <div v-if="bt.scannedDevices.length === 0" class="text-center py-[10vh] border-2 border-dashed border-slate-800 rounded-[3vmin] flex flex-col items-center gap-[2vh]">
-             <span class="text-[6vmin] opacity-20">📡</span>
-             <div class="space-y-1">
-               <p class="text-slate-400 font-bold text-[2vmin]">{{ bt.isScanning ? 'Searching for cubes...' : 'No devices found' }}</p>
-               <p class="text-slate-600 text-[1.4vmin] max-w-[20vw] mx-auto">Make sure your Bluetooth is ON and your cube is awake.</p>
-             </div>
-             <button
-               v-if="!bt.isScanning"
-               @click="CubeBridge.connect()"
-               class="mt-[2vh] px-[4vw] py-[1.5vh] rounded-[2vmin] bg-slate-800 text-white text-[1.8vmin] hover:bg-slate-700 transition-all"
-             >
-               Try Again
-             </button>
+          <div class="pt-4">
+            <div class="flex items-center justify-center gap-2 text-xs text-slate-500">
+              <div class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
+              <span>Initializing WASM protocol handler</span>
+            </div>
           </div>
-
-          <button
-            v-for="device in bt.scannedDevices"
-            :key="device.id"
-            @click="selectDevice(device)"
-            :disabled="bt.isConnecting"
-            class="w-full flex justify-between items-center p-[3vmin] rounded-[2vmin] bg-slate-800/50 border border-slate-700/50 hover:bg-slate-800 hover:border-indigo-500/50 transition-all group"
-          >
-            <div class="text-left">
-              <div class="text-[2vmin] font-bold text-white group-hover:text-indigo-400 transition-colors">{{ device.name }}</div>
-              <div class="text-[1.2vmin] text-slate-500 font-mono">{{ device.id }}</div>
-            </div>
-            <div class="text-[1.5vmin] text-slate-400 font-mono group-hover:text-white">
-              {{ device.rssi }} dBm
-            </div>
-          </button>
         </div>
 
-        <footer v-if="bt.error" class="bg-red-500/10 border border-red-500/20 p-[2vmin] rounded-[1.5vmin] text-red-400 text-[1.4vmin]">
-          {{ bt.error }}
-        </footer>
+        <!-- Error State -->
+        <div v-else-if="bt.error" class="text-center space-y-6">
+          <div class="w-20 h-20 mx-auto rounded-full bg-red-500/10 flex items-center justify-center">
+            <svg class="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+
+          <div>
+            <h3 class="text-xl font-bold text-white mb-2">Connection Failed</h3>
+            <p class="text-sm text-slate-400 mb-4">{{ bt.error }}</p>
+
+            <div class="bg-slate-800/50 rounded-lg p-4 text-left space-y-2 text-xs text-slate-400">
+              <p class="font-semibold text-slate-300">Troubleshooting:</p>
+              <ul class="list-disc list-inside space-y-1 ml-2">
+                <li>Make sure your cube is powered on</li>
+                <li>Check if Bluetooth is enabled on your device</li>
+                <li>Try turning the cube off and on again</li>
+                <li>Make sure the cube isn't connected to another device</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="flex gap-3">
+            <button
+              @click="bt.startScan()"
+              class="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-colors"
+            >
+              Try Again
+            </button>
+            <button
+              @click="closeModal"
+              class="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-sm transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        <!-- Success State (briefly shown) -->
+        <div v-else class="text-center space-y-6">
+          <div class="w-20 h-20 mx-auto rounded-full bg-emerald-500/10 flex items-center justify-center">
+            <svg class="w-10 h-10 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+
+          <div>
+            <h3 class="text-xl font-bold text-white mb-2">Connected!</h3>
+            <p class="text-sm text-slate-400">
+              Your cube is ready to use
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   </Transition>
 </template>
-
-<style scoped>
-::-webkit-scrollbar {
-  width: 0.5vmin;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 1vmin;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #334155;
-}
-</style>

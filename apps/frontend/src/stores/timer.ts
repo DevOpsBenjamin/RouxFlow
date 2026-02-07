@@ -1,86 +1,48 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { useSessionStore } from './session'
+import { computed } from 'vue'
+import { cubeManager } from '../services/cube/bridge'
 
 export const useTimerStore = defineStore('timer', () => {
-    const time = ref(0)
-    const isRunning = ref(false)
-    const currentMoves = ref<string[]>([])
-    const isHandheld = ref(false)
-    const isSynced = ref(false)
-    const useGyroTiming = ref(true)
-    const flowState = ref<'Idle' | 'Scrambling' | 'Ready' | 'Solving' | 'Summary' | 'Finished'>('Idle')
-    const lastReceivedMove = ref<{ face: number; amount: number } | null>(null)
+    // Query WASM for timer state
+    const time = computed(() => cubeManager?.get_current_time_ms() ?? 0)
 
-    const sessionStore = useSessionStore()
+    const isRunning = computed(() => cubeManager?.is_timer_running() ?? false)
+
+    const flowState = computed(() => {
+        if (!cubeManager) return 'Idle'
+        const flowStateJson = cubeManager.get_flow_state()
+        if (!flowStateJson) return 'Idle'
+        try {
+            // FlowState is returned as a JSON string
+            return JSON.parse(flowStateJson)
+        } catch {
+            return 'Idle'
+        }
+    })
+
+    const currentMoves = computed(() => {
+        if (!cubeManager) return []
+        const timerStateJson = cubeManager.get_timer_state()
+        if (!timerStateJson) return []
+        try {
+            const state = JSON.parse(timerStateJson)
+            return state.moves || []
+        } catch {
+            return []
+        }
+    })
 
     const formattedTime = computed(() => {
-        const seconds = (time.value / 1000).toFixed(2)
+        const timeNum = typeof time.value === 'bigint' ? Number(time.value) : time.value
+        const seconds = (timeNum / 1000).toFixed(2)
         return seconds
     })
 
-    function handleEvent(type: string, data?: string) {
-        if (type === 'pickup' && useGyroTiming.value) {
-            isHandheld.value = true
-            console.log('[Timer] Pickup detected')
-        } else if (type === 'putdown' && useGyroTiming.value) {
-            isHandheld.value = false
-            if (isRunning.value) {
-                stopTimer()
-                console.log('[Timer] Putdown detected - stopping solve')
-            }
-        } else if (type === 'move') {
-            if (flowState.value === 'Idle' || flowState.value === 'Summary') {
-                flowState.value = 'Scrambling'
-            } else if (flowState.value === 'Scrambling') {
-                // If the scramble is ready, any move starts the timer
-                // This will be triggered by handleScrambleComplete usually
-                // but let's allow it here if it's the start of a solve
-            }
-
-            if (isRunning.value) {
-                if (data) currentMoves.value.push(data)
-            }
-        } else if (type === 'sync') {
-            isSynced.value = true
-            console.log('[Timer] Cube state synchronized!')
-        }
+    return {
+        time,
+        isRunning,
+        flowState,
+        currentMoves,
+        formattedTime,
     }
-
-    let startTime = 0
-    let timerId: number | null = null
-
-    function updateTime() {
-        if (isRunning.value) {
-            time.value = performance.now() - startTime
-            timerId = requestAnimationFrame(updateTime)
-        }
-    }
-
-    function startTimer() {
-        isRunning.value = true
-        flowState.value = 'Solving'
-        startTime = performance.now()
-        time.value = 0
-        currentMoves.value = []
-        updateTime()
-    }
-
-    function stopTimer() {
-        isRunning.value = false
-        flowState.value = 'Summary'
-        if (timerId !== null) {
-            cancelAnimationFrame(timerId)
-            timerId = null
-        }
-        sessionStore.addSolveToActive(time.value, [...currentMoves.value])
-    }
-
-    function reset() {
-        flowState.value = 'Idle'
-        time.value = 0
-        currentMoves.value = []
-    }
-
-    return { time, isRunning, isHandheld, isSynced, useGyroTiming, currentMoves, lastReceivedMove, flowState, formattedTime, handleEvent, startTimer, stopTimer, reset }
 })

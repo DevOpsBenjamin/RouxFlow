@@ -2,18 +2,22 @@
 import { computed } from 'vue'
 import { useBluetoothStore } from '../../stores/bluetooth'
 import Cube3D from '../cube/Cube3D.vue'
-//import BluetoothRequired from '../cube/BluetoothRequired.vue'
+import { reset_gyro } from '../../services/cube/bridge'
+import { logger } from '../../utils/logger'
 
 const bt = useBluetoothStore()
 
-// Mock function for now, will bridge to Rust Core later
 function resetGyro() {
-  console.log('Resetting Gyro orientation...')
-  // TODO: Call Rust Core to reset gyro offset
+  try {
+    reset_gyro()
+    logger.info('Gyro orientation reset')
+  } catch (e) {
+    logger.error('Failed to reset gyro:', e)
+  }
 }
 
 const isGyroSupported = computed(() => {
-  return bt.deviceInfo?.features?.gyro || true // Assume true for now for testing
+  return bt.deviceInfo?.features?.gyro ?? false
 })
 
 </script>

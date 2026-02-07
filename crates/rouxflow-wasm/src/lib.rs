@@ -472,3 +472,254 @@ impl WasmStorageManager {
             .map_err(|e| JsValue::from_str(&e.message))
     }
 }
+
+// ========== WASM CubeManager: Unified State Manager ==========
+
+/// WasmCubeManager - Unified state manager that wraps CubeManager and handles protocol
+#[wasm_bindgen]
+pub struct WasmCubeManager {
+    inner: rouxflow_core::CubeManager,
+    protocol: Option<Box<dyn CubeProtocol>>,
+}
+
+#[wasm_bindgen]
+impl WasmCubeManager {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self {
+            inner: rouxflow_core::CubeManager::new(),
+            protocol: None,
+        }
+    }
+
+    // ========== Connection Management ==========
+
+    /// Connect to a cube with specified protocol
+    pub fn connect(&mut self, device_name: &str, mac_address: &str, protocol_name: &str) -> Result<(), JsValue> {
+        // Create protocol handler
+        let protocol_version = match protocol_name {
+            "GanV1" => rouxflow_bluetoothcube::ProtocolVersion::GanV1,
+            "GanV2" => rouxflow_bluetoothcube::ProtocolVersion::GanV2,
+            "GanV3" => rouxflow_bluetoothcube::ProtocolVersion::GanV3,
+            "GanV4" => rouxflow_bluetoothcube::ProtocolVersion::GanV4,
+            "MoYuAi" => rouxflow_bluetoothcube::ProtocolVersion::MoYuAi,
+            "MoYuV3" => rouxflow_bluetoothcube::ProtocolVersion::MoYuV3,
+            "GiikerV1" => rouxflow_bluetoothcube::ProtocolVersion::GiikerV1,
+            "GoCube" => rouxflow_bluetoothcube::ProtocolVersion::GoCube,
+            "QiYiSmart" => rouxflow_bluetoothcube::ProtocolVersion::QiYiSmart,
+            _ => return Err(JsValue::from_str(&format!("Unknown protocol: {}", protocol_name))),
+        };
+
+        let protocol = codec::create_protocol(protocol_version, mac_address);
+        let has_gyro = protocol.has_gyro();
+
+        self.protocol = Some(protocol);
+        self.inner.connect(
+            device_name.to_string(),
+            mac_address.to_string(),
+            protocol_name.to_string(),
+            has_gyro,
+        );
+
+        Ok(())
+    }
+
+    pub fn disconnect(&mut self) {
+        self.inner.disconnect();
+        self.protocol = None;
+    }
+
+    pub fn is_connected(&self) -> bool {
+        self.inner.is_connected()
+    }
+
+    pub fn get_device_info(&self) -> Option<String> {
+        self.inner.get_device_info_json()
+    }
+
+    // ========== BLE Packet Processing ==========
+
+    /// Process a raw BLE packet through the protocol handler and update state
+    /// Returns JSON array of CoreActions
+    pub fn process_ble_packet(&mut self, raw_data: &[u8], timestamp: f64) -> String {
+        let protocol = match &mut self.protocol {
+            Some(p) => p,
+            None => return String::new(),
+        };
+
+        // Decrypt and decode
+        let decrypted = protocol.decrypt(raw_data);
+        let events = protocol.decode_event(&decrypted);
+
+        let mut actions: Vec<String> = Vec::new();
+
+        for event in events {
+            match &event {
+                CubeEvent::Move { face, direction, .. } => {
+                    let cube_move = CubeMove {
+                        face: *face,
+                        amount: *direction,
+                    };
+                    let notation = cube_move.notation();
+
+                    // Update cube state
+                    self.inner.record_move(notation.clone());
+
+                    // Try scramble validation first
+                    let action = self.inner.handle_scramble_move(&notation, timestamp);
+                    if !action.is_empty() {
+                        actions.push(action);
+                    } else {
+                        // If not in scramble phase, emit as a plain move
+                        let action_json = serde_json::to_string(&CoreAction::Move(notation))
+                            .unwrap_or_default();
+                        if !action_json.is_empty() {
+                            actions.push(action_json);
+                        }
+                    }
+                }
+                CubeEvent::Gyro { quaternion, .. } => {
+                    // Update orientation state
+                    self.inner.update_orientation(
+                        quaternion.x,
+                        quaternion.y,
+                        quaternion.z,
+                        quaternion.w,
+                    );
+
+                    // Process through session manager for pickup/putdown detection
+                    let action = self.inner.get_session_manager_mut().process_orientation(
+                        quaternion.x,
+                        quaternion.y,
+                        quaternion.z,
+                        quaternion.w,
+                        timestamp,
+                    );
+                    if !action.is_empty() {
+                        actions.push(action);
+                    }
+                }
+                CubeEvent::Battery { level } => {
+                    self.inner.update_battery(*level);
+                    let action = format!(r#"{{"type":"Battery","data":{}}}"#, level);
+                    actions.push(action);
+                }
+                CubeEvent::Facelets { cp, co, ep, eo, .. } => {
+                    // For now, just return as action - TODO: update cube state properly
+                    let action = format!(
+                        r#"{{"type":"Facelets","data":{{"cp":{:?},"co":{:?},"ep":{:?},"eo":{:?}}}}}"#,
+                        cp, co, ep, eo
+                    );
+                    actions.push(action);
+                }
+                _ => {
+                    // Handle other events via the legacy handler
+                    let action = handle_cube_event(&event, self.inner.get_session_manager_mut());
+                    if !action.is_empty() {
+                        actions.push(action);
+                    }
+                }
+            }
+        }
+
+        if actions.is_empty() {
+            String::new()
+        } else if actions.len() == 1 {
+            actions.into_iter().next().unwrap()
+        } else {
+            format!("[{}]", actions.join(","))
+        }
+    }
+
+    /// Encode a command using the current protocol
+    pub fn encode_command(&self, command_name: &str) -> Result<Vec<u8>, JsValue> {
+        let protocol = self.protocol.as_ref()
+            .ok_or_else(|| JsValue::from_str("No protocol configured"))?;
+
+        let cmd = match command_name {
+            "facelets" => CubeCommand::RequestFacelets,
+            "hardware" => CubeCommand::RequestHardware,
+            "battery" => CubeCommand::RequestBattery,
+            "reset" => CubeCommand::RequestReset,
+            _ => return Err(JsValue::from_str(&format!("Unknown command: {}", command_name))),
+        };
+
+        match protocol.create_command(cmd) {
+            Some(msg) => Ok(protocol.encrypt(&msg)),
+            None => Err(JsValue::from_str("Command not supported by this protocol")),
+        }
+    }
+
+    // ========== Cube State Queries ==========
+
+    pub fn get_cube_state(&self) -> String {
+        self.inner.get_cube_state_json()
+    }
+
+    pub fn get_orientation(&self) -> Vec<f32> {
+        self.inner.get_orientation().to_vec()
+    }
+
+    pub fn get_facelets(&self) -> Vec<u8> {
+        self.inner.get_facelets().to_vec()
+    }
+
+    // ========== Timer Management ==========
+
+    pub fn start_timer(&mut self, timestamp: f64) {
+        self.inner.start_timer(timestamp);
+    }
+
+    pub fn stop_timer(&mut self, timestamp: f64) {
+        self.inner.stop_timer(timestamp);
+    }
+
+    pub fn update_timer(&mut self, timestamp: f64) {
+        self.inner.update_timer(timestamp);
+    }
+
+    pub fn get_timer_state(&self) -> String {
+        self.inner.get_timer_state_json()
+    }
+
+    pub fn is_timer_running(&self) -> bool {
+        self.inner.is_timer_running()
+    }
+
+    pub fn get_current_time_ms(&self) -> u64 {
+        self.inner.get_current_time_ms()
+    }
+
+    // ========== Session Management ==========
+
+    pub fn get_flow_state(&self) -> String {
+        self.inner.get_flow_state()
+    }
+
+    pub fn set_active_session(&mut self, session_json: &str) {
+        self.inner.set_active_session(session_json);
+    }
+
+    pub fn create_session(&mut self, session_json: &str) {
+        self.inner.create_session(session_json);
+    }
+
+    pub fn start_scramble(&mut self, scramble: &str) -> String {
+        self.inner.start_scramble(scramble)
+    }
+
+    pub fn handle_scramble_move(&mut self, move_str: &str) -> String {
+        let timestamp = js_sys::Date::now() / 1000.0;
+        self.inner.handle_scramble_move(move_str, timestamp)
+    }
+
+    pub fn set_solving(&mut self) -> String {
+        let timestamp = js_sys::Date::now() / 1000.0;
+        self.inner.set_solving(timestamp)
+    }
+
+    pub fn record_solve(&mut self, time_ms: u32, moves_json: &str) -> String {
+        let timestamp = js_sys::Date::now() / 1000.0;
+        self.inner.record_solve(timestamp, time_ms, moves_json)
+    }
+}
