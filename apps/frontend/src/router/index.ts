@@ -44,6 +44,11 @@ const routes = [
     path: '/supported-cubes',
     name: 'SupportedCubes',
     component: () => import('../components/layout/SupportedCubesView.vue')
+  },
+  {
+    path: '/bluetooth-required',
+    name: 'BluetoothRequired',
+    component: () => import('../components/cube/BluetoothRequired.vue')
   }
 ]
 
@@ -54,7 +59,7 @@ const router = createRouter({
 
 router.beforeEach((to, _from, next) => {
   if (to.meta.requiresCube && !cm_is_connected()) {
-    next({ name: 'Home' })
+    next({ name: 'BluetoothRequired' })
     return
   }
 

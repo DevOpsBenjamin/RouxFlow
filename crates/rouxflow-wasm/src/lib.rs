@@ -6,7 +6,7 @@
 use std::cell::{Cell, RefCell};
 use wasm_bindgen::prelude::*;
 use rouxflow_bluetoothcube::codec::{self, CubeCommand, CubeEvent, CubeProtocol};
-use rouxflow_core::cube::{CubeMove, facelet::Color as FaceletColor};
+use rouxflow_core::cube::{CubeMove, Face, facelet::Color as FaceletColor};
 use rouxflow_core::session::CoreAction;
 
 // ========== INIT ==========
@@ -605,6 +605,41 @@ pub fn cm_get_device_info() -> Option<String> {
 
 // ========== BLE Packet Processing ==========
 
+/// Detect pairs of opposite-face moves that form slice moves (M, S, E).
+/// Returns the slice notation string if the pair merges, None otherwise.
+fn try_merge_slice(a: &CubeEvent, b: &CubeEvent) -> Option<String> {
+    if let (
+        CubeEvent::Move { face: f1, direction: d1, .. },
+        CubeEvent::Move { face: f2, direction: d2, .. },
+    ) = (a, b) {
+        // Only merge if opposite faces with opposite directions
+        if *d1 != -(*d2) {
+            return None;
+        }
+        let suffix = |d: i8| if d > 0 { "" } else { "'" };
+        match (*f1, *f2) {
+            (Face::L, Face::R) | (Face::R, Face::L) => {
+                // M follows L direction
+                let dir = if *f1 == Face::L { *d1 } else { *d2 };
+                Some(format!("M{}", suffix(dir)))
+            }
+            (Face::F, Face::B) | (Face::B, Face::F) => {
+                // S follows F direction
+                let dir = if *f1 == Face::F { *d1 } else { *d2 };
+                Some(format!("S{}", suffix(dir)))
+            }
+            (Face::U, Face::D) | (Face::D, Face::U) => {
+                // E follows D direction
+                let dir = if *f1 == Face::D { *d1 } else { *d2 };
+                Some(format!("E{}", suffix(dir)))
+            }
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
 /// Process a raw BLE packet through the protocol handler and update state.
 /// Returns JSON array of CoreActions.
 #[wasm_bindgen]
@@ -632,8 +667,33 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
 
         let mut actions: Vec<String> = Vec::new();
 
-        for event in events {
-            match &event {
+        let mut i = 0;
+        while i < events.len() {
+            // Lookahead: try to merge adjacent Move events into slice notation (M/S/E)
+            if i + 1 < events.len() {
+                if let Some(slice_notation) = try_merge_slice(&events[i], &events[i + 1]) {
+                    st.cube_logic.apply_move(&slice_notation);
+                    st.inner.update_facelets(&st.cube_logic.facelets());
+                    st.inner.record_move(slice_notation.clone());
+                    rouxflow_render::queue_move_anim(slice_notation.clone(), 0.15);
+
+                    let action = st.inner.handle_scramble_move(&slice_notation, timestamp);
+                    if !action.is_empty() {
+                        actions.push(action);
+                    } else {
+                        let action_json = serde_json::to_string(&CoreAction::Move(slice_notation))
+                            .unwrap_or_default();
+                        if !action_json.is_empty() {
+                            actions.push(action_json);
+                        }
+                    }
+
+                    i += 2; // Skip both events
+                    continue;
+                }
+            }
+
+            match &events[i] {
                 CubeEvent::Move { face, direction, .. } => {
                     let cube_move = CubeMove {
                         face: *face,
@@ -715,12 +775,14 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     actions.push(format!(r#"{{"type":"RawFacelets","data":"{}"}}"#, facelet_string));
                 }
                 _ => {
-                    let action = handle_cube_event(&event, st.inner.get_session_manager_mut());
+                    let action = handle_cube_event(&events[i], st.inner.get_session_manager_mut());
                     if !action.is_empty() {
                         actions.push(action);
                     }
                 }
             }
+
+            i += 1;
         }
 
         if actions.is_empty() {

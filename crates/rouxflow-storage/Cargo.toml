@@ -1,6 +1,6 @@
 [package]
 name = "rouxflow-storage"
-version = "0.1.0"
+version = "0.0.20"
 edition = "2024"
 description = "Unified storage for RouxFlow - IndexedDB (local) + Supabase (cloud) + sync"
 authors = ["DevOpsBen"]

@@ -64,16 +64,20 @@ export async function ensureWasm() {
         show: () => {
             const hex = cm_get_last_gyro_hex()
             console.log('Last gyro hex:', hex)
-            // Also show individual bytes for easier analysis
             if (hex && !hex.startsWith('No') && !hex.startsWith('ERROR')) {
-                const bytes = hex.split(' ')
-                console.log(`  Opcode: 0x${bytes[0]}`)
-                console.log(`  Bytes[1-2]:  ${bytes.slice(1, 3).join(' ')}  (qw?)`)
-                console.log(`  Bytes[3-4]:  ${bytes.slice(3, 5).join(' ')}  (qx?)`)
-                console.log(`  Bytes[5-6]:  ${bytes.slice(5, 7).join(' ')}  (qy?)`)
-                console.log(`  Bytes[7-8]:  ${bytes.slice(7, 9).join(' ')}  (qz?)`)
-                console.log(`  Bytes[9-10]: ${bytes.slice(9, 11).join(' ')}  (velocity?)`)
-                console.log(`  Rest:        ${bytes.slice(11).join(' ')}`)
+                const b = hex.split(' ').map(h => parseInt(h, 16))
+                // LE int16 helper
+                const i16 = (lo: number, hi: number) => { const v = lo | (hi << 8); return v > 32767 ? v - 65536 : v }
+                // Accelerometer: bytes 1-2, 5-6, 9-10, 13-14 (LE int16)
+                const ax = i16(b[1], b[2]), ay = i16(b[5], b[6]), az = i16(b[9], b[10]), a4 = i16(b[13], b[14])
+                // Quaternion: bytes 3-4, 7-8, 11-12, 15-16 (LE int16 / 16384)
+                const qw = i16(b[3], b[4]) / 16384, qx = i16(b[7], b[8]) / 16384
+                const qy = i16(b[11], b[12]) / 16384, qz = i16(b[15], b[16]) / 16384
+                const norm = Math.sqrt(qw*qw + qx*qx + qy*qy + qz*qz)
+                console.log(`  Quaternion: w=${qw.toFixed(4)} x=${qx.toFixed(4)} y=${qy.toFixed(4)} z=${qz.toFixed(4)}  norm=${norm.toFixed(4)}`)
+                console.log(`  Accel raw:  a1=${ax}  a2=${ay}  a3=${az}  a4=${a4}`)
+                console.log(`  Accel /1000: a1=${(ax/1000).toFixed(2)}g  a2=${(ay/1000).toFixed(2)}g  a3=${(az/1000).toFixed(2)}g  a4=${(a4/1000).toFixed(2)}g`)
+                console.log(`  Padding: ${b.slice(17).map(v => v.toString(16).padStart(2,'0')).join(' ')}`)
             }
             return hex
         },
