@@ -86,14 +86,14 @@ export async function ensureWasm() {
             const hex = cm_get_last_gyro_hex()
             console.log('Last gyro hex:', hex)
             if (hex && !hex.startsWith('No') && !hex.startsWith('ERROR')) {
-                const b = hex.split(' ').map(h => parseInt(h, 16))
+                const b = hex.split(' ').map(h => parseInt(h, 16)) as number[]
                 // LE int16 helper
                 const i16 = (lo: number, hi: number) => { const v = lo | (hi << 8); return v > 32767 ? v - 65536 : v }
                 // Accelerometer: bytes 1-2, 5-6, 9-10, 13-14 (LE int16)
-                const ax = i16(b[1], b[2]), ay = i16(b[5], b[6]), az = i16(b[9], b[10]), a4 = i16(b[13], b[14])
+                const ax = i16(b[1]!, b[2]!), ay = i16(b[5]!, b[6]!), az = i16(b[9]!, b[10]!), a4 = i16(b[13]!, b[14]!)
                 // Quaternion: bytes 3-4, 7-8, 11-12, 15-16 (LE int16 / 16384)
-                const qw = i16(b[3], b[4]) / 16384, qx = i16(b[7], b[8]) / 16384
-                const qy = i16(b[11], b[12]) / 16384, qz = i16(b[15], b[16]) / 16384
+                const qw = i16(b[3]!, b[4]!) / 16384, qx = i16(b[7]!, b[8]!) / 16384
+                const qy = i16(b[11]!, b[12]!) / 16384, qz = i16(b[15]!, b[16]!) / 16384
                 const norm = Math.sqrt(qw*qw + qx*qx + qy*qy + qz*qz)
                 console.log(`  Quaternion: w=${qw.toFixed(4)} x=${qx.toFixed(4)} y=${qy.toFixed(4)} z=${qz.toFixed(4)}  norm=${norm.toFixed(4)}`)
                 console.log(`  Accel raw:  a1=${ax}  a2=${ay}  a3=${az}  a4=${a4}`)

@@ -27,6 +27,10 @@ interface BluetoothRemoteGATTCharacteristic {
     value?: DataView
     addEventListener(type: string, listener: EventListener): void
     removeEventListener(type: string, listener: EventListener): void
+    readValue(): Promise<DataView>
+    writeValue(value: BufferSource): Promise<void>
+    writeValueWithResponse(value: BufferSource): Promise<void>
+    writeValueWithoutResponse(value: BufferSource): Promise<void>
     startNotifications(): Promise<BluetoothRemoteGATTCharacteristic>
     stopNotifications(): Promise<BluetoothRemoteGATTCharacteristic>
 }

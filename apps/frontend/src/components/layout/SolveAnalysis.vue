@@ -49,7 +49,7 @@ function formatTime(ms: number) {
       <!-- Summary Card -->
       <div class="bg-indigo-600/10 border border-indigo-500/20 rounded-[3vmin] p-[4vmin] flex flex-col items-center justify-center gap-[2vh]">
         <p class="text-[1.5vmin] text-indigo-400 font-bold uppercase tracking-widest">Final Time</p>
-        <p class="text-[12vmin] font-black text-white italic leading-none tabular-nums">{{ formatTime(solve.time) }}s</p>
+        <p class="text-[12vmin] font-black text-white italic leading-none tabular-nums">{{ formatTime(Number(solve.time)) }}s</p>
       </div>
 
       <!-- Phase Breakdown -->

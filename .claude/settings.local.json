@@ -37,7 +37,8 @@
       "Bash(gh api:*)",
       "WebFetch(domain:api.github.com)",
       "WebFetch(domain:crates.io)",
-      "WebFetch(domain:kociemba.org)"
+      "WebFetch(domain:kociemba.org)",
+      "Bash(pnpm run build:*)"
     ]
   }
 }
