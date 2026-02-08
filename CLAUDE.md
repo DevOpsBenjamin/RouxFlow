@@ -80,8 +80,6 @@ cd crates/rouxflow-core && cargo test
 - `rouxflow-storage`: Unified storage. IndexedDB (local, offline-first) + Supabase REST (cloud sync). WASM-only.
 - `rouxflow-ai`: Roux solver (future, not in WASM yet)
 - `rouxflow-bitboard`: Experimental cube representation (future)
-- `rouxflow-bt-test`: BLE testing utility (dev tool, not WASM)
-- `rouxflow-standalone`: Standalone test utilities (dev tool)
 
 ### Key Architectural Patterns
 
@@ -156,8 +154,6 @@ RouxFlow/
 │   ├── rouxflow-storage/      # IndexedDB + Supabase (rlib)
 │   ├── rouxflow-ai/           # Solver (future)
 │   ├── rouxflow-bitboard/     # Experimental (future)
-│   ├── rouxflow-bt-test/      # Dev tool
-│   └── rouxflow-standalone/   # Dev tool
 ├── package.json               # Workspace root
 └── pnpm-workspace.yaml
 ```

@@ -22,11 +22,11 @@ function formatTps(tps: number): string {
 
     <template v-else>
       <!-- Column headers -->
-      <div class="flex items-center gap-[1.5vmin] px-[1.5vmin] py-[0.5vh] text-[1.3vmin] text-slate-600 font-bold uppercase tracking-wider shrink-0 border-b border-slate-800/50 mb-[0.5vh]">
+      <div class="flex items-center gap-[1.5vmin] px-[1.5vmin] py-[0.5vh] text-[1.5vmin] text-slate-600 font-bold uppercase tracking-wider shrink-0 border-b border-slate-800/50 mb-[0.5vh]">
         <span class="w-[3.5vmin] text-right shrink-0">#</span>
         <span class="flex-1">Time</span>
-        <span class="w-[5vmin] text-right">Moves</span>
-        <span class="w-[5vmin] text-right">TPS</span>
+        <span class="w-[6vmin] text-right">Moves</span>
+        <span class="w-[6vmin] text-right">TPS</span>
       </div>
 
       <!-- Solve rows -->
@@ -42,12 +42,12 @@ function formatTps(tps: number): string {
               : 'bg-white/3 border border-transparent hover:bg-white/5'
           ]"
         >
-          <span class="text-[1.4vmin] text-slate-600 font-mono w-[3.5vmin] text-right shrink-0">#{{ entry.index }}</span>
-          <span :class="['text-[2.2vmin] font-mono font-bold flex-1', entry.is_best ? 'text-emerald-400' : 'text-slate-200']">
+          <span class="text-[1.6vmin] text-slate-600 font-mono w-[3.5vmin] text-right shrink-0">#{{ entry.index }}</span>
+          <span :class="['text-[2.5vmin] font-mono font-bold flex-1', entry.is_best ? 'text-emerald-400' : 'text-slate-200']">
             {{ formatTime(entry.time_ms) }}
           </span>
-          <span class="text-[1.4vmin] text-slate-400 font-mono w-[5vmin] text-right">{{ entry.turns }}</span>
-          <span class="text-[1.4vmin] text-slate-500 font-mono w-[5vmin] text-right">{{ formatTps(entry.tps) }}</span>
+          <span class="text-[1.8vmin] text-slate-400 font-mono w-[6vmin] text-right">{{ entry.turns }}</span>
+          <span class="text-[1.8vmin] text-slate-500 font-mono w-[6vmin] text-right">{{ formatTps(entry.tps) }}</span>
         </button>
       </div>
     </template>

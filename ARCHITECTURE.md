@@ -72,5 +72,3 @@ Lecture:
 | `rouxflow-storage` | `rlib` | IndexedDB + Supabase + sync (WASM only) |
 | `rouxflow-ai` | `rlib` | Solveur Roux (futur) |
 | `rouxflow-bitboard` | `rlib` | Représentation binaire (expérimental) |
-| `rouxflow-bt-test` | `bin` | Outil de test BLE (dev) |
-| `rouxflow-standalone` | `bin` | Utilitaires de test (dev) |
