@@ -50,12 +50,20 @@ jobs:
       - name: Install Wrangler
         run: pnpm add -g wrangler
 
+      - name: Set Pages project name
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == *preview* ]]; then
+            echo "CF_PAGES_PROJECT=rouxflowapp-dev" >> $GITHUB_ENV
+          else
+            echo "CF_PAGES_PROJECT=rouxflowapp" >> $GITHUB_ENV
+          fi
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy apps/frontend/dist --project-name=${{ contains(github.ref_name, 'preview') && 'rouxflowapp-dev' || 'rouxflowapp' }} --branch=main
+          command: pages deploy apps/frontend/dist --project-name=$CF_PAGES_PROJECT --branch=main --no-functions
 
   # Build Tauri Desktop App (Windows + Linux) - always runs on any tag
   build-tauri:

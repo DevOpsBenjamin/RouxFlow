@@ -62,7 +62,13 @@ pub enum CoreAction {
 }
 
 pub struct ScrambleValidator {
+    /// Original scramble for display: ["R", "U2", "L'"]
     pub scramble: Vec<String>,
+    /// Expanded for validation: ["R", "U", "U", "L'"] — double moves split into quarter turns
+    expanded: Vec<String>,
+    /// Maps each expanded index → original scramble index (for display highlighting)
+    display_map: Vec<usize>,
+    /// Current position in expanded sequence
     pub current_index: usize,
     last_move_time: f64,
     pub is_invalid: bool,
@@ -71,8 +77,28 @@ pub struct ScrambleValidator {
 
 impl ScrambleValidator {
     pub fn new(scramble_str: &str) -> Self {
+        let scramble: Vec<String> = scramble_str.split_whitespace().map(|s| s.to_string()).collect();
+        let mut expanded = Vec::new();
+        let mut display_map = Vec::new();
+
+        for (i, m) in scramble.iter().enumerate() {
+            if m.ends_with("2") {
+                // "U2" → two quarter turns "U", "U"
+                let face = &m[..m.len()-1];
+                expanded.push(face.to_string());
+                expanded.push(face.to_string());
+                display_map.push(i);
+                display_map.push(i);
+            } else {
+                expanded.push(m.clone());
+                display_map.push(i);
+            }
+        }
+
         Self {
-            scramble: scramble_str.split_whitespace().map(|s| s.to_string()).collect(),
+            scramble,
+            expanded,
+            display_map,
             current_index: 0,
             last_move_time: 0.0,
             is_invalid: false,
@@ -96,10 +122,9 @@ impl ScrambleValidator {
         }
 
         // 1. Check if it's the expected move and we have no pending mistakes
-        if self.mistakes.is_empty() && self.current_index < self.scramble.len() && move_str == self.scramble[self.current_index] {
+        if self.mistakes.is_empty() && self.current_index < self.expanded.len() && move_str == self.expanded[self.current_index] {
             // Check speed - only if not the first move
-            if self.last_move_time > 0.0 && timestamp - self.last_move_time > 5.0 {
-                // User was too slow during scramble (relaxed to 5s for now)
+            if self.last_move_time > 0.0 && timestamp - self.last_move_time > 10.0 {
                 self.is_invalid = true;
                 return false;
             }
@@ -110,7 +135,7 @@ impl ScrambleValidator {
 
         // 2. Check if it's an undo of a mistake
         if !self.mistakes.is_empty() {
-            if move_str == Self::get_inverse(&self.mistakes.last().unwrap()) {
+            if move_str == Self::get_inverse(self.mistakes.last().unwrap()) {
                 self.mistakes.pop();
                 return true;
             }
@@ -118,7 +143,7 @@ impl ScrambleValidator {
 
         // 3. Check if it's an undo of the previous correct move
         if self.mistakes.is_empty() && self.current_index > 0 {
-            if move_str == Self::get_inverse(&self.scramble[self.current_index - 1]) {
+            if move_str == Self::get_inverse(&self.expanded[self.current_index - 1]) {
                 self.current_index -= 1;
                 return true;
             }
@@ -127,8 +152,8 @@ impl ScrambleValidator {
         // 4. Otherwise, it's a mistake
         self.mistakes.push(move_str.to_string());
 
-        // If too many mistakes (tolerance = 1), mark invalid
-        if self.mistakes.len() > 1 {
+        // If too many mistakes (tolerance = 3), mark invalid
+        if self.mistakes.len() > 3 {
             self.is_invalid = true;
         }
 
@@ -136,7 +161,7 @@ impl ScrambleValidator {
     }
 
     pub fn is_ready(&self) -> bool {
-        self.current_index >= self.scramble.len() && !self.is_invalid && self.mistakes.is_empty()
+        self.current_index >= self.expanded.len() && !self.is_invalid && self.mistakes.is_empty()
     }
 
     /// Get the correction move needed to undo last mistake (inverse of last mistake)
@@ -149,10 +174,19 @@ impl ScrambleValidator {
         if !self.mistakes.is_empty() || self.is_invalid {
             return None;
         }
-        if self.current_index < self.scramble.len() {
-            Some(&self.scramble[self.current_index])
+        if self.current_index < self.expanded.len() {
+            Some(&self.expanded[self.current_index])
         } else {
             None
+        }
+    }
+
+    /// Map expanded index to original scramble index (for display highlighting)
+    pub fn display_index(&self) -> usize {
+        if self.current_index >= self.expanded.len() {
+            self.scramble.len()
+        } else {
+            self.display_map[self.current_index]
         }
     }
 }
@@ -413,7 +447,7 @@ impl SessionManager {
     }
 
     pub fn get_scramble_index(&self) -> usize {
-        self.scramble_validator.as_ref().map(|v| v.current_index).unwrap_or(0)
+        self.scramble_validator.as_ref().map(|v| v.display_index()).unwrap_or(0)
     }
 
     pub fn get_scramble_len(&self) -> usize {
@@ -452,7 +486,7 @@ impl SessionManager {
         let state = match &self.scramble_validator {
             Some(v) => ScrambleState {
                 scramble: v.scramble.clone(),
-                index: v.current_index,
+                index: v.display_index(),
                 total: v.scramble.len(),
                 is_ready: v.is_ready(),
                 is_invalid: v.is_invalid,

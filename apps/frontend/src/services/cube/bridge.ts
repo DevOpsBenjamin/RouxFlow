@@ -55,9 +55,10 @@ import init, {
 import { logger } from '../../utils/logger'
 import type { SavedCube } from '../../stores/bluetooth'
 
-// Callback to notify Vue store that WASM state changed (triggers computed re-evaluation)
-let _onWasmStateChanged: (() => void) | null = null
-export function onWasmStateChanged(cb: () => void) { _onWasmStateChanged = cb }
+// Callbacks to notify Vue stores that WASM state changed (triggers computed re-evaluation)
+const _wasmStateListeners: (() => void)[] = []
+export function onWasmStateChanged(cb: () => void) { _wasmStateListeners.push(cb) }
+function _notifyWasmStateChanged() { for (const cb of _wasmStateListeners) cb() }
 
 let wasmReady = false
 let storageManager: WasmStorageManager | null = null
@@ -246,7 +247,7 @@ function blePacketHandler(event: Event) {
     const actionsJson = cm_process_ble_packet(bytes, timestamp)
 
     // Notify Vue that WASM state changed (facelets, orientation, device info, etc.)
-    _onWasmStateChanged?.()
+    _notifyWasmStateChanged()
 
     if (actionsJson) {
         logger.info(`Core Actions: ${actionsJson}`)
@@ -284,7 +285,7 @@ async function handleCoreAction(action: any) {
                     logger.error('Failed to persist solve:', e)
                 }
             }
-            _onWasmStateChanged?.()
+            _notifyWasmStateChanged()
             break
         }
         case 'DemoteSession': {

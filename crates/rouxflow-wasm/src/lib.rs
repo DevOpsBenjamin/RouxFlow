@@ -819,7 +819,11 @@ fn flow_coordinate(st: &mut WasmAppState, timestamp: f64, actions: &mut Vec<Stri
             }
         }
         FlowState::Scrambling => {
-            // Already handled by handle_scramble_move which transitions to Inspection
+            // If scramble was invalidated, reset to Idle so user can start over
+            if st.inner.session.is_scramble_invalid() {
+                let action = st.inner.session.reset_flow();
+                if !action.is_empty() { actions.push(action); }
+            }
         }
         FlowState::Inspection => {
             // First move during inspection → start solving
