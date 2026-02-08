@@ -159,6 +159,7 @@ mod tests {
             date,
             is_valid: true,
             scramble: None,
+            timed_moves: None,
         }
     }
 

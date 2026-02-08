@@ -1,5 +1,6 @@
 use serde::{Serialize, Deserialize};
 use crate::cube::Quaternion;
+use crate::move_interpreter::MoveKind;
 
 pub const DEFAULT_SESSION_ID: &str = "default";
 pub const DEFAULT_SESSION_NAME: &str = "Default Session";
@@ -11,6 +12,13 @@ pub enum SessionType {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TimedMove {
+    pub n: String,
+    pub t: u32,
+    pub k: MoveKind,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Solve {
     pub id: String,
     pub time: u32,
@@ -19,6 +27,8 @@ pub struct Solve {
     pub is_valid: bool,
     #[serde(default)]
     pub scramble: Option<String>,
+    #[serde(default)]
+    pub timed_moves: Option<Vec<TimedMove>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -447,8 +457,10 @@ impl SessionManager {
         "".into()
     }
 
-    pub fn record_solve(&mut self, time_ms: u32, moves_json: &str) -> String {
+    pub fn record_solve(&mut self, time_ms: u32, moves_json: &str, timed_moves_json: &str) -> String {
         let moves: Vec<String> = serde_json::from_str(moves_json).unwrap_or_default();
+        let timed_moves: Option<Vec<TimedMove>> = serde_json::from_str(timed_moves_json).ok()
+            .filter(|v: &Vec<TimedMove>| !v.is_empty());
         let scramble = self.scramble_validator.as_ref()
             .map(|v| v.scramble.join(" "));
         let solve = Solve {
@@ -458,6 +470,7 @@ impl SessionManager {
             date: chrono::Utc::now().timestamp_millis(),
             is_valid: true,
             scramble,
+            timed_moves,
         };
 
         self.flow_state = FlowState::Summary;

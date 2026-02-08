@@ -7,7 +7,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use rouxflow_bluetoothcube::codec::{self, CubeCommand, CubeEvent, CubeProtocol};
-use rouxflow_core::cube::{CubeMove, Face, facelet::Color as FaceletColor};
+use rouxflow_core::cube::{CubeMove, facelet::Color as FaceletColor};
 use rouxflow_core::session::CoreAction;
 
 // ========== INIT ==========
@@ -484,6 +484,9 @@ pub fn cm_connect(device_name: String, mac_address: String, protocol_name: Strin
         st.inner.bluetooth.connect(device_name, mac_address, protocol_name, has_gyro);
         // Reset logical cube to solved; will be overwritten by RawFacelets from cube
         st.cube_logic = rouxflow_core::cube::CubeState::new();
+        // Configure interpreter for this cube
+        st.inner.interpreter.set_has_gyro(has_gyro);
+        st.inner.interpreter.reset();
 
         Ok(())
     });
@@ -543,36 +546,6 @@ fn generate_scramble() -> String {
         }
     }
     result.join(" ")
-}
-
-/// Detect pairs of opposite-face moves that form slice moves (M, S, E).
-fn try_merge_slice(a: &CubeEvent, b: &CubeEvent) -> Option<String> {
-    if let (
-        CubeEvent::Move { face: f1, direction: d1, .. },
-        CubeEvent::Move { face: f2, direction: d2, .. },
-    ) = (a, b) {
-        if *d1 != -(*d2) {
-            return None;
-        }
-        let suffix = |d: i8| if d > 0 { "" } else { "'" };
-        match (*f1, *f2) {
-            (Face::L, Face::R) | (Face::R, Face::L) => {
-                let dir = if *f1 == Face::L { *d1 } else { *d2 };
-                Some(format!("M{}", suffix(dir)))
-            }
-            (Face::F, Face::B) | (Face::B, Face::F) => {
-                let dir = if *f1 == Face::F { *d1 } else { *d2 };
-                Some(format!("S{}", suffix(dir)))
-            }
-            (Face::U, Face::D) | (Face::D, Face::U) => {
-                let dir = if *f1 == Face::D { *d1 } else { *d2 };
-                Some(format!("E{}", suffix(dir)))
-            }
-            _ => None,
-        }
-    } else {
-        None
-    }
 }
 
 /// Flow coordinator: after a move, check flow state and react accordingly.
@@ -649,102 +622,26 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
             st.last_gyro_hex = decrypted.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
         }
 
+        let wall_ms = timestamp * 1000.0;
         let mut actions: Vec<String> = Vec::new();
 
-        let mut i = 0;
-        while i < events.len() {
-            // Lookahead: try to merge adjacent Move events into slice notation (M/S/E)
-            if i + 1 < events.len() {
-                if let Some(slice_notation) = try_merge_slice(&events[i], &events[i + 1]) {
-                    // Apply both individual face moves for correct facelet state
-                    if let (
-                        CubeEvent::Move { face: f1, direction: d1, .. },
-                        CubeEvent::Move { face: f2, direction: d2, .. },
-                    ) = (&events[i], &events[i + 1]) {
-                        let n1 = CubeMove { face: *f1, amount: *d1 }.notation();
-                        let n2 = CubeMove { face: *f2, amount: *d2 }.notation();
-                        st.cube_logic.apply_move(&n1);
-                        st.cube_logic.apply_move(&n2);
-                    }
-
-                    // Record and animate as single slice move
-                    st.inner.record_move(slice_notation.clone());
-                    rouxflow_render::queue_move_anim(slice_notation.clone(), 0.15);
-
-                    // Scramble: pass individual face moves (scrambles never use M/S/E)
-                    let flow_before = st.inner.session.get_flow_state_enum();
-                    if let (
-                        CubeEvent::Move { face: f1, direction: d1, .. },
-                        CubeEvent::Move { face: f2, direction: d2, .. },
-                    ) = (&events[i], &events[i + 1]) {
-                        let n1 = CubeMove { face: *f1, amount: *d1 }.notation();
-                        let n2 = CubeMove { face: *f2, amount: *d2 }.notation();
-                        let a1 = st.inner.session.handle_scramble_move(&n1, timestamp);
-                        if !a1.is_empty() { actions.push(a1); }
-                        let a2 = st.inner.session.handle_scramble_move(&n2, timestamp);
-                        if !a2.is_empty() { actions.push(a2); }
-                    }
-
-                    // Emit slice move action to frontend
-                    let action_json = serde_json::to_string(&CoreAction::Move(slice_notation))
-                        .unwrap_or_default();
-                    if !action_json.is_empty() {
-                        actions.push(action_json);
-                    }
-
-                    // Only coordinate if scramble handling didn't already transition
-                    let flow_after = st.inner.session.get_flow_state_enum();
-                    if flow_before == flow_after {
-                        flow_coordinate(st, timestamp, &mut actions, None);
-                    }
-
-                    i += 2;
-                    continue;
-                }
-            }
-
-            match &events[i] {
+        // ===== Feed phase: push events into interpreter =====
+        for event in &events {
+            match event {
                 CubeEvent::Move { face, direction, .. } => {
-                    let cube_move = CubeMove {
-                        face: *face,
-                        amount: *direction,
-                    };
-                    let notation = cube_move.notation();
-
-                    st.inner.record_move(notation.clone());
-                    st.cube_logic.apply_move(&notation);
-                    rouxflow_render::queue_move_anim(notation.clone(), 0.15);
-
-                    // Track flow state before scramble handling
-                    let flow_before = st.inner.session.get_flow_state_enum();
-
-                    let action = st.inner.session.handle_scramble_move(&notation, timestamp);
-                    if !action.is_empty() {
-                        actions.push(action);
-                    } else {
-                        let action_json = serde_json::to_string(&CoreAction::Move(notation.clone()))
-                            .unwrap_or_default();
-                        if !action_json.is_empty() {
-                            actions.push(action_json);
-                        }
-                    }
-
-                    // Only run flow coordinator if scramble handling didn't already transition state
-                    // (prevents last scramble move from skipping Inspection)
-                    let flow_after = st.inner.session.get_flow_state_enum();
-                    if flow_before == flow_after {
-                        flow_coordinate(st, timestamp, &mut actions, Some(&notation));
-                    }
+                    st.inner.interpreter.feed_face_move(*face, *direction, wall_ms);
                 }
                 CubeEvent::Gyro { quaternion, .. } => {
                     // Update cube_logic orientation for the 3D renderer
-                    st.cube_logic.orientation = Some(rouxflow_core::cube::Quaternion {
+                    let q = rouxflow_core::cube::Quaternion {
                         x: quaternion.x,
                         y: quaternion.y,
                         z: quaternion.z,
                         w: quaternion.w,
-                    });
+                    };
+                    st.cube_logic.orientation = Some(q);
 
+                    // Process orientation for pickup/putdown detection
                     let action = st.inner.session.process_orientation(
                         quaternion.x,
                         quaternion.y,
@@ -755,6 +652,9 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     if !action.is_empty() {
                         actions.push(action);
                     }
+
+                    // Feed gyro to interpreter for rotation detection
+                    st.inner.interpreter.feed_gyro(&q, wall_ms);
                 }
                 CubeEvent::Battery { level } => {
                     st.inner.bluetooth.update_battery(*level);
@@ -774,7 +674,6 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     ));
                 }
                 CubeEvent::RawFacelets { facelet_string } => {
-                    // Parse 54-char facelet string (URFDLB order) into logical cube state
                     let colors: Vec<FaceletColor> = facelet_string.chars().map(|c| match c {
                         'U' => FaceletColor::White,
                         'R' => FaceletColor::Red,
@@ -790,14 +689,52 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     actions.push(format!(r#"{{"type":"RawFacelets","data":"{}"}}"#, facelet_string));
                 }
                 _ => {
-                    let action = handle_cube_event(&events[i], &mut st.inner.session);
+                    let action = handle_cube_event(event, &mut st.inner.session);
                     if !action.is_empty() {
                         actions.push(action);
                     }
                 }
             }
+        }
 
-            i += 1;
+        // ===== Flush phase: get interpreted moves from buffer =====
+        let solve_start_ms = st.inner.timer.start_time_ms();
+        let interpreted = st.inner.interpreter.flush(wall_ms, solve_start_ms);
+
+        // ===== Dispatch phase: process each interpreted move =====
+        for imove in &interpreted {
+            // Apply raw face moves to cube_logic (correct facelet state)
+            for &(face, dir) in &imove.raw_face_moves {
+                let notation = CubeMove { face, amount: dir }.notation();
+                st.cube_logic.apply_move(&notation);
+            }
+
+            // Record interpreted move in timer (notation + timed_move)
+            st.inner.record_interpreted_move(imove);
+
+            // Animate interpreted notation
+            rouxflow_render::queue_move_anim(imove.notation.clone(), 0.15);
+
+            // Scramble validation: feed raw face moves (scrambles = face moves only)
+            let flow_before = st.inner.session.get_flow_state_enum();
+            for &(face, dir) in &imove.raw_face_moves {
+                let notation = CubeMove { face, amount: dir }.notation();
+                let a = st.inner.session.handle_scramble_move(&notation, timestamp);
+                if !a.is_empty() { actions.push(a); }
+            }
+
+            // Emit CoreAction::Move with interpreted notation
+            let action_json = serde_json::to_string(&CoreAction::Move(imove.notation.clone()))
+                .unwrap_or_default();
+            if !action_json.is_empty() {
+                actions.push(action_json);
+            }
+
+            // Flow coordination (only if scramble didn't already transition)
+            let flow_after = st.inner.session.get_flow_state_enum();
+            if flow_before == flow_after {
+                flow_coordinate(st, timestamp, &mut actions, Some(&imove.notation));
+            }
         }
 
         if actions.is_empty() {

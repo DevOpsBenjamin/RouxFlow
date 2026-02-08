@@ -30,6 +30,8 @@ struct SolveRecord {
     is_valid: bool,
     #[serde(default)]
     scramble: Option<String>,
+    #[serde(default)]
+    timed_moves: Option<String>, // JSON-encoded Vec<TimedMove>
 }
 
 // Intermediate struct for serializing sessions to IndexedDB
@@ -148,6 +150,8 @@ impl Storage for LocalStorage {
         for value in all_solves {
             if let Ok(record) = from_js::<SolveRecord>(value) {
                 let moves: Vec<String> = serde_json::from_str(&record.moves).unwrap_or_default();
+                let timed_moves = record.timed_moves.as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok());
                 let solve = Solve {
                     id: record.id,
                     time: record.time,
@@ -155,6 +159,7 @@ impl Storage for LocalStorage {
                     date: record.date,
                     is_valid: record.is_valid,
                     scramble: record.scramble,
+                    timed_moves,
                 };
                 solve_map.entry(record.session_id).or_default().push(solve);
             }
@@ -220,6 +225,8 @@ impl Storage for LocalStorage {
             date: solve.date,
             is_valid: solve.is_valid,
             scramble: solve.scramble.clone(),
+            timed_moves: solve.timed_moves.as_ref()
+                .map(|tm| serde_json::to_string(tm).unwrap_or_default()),
         };
 
         store.put(&to_js(&record)?, None).await
@@ -244,6 +251,8 @@ impl Storage for LocalStorage {
             if let Ok(record) = from_js::<SolveRecord>(value) {
                 if record.session_id == session_id {
                     let moves: Vec<String> = serde_json::from_str(&record.moves).unwrap_or_default();
+                    let timed_moves = record.timed_moves.as_deref()
+                        .and_then(|s| serde_json::from_str(s).ok());
                     solves.push(Solve {
                         id: record.id,
                         time: record.time,
@@ -251,6 +260,7 @@ impl Storage for LocalStorage {
                         date: record.date,
                         is_valid: record.is_valid,
                         scramble: record.scramble,
+                        timed_moves,
                     });
                 }
             }
