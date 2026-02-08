@@ -804,7 +804,7 @@ fn try_merge_slice(a: &CubeEvent, b: &CubeEvent) -> Option<String> {
 }
 
 /// Flow coordinator: after a move, check flow state and react accordingly.
-fn flow_coordinate(st: &mut WasmAppState, timestamp: f64, actions: &mut Vec<String>, notation: Option<&str>) {
+fn flow_coordinate(st: &mut WasmAppState, timestamp: f64, actions: &mut Vec<String>, _notation: Option<&str>) {
     use rouxflow_core::session::FlowState;
 
     let flow = st.inner.session.get_flow_state_enum();
