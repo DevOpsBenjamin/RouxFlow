@@ -226,6 +226,33 @@ impl Storage for LocalStorage {
         Ok(())
     }
 
+    async fn get_solves(&self, session_id: &str) -> Result<Vec<Solve>, StorageError> {
+        let tx = self.db.transaction(&["solves"], TransactionMode::ReadOnly)
+            .map_err(|e| StorageError { message: format!("Transaction error: {:?}", e) })?;
+        let store = tx.store("solves")
+            .map_err(|e| StorageError { message: format!("Store error: {:?}", e) })?;
+
+        let all = store.get_all(None, None).await
+            .map_err(|e| StorageError { message: format!("GetAll error: {:?}", e) })?;
+
+        let mut solves = Vec::new();
+        for value in all {
+            if let Ok(record) = from_js::<SolveRecord>(value) {
+                if record.session_id == session_id {
+                    let moves: Vec<String> = serde_json::from_str(&record.moves).unwrap_or_default();
+                    solves.push(Solve {
+                        id: record.id,
+                        time: record.time,
+                        moves,
+                        date: record.date,
+                        is_valid: record.is_valid,
+                    });
+                }
+            }
+        }
+        Ok(solves)
+    }
+
     async fn demote_session(&self, session_id: &str) -> Result<(), StorageError> {
         let tx = self.db.transaction(&["sessions"], TransactionMode::ReadWrite)
             .map_err(|e| StorageError { message: format!("Transaction error: {:?}", e) })?;

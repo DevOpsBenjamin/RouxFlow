@@ -1,14 +1,41 @@
 import { defineStore } from 'pinia'
-import { computed } from 'vue'
-import { cm_get_current_time_ms, cm_is_timer_running, cm_get_flow_state, cm_get_timer_state } from '../services/cube/bridge'
+import { ref, computed, watch } from 'vue'
+import {
+    cm_get_current_time_ms,
+    cm_is_timer_running,
+    cm_get_flow_state,
+    cm_get_timer_state,
+    cm_is_cube_solved,
+    cm_get_scramble_state,
+    cm_get_inspection_remaining,
+    cm_get_pending_scramble,
+    cm_reset_flow,
+    cm_generate_new_scramble,
+    cm_update_timer,
+    onWasmStateChanged,
+} from '../services/cube/bridge'
 
 export const useTimerStore = defineStore('timer', () => {
-    // Query WASM for timer state (free functions, safe to call before init — returns defaults)
-    const time = computed(() => cm_get_current_time_ms())
+    // Reactive tick — bumped after WASM state changes so computed() re-evaluates
+    const _wasmTick = ref(0)
+    function bumpWasm() { _wasmTick.value++ }
 
-    const isRunning = computed(() => cm_is_timer_running())
+    // Register callback so WASM state changes trigger Vue reactivity
+    onWasmStateChanged(bumpWasm)
+
+    // Query WASM for timer state
+    const time = computed(() => {
+        _wasmTick.value
+        return cm_get_current_time_ms()
+    })
+
+    const isRunning = computed(() => {
+        _wasmTick.value
+        return cm_is_timer_running()
+    })
 
     const flowState = computed(() => {
+        _wasmTick.value
         const flowStateJson = cm_get_flow_state()
         if (!flowStateJson) return 'Idle'
         try {
@@ -19,6 +46,7 @@ export const useTimerStore = defineStore('timer', () => {
     })
 
     const currentMoves = computed(() => {
+        _wasmTick.value
         const timerStateJson = cm_get_timer_state()
         if (!timerStateJson) return []
         try {
@@ -35,11 +63,85 @@ export const useTimerStore = defineStore('timer', () => {
         return seconds
     })
 
+    const isCubeSolved = computed(() => {
+        _wasmTick.value
+        return cm_is_cube_solved()
+    })
+
+    const inspectionRemaining = computed(() => {
+        _wasmTick.value
+        return cm_get_inspection_remaining()
+    })
+
+    const scrambleState = computed(() => {
+        _wasmTick.value
+        try {
+            return JSON.parse(cm_get_scramble_state())
+        } catch {
+            return { scramble: [], index: 0, total: 0, is_ready: false, is_invalid: false, expected_move: null, correction_move: null }
+        }
+    })
+
+    const pendingScramble = computed(() => {
+        _wasmTick.value
+        return cm_get_pending_scramble()
+    })
+
+    // ========== Actions ==========
+
+    function reset() {
+        cm_reset_flow()
+        bumpWasm()
+    }
+
+    function generateScramble() {
+        const scramble = cm_generate_new_scramble()
+        bumpWasm()
+        return scramble
+    }
+
+    // ========== Animation Loop ==========
+
+    let rafId: number | null = null
+
+    function startTick() {
+        if (rafId) return
+        const tick = () => {
+            const now = performance.now() / 1000.0
+            cm_update_timer(now)
+            bumpWasm()
+            rafId = requestAnimationFrame(tick)
+        }
+        rafId = requestAnimationFrame(tick)
+    }
+
+    function stopTick() {
+        if (rafId) {
+            cancelAnimationFrame(rafId)
+            rafId = null
+        }
+    }
+
+    // Watch flowState to start/stop animation loop
+    watch(flowState, (state) => {
+        if (state === 'Inspection' || state === 'Solving') {
+            startTick()
+        } else {
+            stopTick()
+        }
+    })
+
     return {
         time,
         isRunning,
         flowState,
         currentMoves,
         formattedTime,
+        isCubeSolved,
+        inspectionRemaining,
+        scrambleState,
+        pendingScramble,
+        reset,
+        generateScramble,
     }
 })

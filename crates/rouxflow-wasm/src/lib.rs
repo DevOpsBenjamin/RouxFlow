@@ -4,6 +4,7 @@
 //! This is the only crate compiled as `cdylib` for wasm-pack.
 
 use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use rouxflow_bluetoothcube::codec::{self, CubeCommand, CubeEvent, CubeProtocol};
 use rouxflow_core::cube::{CubeMove, Face, facelet::Color as FaceletColor};
@@ -150,7 +151,6 @@ fn handle_cube_event(
             session.process_orientation(quaternion.x, quaternion.y, quaternion.z, quaternion.w, now)
         }
         CubeEvent::Battery { level } => {
-            // TODO: route to frontend via a BatteryUpdate action
             format!(r#"{{"type":"Battery","data":{}}}"#, level)
         }
         CubeEvent::Hardware { name, sw_version, hw_version, gyro_supported } => {
@@ -160,8 +160,6 @@ fn handle_cube_event(
             )
         }
         CubeEvent::Facelets { cp, co, ep, eo, .. } => {
-            // Update the cube state in the session manager's internal cube
-            // For now, return the state as JSON for the frontend
             format!(
                 r#"{{"type":"Facelets","data":{{"cp":{:?},"co":{:?},"ep":{:?},"eo":{:?}}}}}"#,
                 cp, co, ep, eo
@@ -171,7 +169,6 @@ fn handle_cube_event(
             r#"{"type":"Disconnect"}"#.to_string()
         }
         CubeEvent::MoveHistory { moves } => {
-            // Process each recovered move
             let mut last_action = String::new();
             for m in moves {
                 let action = handle_cube_event(m, session);
@@ -185,7 +182,6 @@ fn handle_cube_event(
             format!(r#"{{"type":"RawFacelets","data":"{}"}}"#, facelet_string)
         }
         CubeEvent::WriteBack { data } => {
-            // Return write-back data as a JSON array of bytes for the TS bridge to send
             let bytes: Vec<String> = data.iter().map(|b| b.to_string()).collect();
             format!(r#"{{"type":"WriteBack","data":[{}]}}"#, bytes.join(","))
         }
@@ -193,13 +189,10 @@ fn handle_cube_event(
 }
 
 // ========== Legacy compatibility wrappers ==========
-// These maintain the old API for the bridge.ts until it's updated.
 
 /// Legacy: handle_ble_packet (delegates to protocol auto-detection).
-/// This tries GAN Gen2 with standard GAN keys as a fallback.
 #[wasm_bindgen]
 pub fn handle_ble_packet(data: &[u8], device_id: &str, session: &mut SessionManager) -> String {
-    // Create a temporary GAN V2 protocol with standard keys
     let mut proto = codec::create_protocol(
         rouxflow_bluetoothcube::ProtocolVersion::GanV2,
         device_id,
@@ -214,7 +207,6 @@ pub fn handle_ble_packet(data: &[u8], device_id: &str, session: &mut SessionMana
         }
     }
 
-    // Try MoYu AI keys
     let mut proto_moyu = codec::create_protocol(
         rouxflow_bluetoothcube::ProtocolVersion::MoYuAi,
         device_id,
@@ -319,7 +311,6 @@ impl SessionManager {
 }
 
 // ========== RENDER: re-export WASM functions ==========
-// These functions are cfg(wasm32) in rouxflow-render, so we gate them here too.
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
@@ -348,7 +339,6 @@ pub fn reset_gyro() {
 // ========== BLUETOOTHCUBE: cube registry ==========
 
 /// Find cube definition by BLE name. Returns JSON string or empty string if not found.
-/// Avoids wasm_bindgen JsValue/Reflect alloc churn that corrupts dlmalloc.
 #[wasm_bindgen]
 pub fn find_cube_by_ble_name(device_name: String) -> String {
     match rouxflow_bluetoothcube::find_cube_by_ble_name(&device_name) {
@@ -386,8 +376,7 @@ pub fn all_scan_name_prefixes() -> String {
     format!("[{}]", parts.join(","))
 }
 
-// ========== STORAGE: StorageManager ==========
-// StorageManager uses IndexedDB (rexie) which is wasm32-only.
+// ========== STORAGE: WasmStorageManager ==========
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
@@ -473,17 +462,17 @@ impl WasmStorageManager {
     }
 }
 
-// ========== WASM CubeManager: thread_local state ==========
+// ========== WASM AppState: thread_local state ==========
 //
-// State lives in thread_local! so borrows are scoped to .with() closures and
-// can never leak across the JS↔WASM boundary. This prevents the "recursive use
-// of an object" / "RefCell already borrowed" errors caused by reentrancy
-// (e.g., a WASM call triggers a Vue reactive update that calls back into WASM).
+// Two thread-locals:
+//   APP_STATE — synchronous core state (AppState + protocol + cube logic)
+//   STORAGE   — Rc<StorageManager> (cloned out for async .await)
 //
-// Same proven pattern as rouxflow-render's STATE thread_local.
+// Storage is async (IndexedDB). RefCell can't be held across .await.
+// Solution: clone Rc out of RefCell, drop borrow, then .await freely.
 
-struct CubeManagerState {
-    inner: rouxflow_core::CubeManager,
+struct WasmAppState {
+    inner: rouxflow_core::AppState,
     protocol: Option<Box<dyn CubeProtocol>>,
     /// Logical cube state — tracks moves and produces facelets for rendering
     cube_logic: rouxflow_core::cube::CubeState,
@@ -492,12 +481,12 @@ struct CubeManagerState {
 }
 
 thread_local! {
-    static CM_STATE: RefCell<Option<CubeManagerState>> = RefCell::new(None);
+    static APP_STATE: RefCell<Option<WasmAppState>> = RefCell::new(None);
+    static STORAGE: RefCell<Option<Rc<rouxflow_storage::StorageManager>>> = RefCell::new(None);
     static IN_WASM_CALL: Cell<bool> = Cell::new(false);
 }
 
-/// Debug guard: detect reentrancy. Panics with a clear message identifying
-/// which method was re-entered, so we can find the exact reentrant call path.
+/// Debug guard: detect reentrancy.
 fn enter_wasm(label: &str) {
     IN_WASM_CALL.with(|flag| {
         if flag.get() {
@@ -512,28 +501,14 @@ fn exit_wasm() {
 }
 
 // ========== Free functions: no struct, no WasmRefCell, no borrow corruption ==========
-//
-// Why free functions instead of a struct?
-// wasm-bindgen wraps every #[wasm_bindgen] struct in a WasmRefCell with a
-// 4-byte borrow counter on the WASM heap. For small/ZST structs, dlmalloc
-// can recycle that allocation for string arguments. The borrow-count
-// increment then corrupts the first byte of whichever string landed at
-// the same address (observed: "MoYuV3" → "NoYuV3", +1 on first byte).
-//
-// Free functions eliminate the struct entirely — no heap allocation,
-// no borrow counter, no possible corruption. State lives in CM_STATE
-// thread_local, accessed only via scoped .with() closures.
 
-/// Initialize the CubeManager state. Call once at startup.
+/// Initialize the AppState. Call once at startup.
 #[wasm_bindgen]
 pub fn cm_init() {
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         let cube_logic = rouxflow_core::cube::CubeState::new();
-        let mut cm = rouxflow_core::CubeManager::new();
-        // Set initial facelets to solved state (not all-zeros)
-        cm.update_facelets(&cube_logic.facelets());
-        *s.borrow_mut() = Some(CubeManagerState {
-            inner: cm,
+        *s.borrow_mut() = Some(WasmAppState {
+            inner: rouxflow_core::AppState::new(),
             protocol: None,
             cube_logic,
             last_gyro_hex: String::new(),
@@ -541,14 +516,182 @@ pub fn cm_init() {
     });
 }
 
+/// Initialize storage, load sessions, ensure DefaultSession, set active, load solves.
+/// Call once after cm_init().
+#[wasm_bindgen]
+pub async fn cm_init_storage(supabase_url: Option<String>, supabase_key: Option<String>) -> Result<(), JsValue> {
+    use rouxflow_core::storage::Storage;
+
+    // Create StorageManager
+    let mgr = rouxflow_storage::StorageManager::new(supabase_url, supabase_key)
+        .await
+        .map_err(|e| JsValue::from_str(&e.message))?;
+    let storage = Rc::new(mgr);
+
+    // Store in thread-local
+    STORAGE.with(|s| {
+        *s.borrow_mut() = Some(storage.clone());
+    });
+
+    // Load sessions from IndexedDB
+    let sessions = storage.get_sessions().await
+        .map_err(|e| JsValue::from_str(&e.message))?;
+
+    // Load into AppState and ensure default session
+    let default_session_to_persist = APP_STATE.with(|s| {
+        let mut state = s.borrow_mut();
+        let st = state.as_mut().expect("cm_init must be called before cm_init_storage");
+        st.inner.session.load_sessions(sessions);
+        st.inner.session.ensure_default_session()
+    });
+
+    // Persist new default session if it was just created
+    if let Some(session) = default_session_to_persist {
+        storage.create_session(&session).await
+            .map_err(|e| JsValue::from_str(&e.message))?;
+    }
+
+    // Set default as active session
+    APP_STATE.with(|s| {
+        let mut state = s.borrow_mut();
+        let st = state.as_mut().unwrap();
+        st.inner.session.set_active_session_by_id(rouxflow_core::session::DEFAULT_SESSION_ID);
+    });
+
+    // Load solves for active session
+    let solves = storage.get_solves(rouxflow_core::session::DEFAULT_SESSION_ID).await
+        .map_err(|e| JsValue::from_str(&e.message))?;
+
+    APP_STATE.with(|s| {
+        let mut state = s.borrow_mut();
+        let st = state.as_mut().unwrap();
+        st.inner.session.load_solves_into_active(solves);
+    });
+
+    Ok(())
+}
+
+/// Persist a solve to IndexedDB.
+#[wasm_bindgen]
+pub async fn cm_persist_solve(session_id: &str, solve_json: &str) -> Result<(), JsValue> {
+    use rouxflow_core::storage::Storage;
+
+    let storage = STORAGE.with(|s| s.borrow().clone())
+        .ok_or_else(|| JsValue::from_str("Storage not initialized"))?;
+
+    let solve: rouxflow_core::session::Solve =
+        serde_json::from_str(solve_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    storage.save_solve(session_id, &solve).await
+        .map_err(|e| JsValue::from_str(&e.message))?;
+
+    Ok(())
+}
+
+/// Create a new session in-memory + persist to IndexedDB.
+#[wasm_bindgen]
+pub async fn cm_create_session_persist(name: &str, session_type: &str) -> Result<String, JsValue> {
+    use rouxflow_core::storage::Storage;
+
+    let session_json = APP_STATE.with(|s| {
+        let mut state = s.borrow_mut();
+        let st = state.as_mut().ok_or_else(|| JsValue::from_str("AppState not initialized"))?;
+        let st_enum = match session_type {
+            "WCA" => rouxflow_core::session::SessionType::WCA,
+            _ => rouxflow_core::session::SessionType::Free,
+        };
+        Ok::<String, JsValue>(st.inner.session.create_session(name.to_string(), st_enum))
+    })?;
+
+    // Persist to IndexedDB
+    let storage = STORAGE.with(|s| s.borrow().clone())
+        .ok_or_else(|| JsValue::from_str("Storage not initialized"))?;
+
+    let session: rouxflow_core::session::Session =
+        serde_json::from_str(&session_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    storage.create_session(&session).await
+        .map_err(|e| JsValue::from_str(&e.message))?;
+
+    Ok(session_json)
+}
+
+/// Load solves for the active session from IndexedDB into memory.
+#[wasm_bindgen]
+pub async fn cm_load_active_session_solves() -> Result<(), JsValue> {
+    use rouxflow_core::storage::Storage;
+
+    let session_id = APP_STATE.with(|s| {
+        s.borrow().as_ref()
+            .and_then(|st| st.inner.session.get_active_session_id().map(|s| s.to_string()))
+    }).ok_or_else(|| JsValue::from_str("No active session"))?;
+
+    let storage = STORAGE.with(|s| s.borrow().clone())
+        .ok_or_else(|| JsValue::from_str("Storage not initialized"))?;
+
+    let solves = storage.get_solves(&session_id).await
+        .map_err(|e| JsValue::from_str(&e.message))?;
+
+    APP_STATE.with(|s| {
+        let mut state = s.borrow_mut();
+        if let Some(st) = state.as_mut() {
+            st.inner.session.load_solves_into_active(solves);
+        }
+    });
+
+    Ok(())
+}
+
+// ========== Sync query functions ==========
+
+#[wasm_bindgen]
+pub fn cm_get_sessions_json() -> String {
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(|| "[]".to_string(), |st| st.inner.session.get_sessions_json())
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_get_active_session_json() -> String {
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(|| "null".to_string(), |st| st.inner.session.get_active_session_json())
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_get_active_session_solves_json() -> String {
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(|| "[]".to_string(), |st| st.inner.session.get_active_session_solves_json())
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_get_active_session_id() -> Option<String> {
+    APP_STATE.with(|s| {
+        s.borrow().as_ref()
+            .and_then(|st| st.inner.session.get_active_session_id().map(|s| s.to_string()))
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_switch_session(session_id: &str) -> bool {
+    APP_STATE.with(|s| {
+        let mut state = s.borrow_mut();
+        match state.as_mut() {
+            Some(st) => st.inner.session.set_active_session_by_id(session_id),
+            None => false,
+        }
+    })
+}
+
 // ========== Connection Management ==========
 
 #[wasm_bindgen]
 pub fn cm_connect(device_name: String, mac_address: String, protocol_name: String) -> Result<(), JsValue> {
     enter_wasm("cm_connect");
-    let result = CM_STATE.with(|s| {
+    let result = APP_STATE.with(|s| {
         let mut state = s.borrow_mut();
-        let st = state.as_mut().ok_or_else(|| JsValue::from_str("CubeManager not initialized"))?;
+        let st = state.as_mut().ok_or_else(|| JsValue::from_str("AppState not initialized"))?;
 
         let protocol_version = match protocol_name.as_str() {
             "GanV1" => rouxflow_bluetoothcube::ProtocolVersion::GanV1,
@@ -566,10 +709,9 @@ pub fn cm_connect(device_name: String, mac_address: String, protocol_name: Strin
         let protocol = codec::create_protocol(protocol_version, &mac_address);
         let has_gyro = protocol.has_gyro();
         st.protocol = Some(protocol);
-        st.inner.connect(device_name, mac_address, protocol_name, has_gyro);
+        st.inner.bluetooth.connect(device_name, mac_address, protocol_name, has_gyro);
         // Reset logical cube to solved; will be overwritten by RawFacelets from cube
         st.cube_logic = rouxflow_core::cube::CubeState::new();
-        st.inner.update_facelets(&st.cube_logic.facelets());
 
         Ok(())
     });
@@ -580,7 +722,7 @@ pub fn cm_connect(device_name: String, mac_address: String, protocol_name: Strin
 #[wasm_bindgen]
 pub fn cm_disconnect() {
     enter_wasm("cm_disconnect");
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         if let Some(st) = s.borrow_mut().as_mut() {
             st.inner.disconnect();
             st.protocol = None;
@@ -591,45 +733,66 @@ pub fn cm_disconnect() {
 
 #[wasm_bindgen]
 pub fn cm_is_connected() -> bool {
-    CM_STATE.with(|s| {
-        s.borrow().as_ref().map_or(false, |st| st.inner.is_connected())
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or(false, |st| st.inner.bluetooth.is_connected())
     })
 }
 
 #[wasm_bindgen]
 pub fn cm_get_device_info() -> Option<String> {
-    CM_STATE.with(|s| {
-        s.borrow().as_ref().and_then(|st| st.inner.get_device_info_json())
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().and_then(|st| st.inner.bluetooth.get_device_info_json())
     })
 }
 
 // ========== BLE Packet Processing ==========
 
+// ========== Scramble Generator ==========
+
+fn generate_scramble() -> String {
+    let faces = ["U", "R", "F", "D", "L", "B"];
+    let mods = ["", "'", "2"];
+    let mut result = Vec::with_capacity(20);
+    let mut last: Option<usize> = None;
+    let mut second_last: Option<usize> = None;
+    for _ in 0..20 {
+        loop {
+            let fi = (js_sys::Math::random() * 6.0) as usize % 6;
+            if last == Some(fi) { continue; }
+            // Prevent 3 consecutive on same axis (U/D=0/3, R/L=1/4, F/B=2/5)
+            if let (Some(l), Some(sl)) = (last, second_last) {
+                if fi % 3 == l % 3 && l % 3 == sl % 3 { continue; }
+            }
+            let mi = (js_sys::Math::random() * 3.0) as usize % 3;
+            result.push(format!("{}{}", faces[fi], mods[mi]));
+            second_last = last;
+            last = Some(fi);
+            break;
+        }
+    }
+    result.join(" ")
+}
+
 /// Detect pairs of opposite-face moves that form slice moves (M, S, E).
-/// Returns the slice notation string if the pair merges, None otherwise.
 fn try_merge_slice(a: &CubeEvent, b: &CubeEvent) -> Option<String> {
     if let (
         CubeEvent::Move { face: f1, direction: d1, .. },
         CubeEvent::Move { face: f2, direction: d2, .. },
     ) = (a, b) {
-        // Only merge if opposite faces with opposite directions
         if *d1 != -(*d2) {
             return None;
         }
         let suffix = |d: i8| if d > 0 { "" } else { "'" };
         match (*f1, *f2) {
             (Face::L, Face::R) | (Face::R, Face::L) => {
-                // M follows L direction
                 let dir = if *f1 == Face::L { *d1 } else { *d2 };
                 Some(format!("M{}", suffix(dir)))
             }
             (Face::F, Face::B) | (Face::B, Face::F) => {
-                // S follows F direction
                 let dir = if *f1 == Face::F { *d1 } else { *d2 };
                 Some(format!("S{}", suffix(dir)))
             }
             (Face::U, Face::D) | (Face::D, Face::U) => {
-                // E follows D direction
                 let dir = if *f1 == Face::D { *d1 } else { *d2 };
                 Some(format!("E{}", suffix(dir)))
             }
@@ -640,12 +803,62 @@ fn try_merge_slice(a: &CubeEvent, b: &CubeEvent) -> Option<String> {
     }
 }
 
+/// Flow coordinator: after a move, check flow state and react accordingly.
+fn flow_coordinate(st: &mut WasmAppState, timestamp: f64, actions: &mut Vec<String>, notation: Option<&str>) {
+    use rouxflow_core::session::FlowState;
+
+    let flow = st.inner.session.get_flow_state_enum();
+
+    match flow {
+        FlowState::Idle => {
+            // If cube is solved in Idle, auto-generate scramble
+            if st.cube_logic.is_solved() {
+                let scramble = generate_scramble();
+                let action = st.inner.session.start_scramble(&scramble);
+                if !action.is_empty() { actions.push(action); }
+            }
+        }
+        FlowState::Scrambling => {
+            // Already handled by handle_scramble_move which transitions to Inspection
+        }
+        FlowState::Inspection => {
+            // First move during inspection → start solving
+            let action = st.inner.start_solving(timestamp);
+            if !action.is_empty() { actions.push(action); }
+        }
+        FlowState::Solving => {
+            // Check if cube is solved → auto-complete
+            if st.cube_logic.is_solved() {
+                let time_ms = st.inner.timer.get_current_time_ms() as u32;
+                let moves_json = st.inner.timer.get_moves_json();
+                let action = st.inner.record_solve(timestamp, time_ms, &moves_json);
+                if !action.is_empty() { actions.push(action); }
+                // Generate next scramble for chaining
+                let next = generate_scramble();
+                st.inner.session.set_pending_scramble(next);
+            }
+        }
+        FlowState::Summary => {
+            // Auto-chain: start next scramble from pending
+            if let Some(scramble) = st.inner.session.get_pending_scramble().map(|s| s.to_string()) {
+                let action = st.inner.session.start_scramble(&scramble);
+                if !action.is_empty() { actions.push(action); }
+                // Re-feed this move to the scramble validator
+                if let Some(n) = notation {
+                    let action2 = st.inner.session.handle_scramble_move(n, timestamp);
+                    if !action2.is_empty() { actions.push(action2); }
+                }
+            }
+        }
+    }
+}
+
 /// Process a raw BLE packet through the protocol handler and update state.
 /// Returns JSON array of CoreActions.
 #[wasm_bindgen]
 pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
     enter_wasm("cm_process_ble_packet");
-    let result = CM_STATE.with(|s| {
+    let result = APP_STATE.with(|s| {
         let mut state = s.borrow_mut();
         let st = match state.as_mut() {
             Some(st) => st,
@@ -670,9 +883,6 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
         let mut i = 0;
         while i < events.len() {
             // Lookahead: try to merge adjacent Move events into slice notation (M/S/E)
-            // The cube firmware reports L+R' for an M move. We apply both individual
-            // face moves to keep facelets in sync with the cube's internal tracking,
-            // but queue a single slice animation and record the slice notation.
             if i + 1 < events.len() {
                 if let Some(slice_notation) = try_merge_slice(&events[i], &events[i + 1]) {
                     // Apply both individual face moves for correct facelet state
@@ -685,7 +895,6 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                         st.cube_logic.apply_move(&n1);
                         st.cube_logic.apply_move(&n2);
                     }
-                    st.inner.update_facelets(&st.cube_logic.facelets());
 
                     // Record and animate as single slice move
                     st.inner.record_move(slice_notation.clone());
@@ -698,9 +907,9 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     ) = (&events[i], &events[i + 1]) {
                         let n1 = CubeMove { face: *f1, amount: *d1 }.notation();
                         let n2 = CubeMove { face: *f2, amount: *d2 }.notation();
-                        let a1 = st.inner.handle_scramble_move(&n1, timestamp);
+                        let a1 = st.inner.session.handle_scramble_move(&n1, timestamp);
                         if !a1.is_empty() { actions.push(a1); }
-                        let a2 = st.inner.handle_scramble_move(&n2, timestamp);
+                        let a2 = st.inner.session.handle_scramble_move(&n2, timestamp);
                         if !a2.is_empty() { actions.push(a2); }
                     }
 
@@ -711,7 +920,10 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                         actions.push(action_json);
                     }
 
-                    i += 2; // Skip both events
+                    // Flow coordinator after slice move
+                    flow_coordinate(st, timestamp, &mut actions, None);
+
+                    i += 2;
                     continue;
                 }
             }
@@ -725,32 +937,33 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     let notation = cube_move.notation();
 
                     st.inner.record_move(notation.clone());
-                    // Apply move to logical cube and update render facelets
                     st.cube_logic.apply_move(&notation);
-                    st.inner.update_facelets(&st.cube_logic.facelets());
-                    // Queue slice animation in the renderer (0.15s like standalone)
                     rouxflow_render::queue_move_anim(notation.clone(), 0.15);
 
-                    let action = st.inner.handle_scramble_move(&notation, timestamp);
+                    let action = st.inner.session.handle_scramble_move(&notation, timestamp);
                     if !action.is_empty() {
                         actions.push(action);
                     } else {
-                        let action_json = serde_json::to_string(&CoreAction::Move(notation))
+                        let action_json = serde_json::to_string(&CoreAction::Move(notation.clone()))
                             .unwrap_or_default();
                         if !action_json.is_empty() {
                             actions.push(action_json);
                         }
                     }
+
+                    // Flow coordinator: react to moves based on current state
+                    flow_coordinate(st, timestamp, &mut actions, Some(&notation));
                 }
                 CubeEvent::Gyro { quaternion, .. } => {
-                    st.inner.update_orientation(
-                        quaternion.x,
-                        quaternion.y,
-                        quaternion.z,
-                        quaternion.w,
-                    );
+                    // Update cube_logic orientation for the 3D renderer
+                    st.cube_logic.orientation = Some(rouxflow_core::cube::Quaternion {
+                        x: quaternion.x,
+                        y: quaternion.y,
+                        z: quaternion.z,
+                        w: quaternion.w,
+                    });
 
-                    let action = st.inner.get_session_manager_mut().process_orientation(
+                    let action = st.inner.session.process_orientation(
                         quaternion.x,
                         quaternion.y,
                         quaternion.z,
@@ -760,15 +973,13 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     if !action.is_empty() {
                         actions.push(action);
                     }
-
-                    // GyroRaw debug disabled (was spamming logs)
                 }
                 CubeEvent::Battery { level } => {
-                    st.inner.update_battery(*level);
+                    st.inner.bluetooth.update_battery(*level);
                     actions.push(format!(r#"{{"type":"Battery","data":{}}}"#, level));
                 }
                 CubeEvent::Hardware { name, sw_version, hw_version, gyro_supported } => {
-                    st.inner.update_hardware(sw_version.clone(), hw_version.clone());
+                    st.inner.bluetooth.update_hardware(sw_version.clone(), hw_version.clone());
                     actions.push(format!(
                         r#"{{"type":"Hardware","data":{{"name":"{}","swVersion":"{}","hwVersion":"{}","gyroSupported":{}}}}}"#,
                         name, sw_version, hw_version, gyro_supported
@@ -793,12 +1004,11 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     }).collect();
                     if colors.len() == 54 {
                         st.cube_logic.logic.facelets = colors;
-                        st.inner.update_facelets(&st.cube_logic.facelets());
                     }
                     actions.push(format!(r#"{{"type":"RawFacelets","data":"{}"}}"#, facelet_string));
                 }
                 _ => {
-                    let action = handle_cube_event(&events[i], st.inner.get_session_manager_mut());
+                    let action = handle_cube_event(&events[i], &mut st.inner.session);
                     if !action.is_empty() {
                         actions.push(action);
                     }
@@ -823,9 +1033,9 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
 /// Encode a command using the current protocol. Returns JSON array of bytes.
 #[wasm_bindgen]
 pub fn cm_encode_command(command_name: String) -> Result<String, JsValue> {
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         let state = s.borrow();
-        let st = state.as_ref().ok_or_else(|| JsValue::from_str("CubeManager not initialized"))?;
+        let st = state.as_ref().ok_or_else(|| JsValue::from_str("AppState not initialized"))?;
         let protocol = st.protocol.as_ref()
             .ok_or_else(|| JsValue::from_str("No protocol configured"))?;
 
@@ -852,19 +1062,28 @@ pub fn cm_encode_command(command_name: String) -> Result<String, JsValue> {
 
 #[wasm_bindgen]
 pub fn cm_get_cube_state() -> String {
-    CM_STATE.with(|s| {
-        s.borrow().as_ref().map_or_else(|| "{}".to_string(), |st| st.inner.get_cube_state_json())
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(
+            || "{}".to_string(),
+            |st| {
+                let facelets = st.cube_logic.facelets();
+                format!(r#"{{"facelets":{:?}}}"#, facelets)
+            },
+        )
     })
 }
 
 #[wasm_bindgen]
 pub fn cm_get_orientation() -> String {
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         s.borrow().as_ref().map_or_else(
             || "[0,0,0,1]".to_string(),
             |st| {
-                let o = st.inner.get_orientation();
-                format!("[{},{},{},{}]", o[0], o[1], o[2], o[3])
+                if let Some(q) = st.cube_logic.orientation {
+                    format!("[{},{},{},{}]", q.x, q.y, q.z, q.w)
+                } else {
+                    "[0,0,0,1]".to_string()
+                }
             },
         )
     })
@@ -872,11 +1091,11 @@ pub fn cm_get_orientation() -> String {
 
 #[wasm_bindgen]
 pub fn cm_get_facelets() -> String {
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         s.borrow().as_ref().map_or_else(
             || "[]".to_string(),
             |st| {
-                let f = st.inner.get_facelets();
+                let f = st.cube_logic.facelets();
                 let parts: Vec<String> = f.iter().map(|b| b.to_string()).collect();
                 format!("[{}]", parts.join(","))
             },
@@ -889,9 +1108,9 @@ pub fn cm_get_facelets() -> String {
 #[wasm_bindgen]
 pub fn cm_start_timer(timestamp: f64) {
     enter_wasm("cm_start_timer");
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         if let Some(st) = s.borrow_mut().as_mut() {
-            st.inner.start_timer(timestamp);
+            st.inner.timer.start(timestamp);
         }
     });
     exit_wasm();
@@ -900,41 +1119,56 @@ pub fn cm_start_timer(timestamp: f64) {
 #[wasm_bindgen]
 pub fn cm_stop_timer(timestamp: f64) {
     enter_wasm("cm_stop_timer");
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         if let Some(st) = s.borrow_mut().as_mut() {
-            st.inner.stop_timer(timestamp);
+            st.inner.timer.stop(timestamp);
         }
     });
     exit_wasm();
 }
 
 #[wasm_bindgen]
-pub fn cm_update_timer(timestamp: f64) {
-    CM_STATE.with(|s| {
-        if let Some(st) = s.borrow_mut().as_mut() {
-            st.inner.update_timer(timestamp);
+pub fn cm_update_timer(timestamp: f64) -> String {
+    APP_STATE.with(|s| {
+        let mut state = s.borrow_mut();
+        let st = match state.as_mut() {
+            Some(st) => st,
+            None => return String::new(),
+        };
+        st.inner.timer.update(timestamp);
+
+        // Check inspection timeout
+        if st.inner.session.get_flow_state_enum() == rouxflow_core::session::FlowState::Inspection {
+            if st.inner.session.is_inspection_expired(timestamp) {
+                let action = st.inner.start_solving(timestamp);
+                if !action.is_empty() {
+                    return action;
+                }
+            }
         }
-    });
+
+        String::new()
+    })
 }
 
 #[wasm_bindgen]
 pub fn cm_get_timer_state() -> String {
-    CM_STATE.with(|s| {
-        s.borrow().as_ref().map_or_else(|| "{}".to_string(), |st| st.inner.get_timer_state_json())
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(|| "{}".to_string(), |st| st.inner.timer.get_state_json())
     })
 }
 
 #[wasm_bindgen]
 pub fn cm_is_timer_running() -> bool {
-    CM_STATE.with(|s| {
-        s.borrow().as_ref().map_or(false, |st| st.inner.is_timer_running())
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or(false, |st| st.inner.timer.is_running())
     })
 }
 
 #[wasm_bindgen]
 pub fn cm_get_current_time_ms() -> u64 {
-    CM_STATE.with(|s| {
-        s.borrow().as_ref().map_or(0, |st| st.inner.get_current_time_ms())
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or(0, |st| st.inner.timer.get_current_time_ms())
     })
 }
 
@@ -942,42 +1176,42 @@ pub fn cm_get_current_time_ms() -> u64 {
 
 #[wasm_bindgen]
 pub fn cm_get_flow_state() -> String {
-    CM_STATE.with(|s| {
-        s.borrow().as_ref().map_or_else(|| "\"Idle\"".to_string(), |st| st.inner.get_flow_state())
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(|| "\"Idle\"".to_string(), |st| st.inner.session.get_flow_state())
     })
 }
 
 #[wasm_bindgen]
 pub fn cm_set_active_session(session_json: &str) {
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         if let Some(st) = s.borrow_mut().as_mut() {
-            st.inner.set_active_session(session_json);
+            st.inner.session.set_active_session(session_json);
         }
     });
 }
 
 #[wasm_bindgen]
 pub fn cm_create_session(session_json: &str) {
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         if let Some(st) = s.borrow_mut().as_mut() {
-            st.inner.create_session(session_json);
+            st.inner.session.set_active_session(session_json);
         }
     });
 }
 
 #[wasm_bindgen]
 pub fn cm_start_scramble(scramble: &str) -> String {
-    CM_STATE.with(|s| {
-        s.borrow_mut().as_mut().map_or_else(String::new, |st| st.inner.start_scramble(scramble))
+    APP_STATE.with(|s| {
+        s.borrow_mut().as_mut().map_or_else(String::new, |st| st.inner.session.start_scramble(scramble))
     })
 }
 
 #[wasm_bindgen]
 pub fn cm_handle_scramble_move(move_str: &str) -> String {
     let timestamp = js_sys::Date::now() / 1000.0;
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         s.borrow_mut().as_mut().map_or_else(String::new, |st| {
-            st.inner.handle_scramble_move(move_str, timestamp)
+            st.inner.session.handle_scramble_move(move_str, timestamp)
         })
     })
 }
@@ -985,33 +1219,91 @@ pub fn cm_handle_scramble_move(move_str: &str) -> String {
 #[wasm_bindgen]
 pub fn cm_set_solving() -> String {
     let timestamp = js_sys::Date::now() / 1000.0;
-    CM_STATE.with(|s| {
-        s.borrow_mut().as_mut().map_or_else(String::new, |st| st.inner.set_solving(timestamp))
+    APP_STATE.with(|s| {
+        s.borrow_mut().as_mut().map_or_else(String::new, |st| st.inner.start_solving(timestamp))
     })
 }
 
 #[wasm_bindgen]
 pub fn cm_record_solve(time_ms: u32, moves_json: &str) -> String {
     let timestamp = js_sys::Date::now() / 1000.0;
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         s.borrow_mut().as_mut().map_or_else(String::new, |st| {
             st.inner.record_solve(timestamp, time_ms, moves_json)
         })
     })
 }
 
-// ========== MAC Address Validation ==========
+// ========== Flow + Scramble Queries ==========
 
-// ========== Protocol Queries ==========
+#[wasm_bindgen]
+pub fn cm_is_cube_solved() -> bool {
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or(true, |st| st.cube_logic.is_solved())
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_reset_flow() -> String {
+    APP_STATE.with(|s| {
+        s.borrow_mut().as_mut().map_or_else(String::new, |st| {
+            let action = st.inner.session.reset_flow();
+            // If cube is solved, auto-generate a scramble
+            if st.cube_logic.is_solved() {
+                let scramble = generate_scramble();
+                let action2 = st.inner.session.start_scramble(&scramble);
+                if !action2.is_empty() { return action2; }
+            }
+            action
+        })
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_get_scramble_state() -> String {
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(|| "{}".to_string(), |st| st.inner.session.get_scramble_state_json())
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_get_inspection_remaining() -> f64 {
+    let now = js_sys::Date::now() / 1000.0;
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or(0.0, |st| st.inner.session.get_inspection_remaining(now))
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_generate_new_scramble() -> String {
+    APP_STATE.with(|s| {
+        s.borrow_mut().as_mut().map_or_else(String::new, |st| {
+            let scramble = generate_scramble();
+            st.inner.session.start_scramble(&scramble);
+            scramble
+        })
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_get_pending_scramble() -> String {
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(String::new, |st| {
+            st.inner.session.get_pending_scramble().unwrap_or("").to_string()
+        })
+    })
+}
+
+// ========== MAC Address Validation ==========
 
 #[wasm_bindgen]
 pub fn cm_needs_mac_input(device_id: &str, protocol: &str) -> bool {
-    rouxflow_core::CubeManager::needs_mac_input(device_id, protocol)
+    rouxflow_core::BluetoothManager::needs_mac_input(device_id, protocol)
 }
 
 #[wasm_bindgen]
 pub fn cm_requires_handshake() -> bool {
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         s.borrow().as_ref()
             .and_then(|st| st.protocol.as_ref())
             .map_or(false, |p| p.requires_handshake())
@@ -1020,7 +1312,7 @@ pub fn cm_requires_handshake() -> bool {
 
 #[wasm_bindgen]
 pub fn cm_handshake_data() -> Vec<u8> {
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         s.borrow().as_ref()
             .and_then(|st| st.protocol.as_ref())
             .and_then(|p| p.handshake_data())
@@ -1030,21 +1322,19 @@ pub fn cm_handshake_data() -> Vec<u8> {
 
 #[wasm_bindgen]
 pub fn cm_protocol_requires_mac(protocol: &str) -> bool {
-    rouxflow_core::CubeManager::protocol_requires_mac(protocol)
+    rouxflow_core::BluetoothManager::protocol_requires_mac(protocol)
 }
 
 #[wasm_bindgen]
 pub fn cm_is_valid_mac_format(device_id: &str) -> bool {
-    rouxflow_core::CubeManager::is_valid_mac_format(device_id)
+    rouxflow_core::BluetoothManager::is_valid_mac_format(device_id)
 }
 
 // ========== Debug: gyro raw hex ==========
 
-/// Get the last decrypted gyro packet as hex string.
-/// Usage from console: gyroDebug.show()
 #[wasm_bindgen]
 pub fn cm_get_last_gyro_hex() -> String {
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         s.borrow().as_ref().map_or_else(
             || "No state".to_string(),
             |st| {
@@ -1060,11 +1350,9 @@ pub fn cm_get_last_gyro_hex() -> String {
 
 // ========== Debug: decrypt/encrypt hex strings ==========
 
-/// Decrypt a hex string using the current protocol. Returns decrypted hex.
-/// Usage from console: cubeDebug.decode("90 5c 36 ...")
 #[wasm_bindgen]
 pub fn cm_decrypt_hex(hex_input: &str) -> String {
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         let state = s.borrow();
         let st = match state.as_ref() {
             Some(st) => st,
@@ -1085,11 +1373,9 @@ pub fn cm_decrypt_hex(hex_input: &str) -> String {
     })
 }
 
-/// Encrypt a hex string using the current protocol. Returns encrypted hex.
-/// Usage from console: cubeDebug.encode("a4 00 00 ...")
 #[wasm_bindgen]
 pub fn cm_encrypt_hex(hex_input: &str) -> String {
-    CM_STATE.with(|s| {
+    APP_STATE.with(|s| {
         let state = s.borrow();
         let st = match state.as_ref() {
             Some(st) => st,

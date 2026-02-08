@@ -1,6 +1,9 @@
 use serde::{Serialize, Deserialize};
 use crate::cube::Quaternion;
 
+pub const DEFAULT_SESSION_ID: &str = "default";
+pub const DEFAULT_SESSION_NAME: &str = "Default Session";
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub enum SessionType {
     Free,
@@ -29,9 +32,20 @@ pub struct Session {
 pub enum FlowState {
     Idle,
     Scrambling,
-    Ready,
+    Inspection,
     Solving,
-    Finished,
+    Summary,
+}
+
+#[derive(Serialize)]
+pub struct ScrambleState {
+    pub scramble: Vec<String>,
+    pub index: usize,
+    pub total: usize,
+    pub is_ready: bool,
+    pub is_invalid: bool,
+    pub expected_move: Option<String>,
+    pub correction_move: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -124,9 +138,27 @@ impl ScrambleValidator {
     pub fn is_ready(&self) -> bool {
         self.current_index >= self.scramble.len() && !self.is_invalid && self.mistakes.is_empty()
     }
+
+    /// Get the correction move needed to undo last mistake (inverse of last mistake)
+    pub fn get_correction_move(&self) -> Option<String> {
+        self.mistakes.last().map(|m| Self::get_inverse(m))
+    }
+
+    /// Get the next expected scramble move, or None if a mistake is pending
+    pub fn get_expected_move(&self) -> Option<&str> {
+        if !self.mistakes.is_empty() || self.is_invalid {
+            return None;
+        }
+        if self.current_index < self.scramble.len() {
+            Some(&self.scramble[self.current_index])
+        } else {
+            None
+        }
+    }
 }
 
 pub struct SessionManager {
+    sessions: Vec<Session>,
     active_session: Option<Session>,
     scramble_validator: Option<ScrambleValidator>,
 
@@ -137,22 +169,103 @@ pub struct SessionManager {
 
     // Flow management
     flow_state: FlowState,
+
+    // Inspection
+    inspection_start: Option<f64>,
+    inspection_duration: f64,
+
+    // Chaining: next scramble for Summary → Scrambling transition
+    pending_scramble: Option<String>,
 }
 
 impl SessionManager {
     pub fn new() -> Self {
         Self {
+            sessions: Vec::new(),
             active_session: None,
             scramble_validator: None,
             last_orientation: None,
             is_stable: true,
             stable_since: 0.0,
             flow_state: FlowState::Idle,
+            inspection_start: None,
+            inspection_duration: 15.0,
+            pending_scramble: None,
         }
     }
 
+    // ========== Session List Management ==========
+
+    /// Bulk load sessions from storage (replaces in-memory list)
+    pub fn load_sessions(&mut self, sessions: Vec<Session>) {
+        self.sessions = sessions;
+    }
+
+    /// Ensure the DefaultSession exists. Returns Some(session) if a new one was
+    /// created (caller should persist it), or None if it already exists.
+    pub fn ensure_default_session(&mut self) -> Option<Session> {
+        if self.sessions.iter().any(|s| s.id == DEFAULT_SESSION_ID) {
+            return None;
+        }
+
+        let session = Session {
+            id: DEFAULT_SESSION_ID.to_string(),
+            name: DEFAULT_SESSION_NAME.to_string(),
+            session_type: SessionType::Free,
+            solves: Vec::new(),
+            first_solve_at: None,
+        };
+        self.sessions.push(session.clone());
+        Some(session)
+    }
+
+    /// Set active session by ID (looks up in sessions list)
+    pub fn set_active_session_by_id(&mut self, id: &str) -> bool {
+        if let Some(session) = self.sessions.iter().find(|s| s.id == id) {
+            self.active_session = Some(session.clone());
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Populate active session's solves from storage
+    pub fn load_solves_into_active(&mut self, solves: Vec<Solve>) {
+        if let Some(session) = &mut self.active_session {
+            session.solves = solves.clone();
+            // Also sync into sessions list
+            if let Some(s) = self.sessions.iter_mut().find(|s| s.id == session.id) {
+                s.solves = solves;
+            }
+        }
+    }
+
+    /// Get all sessions as JSON
+    pub fn get_sessions_json(&self) -> String {
+        serde_json::to_string(&self.sessions).unwrap_or_else(|_| "[]".to_string())
+    }
+
+    /// Get active session's solves as JSON
+    pub fn get_active_session_solves_json(&self) -> String {
+        match &self.active_session {
+            Some(s) => serde_json::to_string(&s.solves).unwrap_or_else(|_| "[]".to_string()),
+            None => "[]".to_string(),
+        }
+    }
+
+    /// Get active session ID
+    pub fn get_active_session_id(&self) -> Option<&str> {
+        self.active_session.as_ref().map(|s| s.id.as_str())
+    }
+
+    // ========== Legacy Compatibility ==========
+
     pub fn set_active_session(&mut self, session_json: &str) {
-        if let Ok(session) = serde_json::from_str(session_json) {
+        if let Ok(session) = serde_json::from_str::<Session>(session_json) {
+            // Also add to sessions list if not present
+            if !self.sessions.iter().any(|s| s.id == session.id) {
+                self.sessions.push(session.clone());
+            }
             self.active_session = Some(session);
         }
     }
@@ -182,6 +295,16 @@ impl SessionManager {
                     return serde_json::to_string(&CoreAction::Error("WCA Session full".into())).unwrap();
                 }
             }
+
+            // Push solve into active session's in-memory solves
+            session.solves.push(solve.clone());
+
+            // Sync to sessions list
+            let session_id = session.id.clone();
+            if let Some(s) = self.sessions.iter_mut().find(|s| s.id == session_id) {
+                s.solves.push(solve.clone());
+            }
+
             serde_json::to_string(&CoreAction::SaveSolve(solve)).unwrap()
         } else {
             serde_json::to_string(&CoreAction::Error("No active session".into())).unwrap()
@@ -222,6 +345,7 @@ impl SessionManager {
             solves: Vec::new(),
             first_solve_at: None,
         };
+        self.sessions.push(session.clone());
         self.active_session = Some(session.clone());
         serde_json::to_string(&session).unwrap_or_default()
     }
@@ -246,9 +370,8 @@ impl SessionManager {
         if let Some(v) = &mut self.scramble_validator {
             let moved = v.handle_move(move_str, timestamp);
 
-            if v.is_ready() && self.flow_state != FlowState::Ready {
-                self.flow_state = FlowState::Ready;
-                return serde_json::to_string(&CoreAction::FlowStateChanged(self.flow_state)).unwrap_or_default();
+            if v.is_ready() && self.flow_state == FlowState::Scrambling {
+                return self.enter_inspection(timestamp);
             }
 
             if moved {
@@ -268,7 +391,7 @@ impl SessionManager {
             is_valid: true,
         };
 
-        self.flow_state = FlowState::Finished;
+        self.flow_state = FlowState::Summary;
         self.save_solve_internal(solve)
     }
 
@@ -295,5 +418,73 @@ impl SessionManager {
 
     pub fn get_scramble_len(&self) -> usize {
         self.scramble_validator.as_ref().map(|v| v.scramble.len()).unwrap_or(0)
+    }
+
+    // ========== Inspection ==========
+
+    pub fn enter_inspection(&mut self, timestamp: f64) -> String {
+        self.flow_state = FlowState::Inspection;
+        self.inspection_start = Some(timestamp);
+        serde_json::to_string(&CoreAction::FlowStateChanged(self.flow_state)).unwrap_or_default()
+    }
+
+    pub fn get_inspection_remaining(&self, now: f64) -> f64 {
+        match self.inspection_start {
+            Some(start) => {
+                let elapsed = now - start;
+                let remaining = self.inspection_duration - elapsed;
+                if remaining > 0.0 { remaining } else { 0.0 }
+            }
+            None => 0.0,
+        }
+    }
+
+    pub fn is_inspection_expired(&self, now: f64) -> bool {
+        match self.inspection_start {
+            Some(start) => (now - start) >= self.inspection_duration,
+            None => false,
+        }
+    }
+
+    // ========== Scramble State ==========
+
+    pub fn get_scramble_state_json(&self) -> String {
+        let state = match &self.scramble_validator {
+            Some(v) => ScrambleState {
+                scramble: v.scramble.clone(),
+                index: v.current_index,
+                total: v.scramble.len(),
+                is_ready: v.is_ready(),
+                is_invalid: v.is_invalid,
+                expected_move: v.get_expected_move().map(|s| s.to_string()),
+                correction_move: v.get_correction_move(),
+            },
+            None => ScrambleState {
+                scramble: Vec::new(),
+                index: 0,
+                total: 0,
+                is_ready: false,
+                is_invalid: false,
+                expected_move: None,
+                correction_move: None,
+            },
+        };
+        serde_json::to_string(&state).unwrap_or_else(|_| "{}".to_string())
+    }
+
+    // ========== Pending Scramble (chaining) ==========
+
+    pub fn set_pending_scramble(&mut self, scramble: String) {
+        self.pending_scramble = Some(scramble);
+    }
+
+    pub fn get_pending_scramble(&self) -> Option<&str> {
+        self.pending_scramble.as_deref()
+    }
+
+    // ========== Flow State Enum Access ==========
+
+    pub fn get_flow_state_enum(&self) -> FlowState {
+        self.flow_state
     }
 }

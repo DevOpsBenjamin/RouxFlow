@@ -1,45 +1,77 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { cm_set_active_session, getSessions, createSession as bridgeCreateSession } from '../services/cube/bridge'
+import {
+    cm_get_sessions_json,
+    cm_get_active_session_json,
+    cm_get_active_session_solves_json,
+    cm_get_active_session_id,
+    cm_switch_session,
+    cm_create_session_persist,
+    cm_load_active_session_solves,
+    onWasmStateChanged,
+} from '../services/cube/bridge'
+import { logger } from '../utils/logger'
 
 export type SessionType = 'Free' | 'WCA'
 
 export const useSessionStore = defineStore('session', () => {
-    const sessions = ref<any[]>([])
-    const activeSessionId = ref<string | null>(null)
+    // Reactive tick — bumped after WASM state changes so computed() re-evaluates
+    const _wasmTick = ref(0)
+    function bumpWasm() { _wasmTick.value++ }
 
-    const activeSession = computed(() => {
-        return sessions.value.find(s => s.id === activeSessionId.value) || null
+    // Register callback so WASM state changes trigger Vue reactivity
+    onWasmStateChanged(bumpWasm)
+
+    // ========== Query WASM for all state ==========
+
+    const sessions = computed(() => {
+        _wasmTick.value
+        try {
+            return JSON.parse(cm_get_sessions_json())
+        } catch { return [] }
     })
 
-    async function loadSessions() {
-        const data = await getSessions()
-        sessions.value = data
-        if (data.length > 0 && !activeSessionId.value) {
-            activeSessionId.value = data[0].id
-        }
-    }
+    const activeSessionId = computed(() => {
+        _wasmTick.value
+        return cm_get_active_session_id() ?? null
+    })
+
+    const activeSession = computed(() => {
+        _wasmTick.value
+        try {
+            const json = cm_get_active_session_json()
+            return json && json !== 'null' ? JSON.parse(json) : null
+        } catch { return null }
+    })
+
+    const activeSessionSolves = computed(() => {
+        _wasmTick.value
+        try {
+            return JSON.parse(cm_get_active_session_solves_json())
+        } catch { return [] }
+    })
+
+    // ========== Actions ==========
 
     async function createSession(name: string, type: SessionType) {
-        const session = {
-            id: crypto.randomUUID(),
-            name: name || new Date().toLocaleDateString(),
-            type,
-            created_at: Date.now(),
-            solves: []
+        try {
+            await cm_create_session_persist(name || new Date().toLocaleDateString(), type)
+            bumpWasm()
+        } catch (e) {
+            logger.error('Failed to create session:', e)
         }
-
-        await bridgeCreateSession(session)
-
-        await loadSessions()
-        activeSessionId.value = session.id
     }
 
     async function switchSession(id: string) {
-        const session = sessions.value.find(s => s.id === id)
-        if (session) {
-            cm_set_active_session(JSON.stringify(session))
-            activeSessionId.value = id
+        const ok = cm_switch_session(id)
+        if (ok) {
+            // Load solves for the new active session from IndexedDB
+            try {
+                await cm_load_active_session_solves()
+            } catch (e) {
+                logger.error('Failed to load solves for session:', e)
+            }
+            bumpWasm()
         }
     }
 
@@ -47,8 +79,9 @@ export const useSessionStore = defineStore('session', () => {
         sessions,
         activeSession,
         activeSessionId,
+        activeSessionSolves,
         createSession,
         switchSession,
-        loadSessions
+        bumpWasm,
     }
 })

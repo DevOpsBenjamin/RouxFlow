@@ -30,7 +30,14 @@
       "Bash(pnpm add:*)",
       "Bash(timeout 20 pnpm dev:*)",
       "Bash(pnpm build:*)",
-      "Bash(pnpm build:wasm:*)"
+      "Bash(pnpm build:wasm:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh.exe repo view thewca/tnoodle --json description,licenseInfo,defaultBranchRef)",
+      "Bash(where:*)",
+      "Bash(gh api:*)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:crates.io)",
+      "WebFetch(domain:kociemba.org)"
     ]
   }
 }

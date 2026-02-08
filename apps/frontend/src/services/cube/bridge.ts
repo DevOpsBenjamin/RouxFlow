@@ -8,6 +8,7 @@ import init, {
     all_scan_service_uuids,
     all_scan_name_prefixes,
     cm_init,
+    cm_init_storage,
     cm_connect,
     cm_disconnect,
     cm_is_connected,
@@ -36,6 +37,20 @@ import init, {
     cm_decrypt_hex,
     cm_encrypt_hex,
     cm_get_last_gyro_hex,
+    cm_persist_solve,
+    cm_create_session_persist,
+    cm_load_active_session_solves,
+    cm_get_sessions_json,
+    cm_get_active_session_json,
+    cm_get_active_session_solves_json,
+    cm_get_active_session_id,
+    cm_switch_session,
+    cm_is_cube_solved,
+    cm_reset_flow,
+    cm_get_scramble_state,
+    cm_get_inspection_remaining,
+    cm_generate_new_scramble,
+    cm_get_pending_scramble,
 } from '../../wasm/rouxflow/rouxflow_wasm'
 import { logger } from '../../utils/logger'
 import type { SavedCube } from '../../stores/bluetooth'
@@ -55,8 +70,14 @@ export async function ensureWasm() {
     if (wasmReady) return
     await init()
     cm_init()
+
+    // Initialize storage (IndexedDB), load sessions, ensure DefaultSession
+    const url = import.meta.env.VITE_SUPABASE_URL || ''
+    const key = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+    await cm_init_storage(url || undefined, key || undefined)
+
     wasmReady = true
-    logger.info('WASM initialized')
+    logger.info('WASM + storage initialized')
 
     // Expose gyro debug on window for console use
     ;(window as any).gyroDebug = {
@@ -164,6 +185,20 @@ export {
     cm_handle_scramble_move,
     cm_set_solving,
     cm_record_solve,
+    // New session query functions
+    cm_get_sessions_json,
+    cm_get_active_session_json,
+    cm_get_active_session_solves_json,
+    cm_get_active_session_id,
+    cm_switch_session,
+    cm_create_session_persist,
+    cm_load_active_session_solves,
+    cm_is_cube_solved,
+    cm_reset_flow,
+    cm_get_scramble_state,
+    cm_get_inspection_remaining,
+    cm_generate_new_scramble,
+    cm_get_pending_scramble,
 }
 
 // Wrapper functions that parse JSON from WASM (avoids wasm_bindgen alloc churn)
@@ -207,7 +242,7 @@ function blePacketHandler(event: Event) {
     const bytes = new Uint8Array(value.buffer)
     const timestamp = performance.now() / 1000.0
 
-    // Forward to WASM CubeManager (free function, no struct)
+    // Forward to WASM AppState (free function, no struct)
     const actionsJson = cm_process_ble_packet(bytes, timestamp)
 
     // Notify Vue that WASM state changed (facelets, orientation, device info, etc.)
@@ -239,6 +274,17 @@ async function handleCoreAction(action: any) {
     switch (action.type) {
         case 'SaveSolve': {
             logger.debug('SaveSolve action received', action.data)
+            // Persist solve to IndexedDB
+            const sessionId = cm_get_active_session_id()
+            if (sessionId) {
+                try {
+                    await cm_persist_solve(sessionId, JSON.stringify(action.data))
+                    logger.info('Solve persisted to IndexedDB')
+                } catch (e) {
+                    logger.error('Failed to persist solve:', e)
+                }
+            }
+            _onWasmStateChanged?.()
             break
         }
         case 'DemoteSession': {
@@ -378,7 +424,6 @@ export async function finalizeConnection(device: BluetoothDevice, cubeDef: any, 
         }
 
         // Send initial request commands to activate the cube's notification stream
-        // (matches bt-test sequence: wait, then request battery/hardware/facelets)
         if (commandCharacteristic) {
             const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
             await delay(400)
@@ -485,6 +530,7 @@ export async function disconnect(): Promise<void> {
 }
 
 // --- Storage operations (delegated to WASM StorageManager) ---
+// These still use WasmStorageManager for cube operations (not migrated yet)
 
 export async function getSessions(): Promise<any[]> {
     const storage = await getStorage()

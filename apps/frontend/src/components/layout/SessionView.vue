@@ -19,7 +19,7 @@ const isWCAMode = computed(() => sessionStore.activeSession?.session_type === 'W
 
 <template>
   <div class="w-full h-full flex flex-col p-[2vmin] overflow-hidden gap-[2vh]">
-    
+
     <!-- Session Content -->
     <div class="flex-1 flex flex-col overflow-hidden gap-[2vh] animate-in fade-in duration-1000">
       <!-- Top Bar -->
@@ -40,8 +40,16 @@ const isWCAMode = computed(() => sessionStore.activeSession?.session_type === 'W
         <!-- Center Logic: Scramble + Timer -->
         <main class="lg:col-span-2 flex flex-col items-center justify-between py-[4vh] gap-[4vh]">
           <div class="w-full">
+            <!-- Idle + not solved: prompt user -->
+            <div v-if="timer.flowState === 'Idle' && !timer.isCubeSolved"
+                 class="w-full text-center p-[2vmin] bg-amber-500/10 rounded-[2vmin] border border-amber-500/20">
+              <div class="text-amber-400 text-[3vmin] font-bold">Solve your cube to start</div>
+              <div class="text-amber-500/60 text-[1.5vmin] mt-[1vh]">The cube must be in solved state to begin a scramble</div>
+            </div>
+
+            <!-- Scrambling / Inspection: show scramble display -->
             <ScrambleDisplay
-              scramble="U' R2 U B2 D2 F2 L2 D' R2 F2 U L' F D2 B' D2 R' U B' L F'"
+              v-else-if="timer.flowState === 'Scrambling' || timer.flowState === 'Inspection' || timer.flowState === 'Idle'"
               class="transform transition-all"
             />
           </div>
@@ -69,7 +77,7 @@ const isWCAMode = computed(() => sessionStore.activeSession?.session_type === 'W
     </div>
 
     <!-- Free Mode Decision Overlay -->
-    <Transition 
+    <Transition
       enter-active-class="transition duration-500 ease-out"
       enter-from-class="opacity-0 scale-95"
       enter-to-class="opacity-100 scale-100"
@@ -83,20 +91,24 @@ const isWCAMode = computed(() => sessionStore.activeSession?.session_type === 'W
              <h2 class="text-[5vmin] font-black italic text-white leading-none tracking-tighter uppercase">Solve Finished</h2>
              <p class="text-[1.5vmin] text-slate-500 mt-[1vh] font-bold uppercase tracking-widest">Nice Work!</p>
            </header>
-           
+
            <div class="text-[15vmin] font-light text-indigo-400 leading-none tabular-nums italic">
              {{ timer.formattedTime }}s
            </div>
 
+           <div v-if="timer.pendingScramble" class="text-[1.5vmin] text-slate-500">
+             Next: <span class="text-slate-400 font-mono">{{ timer.pendingScramble }}</span>
+           </div>
+
            <div class="flex gap-[4vmin] justify-center w-full">
-             <button 
+             <button
                 @click="router.push({ name: 'Analysis', params: { solveId: 'current' } })"
                 class="flex-1 py-[3vh] px-[4vw] rounded-[3vmin] bg-slate-800 text-slate-300 font-bold text-[3vmin] hover:bg-slate-700 hover:text-white transition-all transform hover:scale-105 active:scale-95"
              >
                 Deep Analysis
              </button>
-             <button 
-                @click="timer.reset()" 
+             <button
+                @click="timer.reset()"
                 class="flex-1 py-[3vh] px-[4vw] rounded-[3vmin] bg-indigo-600 text-white font-bold text-[3vmin] shadow-lg shadow-indigo-600/20 hover:bg-indigo-500 transition-all transform hover:scale-105 active:scale-95"
              >
                 Next Scramble

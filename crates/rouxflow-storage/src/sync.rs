@@ -89,6 +89,10 @@ impl Storage for StorageManager {
         self.local.save_solve(session_id, solve).await
     }
 
+    async fn get_solves(&self, session_id: &str) -> Result<Vec<Solve>, StorageError> {
+        self.local.get_solves(session_id).await
+    }
+
     async fn demote_session(&self, session_id: &str) -> Result<(), StorageError> {
         self.local.demote_session(session_id).await
     }

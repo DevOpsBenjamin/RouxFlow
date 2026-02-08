@@ -109,6 +109,11 @@ impl Storage for CloudStorage {
         Ok(())
     }
 
+    async fn get_solves(&self, _session_id: &str) -> Result<Vec<Solve>, StorageError> {
+        // Cloud solves not yet implemented
+        Ok(Vec::new())
+    }
+
     async fn demote_session(&self, _session_id: &str) -> Result<(), StorageError> {
         // Cloud sessions not yet implemented
         Ok(())
