@@ -10,9 +10,9 @@ let rafHandle: number | null = null
 function renderLoop() {
   // Query WASM for latest state (returns JSON strings to avoid Vec alloc churn)
   const facelets = new Uint8Array(JSON.parse(cm_get_facelets()))
-  // TODO: gyro orientation disabled — causes rendering issues, needs investigation
-  // const [x, y, z, w] = JSON.parse(cm_get_orientation())
-  const [x, y, z, w] = [0, 0, 0, 1] // identity quaternion
+
+  // Read gyro orientation from WASM and pass to renderer
+  const [x, y, z, w] = JSON.parse(cm_get_orientation()) as [number, number, number, number]
 
   // Update WASM render state
   update_render_state(facelets, x, y, z, w)

@@ -6,7 +6,7 @@
 use std::cell::{Cell, RefCell};
 use wasm_bindgen::prelude::*;
 use rouxflow_bluetoothcube::codec::{self, CubeCommand, CubeEvent, CubeProtocol};
-use rouxflow_core::cube::CubeMove;
+use rouxflow_core::cube::{CubeMove, facelet::Color as FaceletColor};
 use rouxflow_core::session::CoreAction;
 
 // ========== INIT ==========
@@ -485,6 +485,10 @@ impl WasmStorageManager {
 struct CubeManagerState {
     inner: rouxflow_core::CubeManager,
     protocol: Option<Box<dyn CubeProtocol>>,
+    /// Logical cube state — tracks moves and produces facelets for rendering
+    cube_logic: rouxflow_core::cube::CubeState,
+    /// Last decrypted gyro packet as hex string (for debug)
+    last_gyro_hex: String,
 }
 
 thread_local! {
@@ -524,9 +528,15 @@ fn exit_wasm() {
 #[wasm_bindgen]
 pub fn cm_init() {
     CM_STATE.with(|s| {
+        let cube_logic = rouxflow_core::cube::CubeState::new();
+        let mut cm = rouxflow_core::CubeManager::new();
+        // Set initial facelets to solved state (not all-zeros)
+        cm.update_facelets(&cube_logic.facelets());
         *s.borrow_mut() = Some(CubeManagerState {
-            inner: rouxflow_core::CubeManager::new(),
+            inner: cm,
             protocol: None,
+            cube_logic,
+            last_gyro_hex: String::new(),
         });
     });
 }
@@ -557,6 +567,9 @@ pub fn cm_connect(device_name: String, mac_address: String, protocol_name: Strin
         let has_gyro = protocol.has_gyro();
         st.protocol = Some(protocol);
         st.inner.connect(device_name, mac_address, protocol_name, has_gyro);
+        // Reset logical cube to solved; will be overwritten by RawFacelets from cube
+        st.cube_logic = rouxflow_core::cube::CubeState::new();
+        st.inner.update_facelets(&st.cube_logic.facelets());
 
         Ok(())
     });
@@ -612,6 +625,11 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
         let decrypted = protocol.decrypt(raw_data);
         let events = protocol.decode_event(&decrypted);
 
+        // Store decrypted hex if any event is Gyro (for gyroDebug.show())
+        if events.iter().any(|e| matches!(e, CubeEvent::Gyro { .. })) {
+            st.last_gyro_hex = decrypted.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
+        }
+
         let mut actions: Vec<String> = Vec::new();
 
         for event in events {
@@ -624,6 +642,11 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     let notation = cube_move.notation();
 
                     st.inner.record_move(notation.clone());
+                    // Apply move to logical cube and update render facelets
+                    st.cube_logic.apply_move(&notation);
+                    st.inner.update_facelets(&st.cube_logic.facelets());
+                    // Queue slice animation in the renderer (0.15s like standalone)
+                    rouxflow_render::queue_move_anim(notation.clone(), 0.15);
 
                     let action = st.inner.handle_scramble_move(&notation, timestamp);
                     if !action.is_empty() {
@@ -654,6 +677,8 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     if !action.is_empty() {
                         actions.push(action);
                     }
+
+                    // GyroRaw debug disabled (was spamming logs)
                 }
                 CubeEvent::Battery { level } => {
                     st.inner.update_battery(*level);
@@ -671,6 +696,23 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                         r#"{{"type":"Facelets","data":{{"cp":{:?},"co":{:?},"ep":{:?},"eo":{:?}}}}}"#,
                         cp, co, ep, eo
                     ));
+                }
+                CubeEvent::RawFacelets { facelet_string } => {
+                    // Parse 54-char facelet string (URFDLB order) into logical cube state
+                    let colors: Vec<FaceletColor> = facelet_string.chars().map(|c| match c {
+                        'U' => FaceletColor::White,
+                        'R' => FaceletColor::Red,
+                        'F' => FaceletColor::Green,
+                        'D' => FaceletColor::Yellow,
+                        'L' => FaceletColor::Orange,
+                        'B' => FaceletColor::Blue,
+                        _ => FaceletColor::White,
+                    }).collect();
+                    if colors.len() == 54 {
+                        st.cube_logic.logic.facelets = colors;
+                        st.inner.update_facelets(&st.cube_logic.facelets());
+                    }
+                    actions.push(format!(r#"{{"type":"RawFacelets","data":"{}"}}"#, facelet_string));
                 }
                 _ => {
                     let action = handle_cube_event(&event, st.inner.get_session_manager_mut());
@@ -909,4 +951,89 @@ pub fn cm_protocol_requires_mac(protocol: &str) -> bool {
 #[wasm_bindgen]
 pub fn cm_is_valid_mac_format(device_id: &str) -> bool {
     rouxflow_core::CubeManager::is_valid_mac_format(device_id)
+}
+
+// ========== Debug: gyro raw hex ==========
+
+/// Get the last decrypted gyro packet as hex string.
+/// Usage from console: gyroDebug.show()
+#[wasm_bindgen]
+pub fn cm_get_last_gyro_hex() -> String {
+    CM_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(
+            || "No state".to_string(),
+            |st| {
+                if st.last_gyro_hex.is_empty() {
+                    "No gyro packet received yet".to_string()
+                } else {
+                    st.last_gyro_hex.clone()
+                }
+            },
+        )
+    })
+}
+
+// ========== Debug: decrypt/encrypt hex strings ==========
+
+/// Decrypt a hex string using the current protocol. Returns decrypted hex.
+/// Usage from console: cubeDebug.decode("90 5c 36 ...")
+#[wasm_bindgen]
+pub fn cm_decrypt_hex(hex_input: &str) -> String {
+    CM_STATE.with(|s| {
+        let state = s.borrow();
+        let st = match state.as_ref() {
+            Some(st) => st,
+            None => return "ERROR: No cube connected".to_string(),
+        };
+        let protocol = match st.protocol.as_ref() {
+            Some(p) => p,
+            None => return "ERROR: No protocol configured".to_string(),
+        };
+
+        let bytes = parse_hex_string(hex_input);
+        if bytes.is_empty() {
+            return "ERROR: Invalid hex".to_string();
+        }
+
+        let decrypted = protocol.decrypt(&bytes);
+        decrypted.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ")
+    })
+}
+
+/// Encrypt a hex string using the current protocol. Returns encrypted hex.
+/// Usage from console: cubeDebug.encode("a4 00 00 ...")
+#[wasm_bindgen]
+pub fn cm_encrypt_hex(hex_input: &str) -> String {
+    CM_STATE.with(|s| {
+        let state = s.borrow();
+        let st = match state.as_ref() {
+            Some(st) => st,
+            None => return "ERROR: No cube connected".to_string(),
+        };
+        let protocol = match st.protocol.as_ref() {
+            Some(p) => p,
+            None => return "ERROR: No protocol configured".to_string(),
+        };
+
+        let bytes = parse_hex_string(hex_input);
+        if bytes.is_empty() {
+            return "ERROR: Invalid hex".to_string();
+        }
+
+        let encrypted = protocol.encrypt(&bytes);
+        encrypted.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ")
+    })
+}
+
+fn parse_hex_string(hex: &str) -> Vec<u8> {
+    let hex_clean: String = hex.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+    let mut bytes = Vec::new();
+    let mut i = 0;
+    while i + 1 < hex_clean.len() {
+        if let Ok(b) = u8::from_str_radix(&hex_clean[i..i + 2], 16) {
+            bytes.push(b);
+        }
+        i += 2;
+    }
+    bytes
 }

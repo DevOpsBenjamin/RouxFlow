@@ -33,6 +33,9 @@ import init, {
     cm_needs_mac_input,
     cm_requires_handshake,
     cm_handshake_data,
+    cm_decrypt_hex,
+    cm_encrypt_hex,
+    cm_get_last_gyro_hex,
 } from '../../wasm/rouxflow/rouxflow_wasm'
 import { logger } from '../../utils/logger'
 import type { SavedCube } from '../../stores/bluetooth'
@@ -54,6 +57,54 @@ export async function ensureWasm() {
     cm_init()
     wasmReady = true
     logger.info('WASM initialized')
+
+    // Expose gyro debug on window for console use
+    ;(window as any).gyroDebug = {
+        /** Print last decrypted gyro packet hex: gyroDebug.show() */
+        show: () => {
+            const hex = cm_get_last_gyro_hex()
+            console.log('Last gyro hex:', hex)
+            // Also show individual bytes for easier analysis
+            if (hex && !hex.startsWith('No') && !hex.startsWith('ERROR')) {
+                const bytes = hex.split(' ')
+                console.log(`  Opcode: 0x${bytes[0]}`)
+                console.log(`  Bytes[1-2]:  ${bytes.slice(1, 3).join(' ')}  (qw?)`)
+                console.log(`  Bytes[3-4]:  ${bytes.slice(3, 5).join(' ')}  (qx?)`)
+                console.log(`  Bytes[5-6]:  ${bytes.slice(5, 7).join(' ')}  (qy?)`)
+                console.log(`  Bytes[7-8]:  ${bytes.slice(7, 9).join(' ')}  (qz?)`)
+                console.log(`  Bytes[9-10]: ${bytes.slice(9, 11).join(' ')}  (velocity?)`)
+                console.log(`  Rest:        ${bytes.slice(11).join(' ')}`)
+            }
+            return hex
+        },
+    }
+
+    // Expose debug tools on window for console use
+    ;(window as any).cubeDebug = {
+        /** Decrypt encrypted hex: cubeDebug.decode("90 5c 36 ...") */
+        decode: (hex: string) => {
+            const result = cm_decrypt_hex(hex)
+            console.log('Decrypted:', result)
+            return result
+        },
+        /** Encrypt plaintext hex: cubeDebug.encode("a4 00 00 ...") */
+        encode: (hex: string) => {
+            const result = cm_encrypt_hex(hex)
+            console.log('Encrypted:', result)
+            return result
+        },
+        /** Send raw encrypted hex to cube: cubeDebug.send("90 5c 36 ...") */
+        send: async (hex: string) => {
+            if (!commandCharacteristic) {
+                console.error('No command characteristic — cube not connected')
+                return
+            }
+            const bytes = new Uint8Array(hex.trim().split(/\s+/).map(h => parseInt(h, 16)))
+            logBleSend('console', bytes)
+            await commandCharacteristic.writeValue(bytes)
+            console.log('Sent', bytes.length, 'bytes')
+        },
+    }
 }
 
 async function getStorage(): Promise<WasmStorageManager> {
@@ -126,6 +177,23 @@ export function getScanNamePrefixes(): string[] {
     return JSON.parse(all_scan_name_prefixes())
 }
 
+/// Send a reset command to the cube (MoYu V3: 0xAC 0x00 0x01)
+export async function resetCube(): Promise<void> {
+    if (!commandCharacteristic) {
+        logger.warn('Cannot reset: no command characteristic')
+        return
+    }
+    try {
+        const bytesJson = cm_encode_command('reset')
+        const bytes = new Uint8Array(JSON.parse(bytesJson))
+        logBleSend('reset', bytes)
+        await commandCharacteristic.writeValue(bytes)
+        logger.info('Reset command sent')
+    } catch (e) {
+        logger.error('Reset command failed:', e)
+    }
+}
+
 /// Single BLE event listener that forwards packets to WASM
 function blePacketHandler(event: Event) {
     const target = event.target as unknown as BluetoothRemoteGATTCharacteristic
@@ -154,6 +222,14 @@ function blePacketHandler(event: Event) {
     }
 }
 
+let _lastGyroLog = 0
+
+/// Log every BLE TX as hex (for comparing with CubeEast)
+function logBleSend(label: string, bytes: Uint8Array) {
+    const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ')
+    logger.info(`BLE SEND [${label}] → ${hex}`)
+}
+
 /// Handle side effects from Core actions (storage writes only)
 async function handleCoreAction(action: any) {
     switch (action.type) {
@@ -169,8 +245,9 @@ async function handleCoreAction(action: any) {
         }
         case 'WriteBack': {
             if (commandCharacteristic) {
-                await commandCharacteristic.writeValue(new Uint8Array(action.data))
-                logger.debug('WriteBack sent:', action.data.length, 'bytes')
+                const wbBytes = new Uint8Array(action.data)
+                logBleSend('WriteBack', wbBytes)
+                await commandCharacteristic.writeValue(wbBytes)
             }
             break
         }
@@ -186,6 +263,15 @@ async function handleCoreAction(action: any) {
         case 'Pickup':
             logger.info('Cube picked up')
             break
+        case 'GyroRaw': {
+            const now = performance.now()
+            if (now - _lastGyroLog > 1000) {
+                _lastGyroLog = now
+                const d = action.data
+                logger.info(`GyroRaw hex=[${d.hex}] x=${d.x.toFixed(4)} y=${d.y.toFixed(4)} z=${d.z.toFixed(4)} w=${d.w.toFixed(4)} norm=${d.norm.toFixed(4)}`)
+            }
+            break
+        }
         case 'Error':
             logger.error('Core logic error:', action.data)
             break
@@ -281,6 +367,7 @@ export async function finalizeConnection(device: BluetoothDevice, cubeDef: any, 
             const handshakeData = cm_handshake_data()
             if (handshakeData.length > 0 && commandCharacteristic) {
                 const encrypted = new Uint8Array(JSON.parse(cm_encode_command('handshake')))
+                logBleSend('handshake', encrypted)
                 await commandCharacteristic.writeValue(encrypted)
                 logger.info(`Handshake sent for ${protocolName}`)
             }
@@ -295,8 +382,8 @@ export async function finalizeConnection(device: BluetoothDevice, cubeDef: any, 
                 try {
                     const bytesJson = cm_encode_command(cmd)
                     const bytes = new Uint8Array(JSON.parse(bytesJson))
+                    logBleSend(cmd, bytes)
                     await commandCharacteristic.writeValue(bytes)
-                    logger.info(`Sent init command: ${cmd}`)
                     await delay(200)
                 } catch (e) {
                     logger.debug(`Init command ${cmd} not supported: ${e}`)
@@ -352,8 +439,8 @@ async function sendBatteryRequest() {
     try {
         const bytesJson = cm_encode_command('battery')
         const bytes = new Uint8Array(JSON.parse(bytesJson))
+        logBleSend('battery-poll', bytes)
         await commandCharacteristic.writeValue(bytes)
-        logger.debug('Battery poll sent')
     } catch (e) {
         logger.debug('Battery poll failed:', e)
     }

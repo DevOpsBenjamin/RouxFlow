@@ -11,13 +11,27 @@
 use super::{
     AngularVelocity, BitView, CubeCommand, CubeEvent, CubeProtocol,
     derive_gan_keys, gan_decrypt, gan_encrypt,
-    parse_quat_component, parse_velocity_component,
 };
 use crate::protocol::moyu_v3::ENCRYPTION_KEYS;
 use rouxflow_core::cube::{Face, Quaternion};
 
+/// Quaternion components are Q14 fixed-point: bit 14 represents 1.0.
+const QUAT_SCALE: f32 = (1u32 << 14) as f32;
+
 /// MoYu V3 face order: "FBUDLR" — used for move encoding and facelet colors.
 const MOYU_FACES: [Face; 6] = [Face::F, Face::B, Face::U, Face::D, Face::L, Face::R];
+
+/// Reset command: 0xA2 (Write Facelets) + solved state in FBUDLR order (3 bits/sticker).
+/// F=000x8, B=001x8, U=010x8, D=011x8, L=100x8, R=101x8, trailing 0x02.
+const SOLVED_STATE_CMD: [u8; 20] = [
+    0xA2, 0x00, 0x00, 0x00,
+    0x24, 0x92, 0x49, // B face (001 x8)
+    0x49, 0x24, 0x92, // U face (010 x8)
+    0x6D, 0xB6, 0xDB, // D face (011 x8)
+    0x92, 0x49, 0x24, // L face (100 x8)
+    0xB6, 0xDB, 0x6D, // R face (101 x8)
+    0x02,
+];
 
 /// Face remapping for facelet parsing: output URFDLB order from FBUDLR storage.
 /// faces[i] is the index into the FBUDLR-ordered face data for output face i.
@@ -207,33 +221,44 @@ impl CubeProtocol for MoYuV3Codec {
                 events
             }
             171 => {
-                // 0xAB — Gyroscope (GAN-style 16-bit sign+magnitude quaternion)
-                // bits 8-23: qw, 24-39: qx, 40-55: qy, 56-71: qz
-                // bits 72-83: angular velocity (3x 4-bit)
-                if decrypted.len() < 10 {
+                // 0xAB — Gyroscope
+                // Data is INTERLEAVED: velocity and quaternion alternate every 2 bytes.
+                //   Byte 0:     opcode (0xAB)
+                //   Byte 1-2:   angular rate A
+                //   Byte 3-4:   qw (LE int16 / 16384)
+                //   Byte 5-6:   angular rate B
+                //   Byte 7-8:   qx (LE int16 / 16384)
+                //   Byte 9-10:  angular rate C
+                //   Byte 11-12: qy (LE int16 / 16384)
+                //   Byte 13-14: angular rate D
+                //   Byte 15-16: qz (LE int16 / 16384)
+                //   Byte 17-19: padding (0x00)
+                if decrypted.len() < 17 {
                     return vec![];
                 }
 
-                let qw = view.get(8, 16);
-                let qx = view.get(24, 16);
-                let qy = view.get(40, 16);
-                let qz = view.get(56, 16);
+                // Quaternion: little-endian int16 at bytes 3-4, 7-8, 11-12, 15-16
+                let qw = view.get_endian(24, 16, true) as u16 as i16;
+                let qx = view.get_endian(56, 16, true) as u16 as i16;
+                let qy = view.get_endian(88, 16, true) as u16 as i16;
+                let qz = view.get_endian(120, 16, true) as u16 as i16;
 
-                let vx = view.get(72, 4);
-                let vy = view.get(76, 4);
-                let vz = view.get(80, 4);
+                // Angular velocity: bytes 1-2, 5-6, 9-10 (LE int16, raw for now)
+                let vx_raw = view.get_endian(8, 16, true) as u16 as i16;
+                let vy_raw = view.get_endian(40, 16, true) as u16 as i16;
+                let vz_raw = view.get_endian(72, 16, true) as u16 as i16;
 
                 vec![CubeEvent::Gyro {
                     quaternion: Quaternion {
-                        w: parse_quat_component(qw),
-                        x: parse_quat_component(qx),
-                        y: parse_quat_component(qy),
-                        z: parse_quat_component(qz),
+                        w: qw as f32 / QUAT_SCALE,
+                        x: qx as f32 / QUAT_SCALE,
+                        y: qz as f32 / QUAT_SCALE,  // gyro Z (up) → renderer Y (up)
+                        z: -(qy as f32) / QUAT_SCALE,  // gyro -Y → renderer Z (roll)
                     },
                     velocity: Some(AngularVelocity {
-                        x: parse_velocity_component(vx),
-                        y: parse_velocity_component(vy),
-                        z: parse_velocity_component(vz),
+                        x: vx_raw as f32,
+                        y: vy_raw as f32,
+                        z: vz_raw as f32,
                     }),
                 }]
             }
@@ -242,14 +267,16 @@ impl CubeProtocol for MoYuV3Codec {
     }
 
     fn create_command(&self, cmd: CubeCommand) -> Option<Vec<u8>> {
-        let opcode = match cmd {
-            CubeCommand::RequestHardware => 161, // 0xA1
-            CubeCommand::RequestFacelets => 163, // 0xA3
-            CubeCommand::RequestBattery => 164,  // 0xA4
-            CubeCommand::RequestReset => return None,
-        };
         let mut msg = vec![0u8; 20];
-        msg[0] = opcode;
+        match cmd {
+            CubeCommand::RequestHardware => { msg[0] = 0xA1; }
+            CubeCommand::RequestFacelets => { msg[0] = 0xA3; }
+            CubeCommand::RequestBattery  => { msg[0] = 0xA4; }
+            CubeCommand::RequestReset => {
+                // 0xA2 = Write Facelets — send solved state (FBUDLR, 3 bits/sticker)
+                msg.copy_from_slice(&SOLVED_STATE_CMD);
+            }
+        }
         Some(msg)
     }
 

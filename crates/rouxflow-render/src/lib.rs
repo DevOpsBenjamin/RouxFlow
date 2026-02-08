@@ -1,30 +1,39 @@
-//! 3D cube rendering for RouxFlow using three-d and web-sys.
+//! 3D cube rendering for RouxFlow using three-d.
 //!
-//! This crate is WASM-only (uses browser APIs). Dependency gating in Cargo.toml
-//! ensures it only compiles for wasm32 targets.
+//! Shared `RenderState` works on both native and WASM targets.
+//! WASM-specific API (init_renderer, etc.) is behind `cfg(target_arch = "wasm32")`.
 
 use three_d::*;
+
+#[cfg(target_arch = "wasm32")]
 use std::rc::Rc;
+#[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
 
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 // CGMath types used by three-d
+#[cfg(target_arch = "wasm32")]
 struct SharedState {
     raw_rotation: Quaternion<f32>,
     rotation_offset: Quaternion<f32>,
     display_rotation: Quaternion<f32>,
     has_gyro: bool,
     facelets: Vec<u8>,
+    pending_move: Option<(String, f32)>,
 }
 
 // Thread-local global state to allow access across the WASM boundary
+#[cfg(target_arch = "wasm32")]
 thread_local! {
     static STATE: Rc<RefCell<Option<SharedState>>> = Rc::new(RefCell::new(None));
 }
 
 // Helper to setup requestAnimationFrame
+#[cfg(target_arch = "wasm32")]
 fn request_animation_frame(f: &Closure<dyn FnMut()>) {
     web_sys::window()
         .unwrap()
@@ -170,7 +179,7 @@ impl RenderState {
 
         let camera = Camera::new_perspective(
             viewport,
-            vec3(11.0, 6.0, 7.0), // User's preferred orbit view
+            vec3(7.0, 6.0, 11.0), // Green front, Red right, White top
             vec3(0.0, 0.0, 0.0),
             vec3(0.0, 1.0, 0.0),
             degrees(45.0),
@@ -377,6 +386,7 @@ impl RenderState {
 // ========== WASM API (for web) ==========
 // These are public functions callable from rouxflow-wasm entry point.
 
+#[cfg(target_arch = "wasm32")]
 pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
 
@@ -413,6 +423,7 @@ pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
             display_rotation: identity,
             has_gyro: false,
             facelets: vec![0; 54], // Start with correct size
+            pending_move: None,
         });
     });
 
@@ -447,10 +458,22 @@ pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
         };
         render_state.set_viewport(viewport);
 
-        // Read rotation and facelets from state
-        let (display_rotation, facelets) = loop_state_rc.borrow().as_ref()
-            .map(|s| (s.display_rotation, s.facelets.clone()))
-            .unwrap_or((Quaternion::new(1.0, 0.0, 0.0, 0.0), Vec::new()));
+        // Read rotation, facelets, and pending move from state
+        let (display_rotation, facelets, pending_move) = {
+            let mut guard = loop_state_rc.borrow_mut();
+            match guard.as_mut() {
+                Some(s) => {
+                    let pm = s.pending_move.take();
+                    (s.display_rotation, s.facelets.clone(), pm)
+                }
+                None => (Quaternion::new(1.0, 0.0, 0.0, 0.0), Vec::new(), None)
+            }
+        };
+
+        // Trigger move animation if a new move arrived
+        if let Some((move_str, duration)) = pending_move {
+            render_state.trigger_move_anim(&move_str, duration);
+        }
 
         render_state.update_cube_state(&facelets, None);
         render_state.display_rotation = display_rotation;
@@ -469,6 +492,7 @@ pub fn init_renderer(canvas_id: String) -> Result<(), JsValue> {
     Ok(())
 }
 
+#[cfg(target_arch = "wasm32")]
 pub fn set_gyro_enabled(enabled: bool) {
     STATE.with(|s| {
         if let Some(state) = s.borrow_mut().as_mut() {
@@ -483,6 +507,17 @@ pub fn set_gyro_enabled(enabled: bool) {
     });
 }
 
+/// Queue a move animation to be picked up by the render loop.
+#[cfg(target_arch = "wasm32")]
+pub fn queue_move_anim(move_str: String, duration_secs: f32) {
+    STATE.with(|s| {
+        if let Some(state) = s.borrow_mut().as_mut() {
+            state.pending_move = Some((move_str, duration_secs));
+        }
+    });
+}
+
+#[cfg(target_arch = "wasm32")]
 pub fn update_render_state(facelets: Vec<u8>, x: f32, y: f32, z: f32, w: f32) {
     STATE.with(|s| {
         if let Some(state) = s.borrow_mut().as_mut() {
@@ -493,6 +528,7 @@ pub fn update_render_state(facelets: Vec<u8>, x: f32, y: f32, z: f32, w: f32) {
     });
 }
 
+#[cfg(target_arch = "wasm32")]
 pub fn reset_gyro() {
     STATE.with(|s| {
         if let Some(state) = s.borrow_mut().as_mut() {
