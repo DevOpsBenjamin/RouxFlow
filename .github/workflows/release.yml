@@ -63,7 +63,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy apps/frontend/dist --project-name=$CF_PAGES_PROJECT --branch=main --no-functions
+          command: pages deploy apps/frontend/dist --project-name=${{ env.CF_PAGES_PROJECT }} --branch=main
 
   # Build Tauri Desktop App (Windows + Linux) - always runs on any tag
   build-tauri:

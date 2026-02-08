@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import TimerDisplay from '../timer/TimerDisplay.vue'
 import SplitStats from '../session/SplitStats.vue'
 import MoveList from '../session/MoveList.vue'
@@ -7,14 +6,8 @@ import SyncStatus from '../cube/SyncStatus.vue'
 import SessionPicker from '../session/SessionPicker.vue'
 import ScrambleDisplay from '../session/ScrambleDisplay.vue'
 import { useTimerStore } from '../../stores/timer'
-import { useSessionStore } from '../../stores/session'
-import { useRouter } from 'vue-router'
 
-const router = useRouter()
 const timer = useTimerStore()
-const sessionStore = useSessionStore()
-
-const isWCAMode = computed(() => sessionStore.activeSession?.session_type === 'WCA')
 </script>
 
 <template>
@@ -76,46 +69,5 @@ const isWCAMode = computed(() => sessionStore.activeSession?.session_type === 'W
       </div>
     </div>
 
-    <!-- Free Mode Decision Overlay -->
-    <Transition
-      enter-active-class="transition duration-500 ease-out"
-      enter-from-class="opacity-0 scale-95"
-      enter-to-class="opacity-100 scale-100"
-      leave-active-class="transition duration-300 ease-in"
-      leave-from-class="opacity-100 scale-100"
-      leave-to-class="opacity-0 scale-95"
-    >
-      <div v-if="timer.flowState === 'Summary' && !isWCAMode" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-[5vmin]">
-        <div class="bg-slate-900 border border-slate-800 rounded-[5vmin] p-[8vmin] max-w-[60vw] w-full shadow-2xl space-y-[6vh] text-center animate-in fade-in zoom-in duration-500">
-           <header>
-             <h2 class="text-[5vmin] font-black italic text-white leading-none tracking-tighter uppercase">Solve Finished</h2>
-             <p class="text-[1.5vmin] text-slate-500 mt-[1vh] font-bold uppercase tracking-widest">Nice Work!</p>
-           </header>
-
-           <div class="text-[15vmin] font-light text-indigo-400 leading-none tabular-nums italic">
-             {{ timer.formattedTime }}s
-           </div>
-
-           <div v-if="timer.pendingScramble" class="text-[1.5vmin] text-slate-500">
-             Next: <span class="text-slate-400 font-mono">{{ timer.pendingScramble }}</span>
-           </div>
-
-           <div class="flex gap-[4vmin] justify-center w-full">
-             <button
-                @click="router.push({ name: 'Analysis', params: { solveId: 'current' } })"
-                class="flex-1 py-[3vh] px-[4vw] rounded-[3vmin] bg-slate-800 text-slate-300 font-bold text-[3vmin] hover:bg-slate-700 hover:text-white transition-all transform hover:scale-105 active:scale-95"
-             >
-                Deep Analysis
-             </button>
-             <button
-                @click="timer.reset()"
-                class="flex-1 py-[3vh] px-[4vw] rounded-[3vmin] bg-indigo-600 text-white font-bold text-[3vmin] shadow-lg shadow-indigo-600/20 hover:bg-indigo-500 transition-all transform hover:scale-105 active:scale-95"
-             >
-                Next Scramble
-             </button>
-           </div>
-        </div>
-      </div>
-    </Transition>
   </div>
 </template>

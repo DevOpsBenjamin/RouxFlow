@@ -66,6 +66,8 @@ pub struct ScrambleValidator {
     pub scramble: Vec<String>,
     /// Expanded for validation: ["R", "U", "U", "L'"] — double moves split into quarter turns
     expanded: Vec<String>,
+    /// True for positions that are halves of a double move (accept either CW or CCW)
+    is_double_half: Vec<bool>,
     /// Maps each expanded index → original scramble index (for display highlighting)
     display_map: Vec<usize>,
     /// Current position in expanded sequence
@@ -79,18 +81,22 @@ impl ScrambleValidator {
     pub fn new(scramble_str: &str) -> Self {
         let scramble: Vec<String> = scramble_str.split_whitespace().map(|s| s.to_string()).collect();
         let mut expanded = Vec::new();
+        let mut is_double_half = Vec::new();
         let mut display_map = Vec::new();
 
         for (i, m) in scramble.iter().enumerate() {
             if m.ends_with("2") {
-                // "U2" → two quarter turns "U", "U"
+                // "U2" → two quarter turns "U", "U" — accept either U or U'
                 let face = &m[..m.len()-1];
                 expanded.push(face.to_string());
                 expanded.push(face.to_string());
+                is_double_half.push(true);
+                is_double_half.push(true);
                 display_map.push(i);
                 display_map.push(i);
             } else {
                 expanded.push(m.clone());
+                is_double_half.push(false);
                 display_map.push(i);
             }
         }
@@ -98,6 +104,7 @@ impl ScrambleValidator {
         Self {
             scramble,
             expanded,
+            is_double_half,
             display_map,
             current_index: 0,
             last_move_time: 0.0,
@@ -116,21 +123,34 @@ impl ScrambleValidator {
         }
     }
 
+    /// Check if two moves target the same face (e.g. "D" and "D'" both target D)
+    fn same_face(a: &str, b: &str) -> bool {
+        a.chars().next() == b.chars().next()
+    }
+
     pub fn handle_move(&mut self, move_str: &str, timestamp: f64) -> bool {
         if self.is_invalid {
             return false;
         }
 
         // 1. Check if it's the expected move and we have no pending mistakes
-        if self.mistakes.is_empty() && self.current_index < self.expanded.len() && move_str == self.expanded[self.current_index] {
-            // Check speed - only if not the first move
-            if self.last_move_time > 0.0 && timestamp - self.last_move_time > 10.0 {
-                self.is_invalid = true;
-                return false;
+        if self.mistakes.is_empty() && self.current_index < self.expanded.len() {
+            let matches = if self.is_double_half[self.current_index] {
+                // For double-move halves: accept any quarter turn of same face (U or U' for U2)
+                Self::same_face(move_str, &self.expanded[self.current_index])
+            } else {
+                move_str == self.expanded[self.current_index]
+            };
+
+            if matches {
+                // Store actual move so undo logic works correctly
+                if self.is_double_half[self.current_index] {
+                    self.expanded[self.current_index] = move_str.to_string();
+                }
+                self.current_index += 1;
+                self.last_move_time = timestamp;
+                return true;
             }
-            self.current_index += 1;
-            self.last_move_time = timestamp;
-            return true;
         }
 
         // 2. Check if it's an undo of a mistake

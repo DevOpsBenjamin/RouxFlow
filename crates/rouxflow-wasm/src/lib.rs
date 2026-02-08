@@ -831,28 +831,23 @@ fn flow_coordinate(st: &mut WasmAppState, timestamp: f64, actions: &mut Vec<Stri
             if !action.is_empty() { actions.push(action); }
         }
         FlowState::Solving => {
-            // Check if cube is solved → auto-complete
+            // Check if cube is solved → auto-complete + immediately chain to next scramble
             if st.cube_logic.is_solved() {
                 let time_ms = st.inner.timer.get_current_time_ms() as u32;
                 let moves_json = st.inner.timer.get_moves_json();
                 let action = st.inner.record_solve(timestamp, time_ms, &moves_json);
                 if !action.is_empty() { actions.push(action); }
-                // Generate next scramble for chaining
+                // Skip Summary: immediately start next scramble
                 let next = generate_scramble();
-                st.inner.session.set_pending_scramble(next);
+                let action2 = st.inner.session.start_scramble(&next);
+                if !action2.is_empty() { actions.push(action2); }
             }
         }
         FlowState::Summary => {
-            // Auto-chain: start next scramble from pending
-            if let Some(scramble) = st.inner.session.get_pending_scramble().map(|s| s.to_string()) {
-                let action = st.inner.session.start_scramble(&scramble);
-                if !action.is_empty() { actions.push(action); }
-                // Re-feed this move to the scramble validator
-                if let Some(n) = notation {
-                    let action2 = st.inner.session.handle_scramble_move(n, timestamp);
-                    if !action2.is_empty() { actions.push(action2); }
-                }
-            }
+            // Fallback: if somehow in Summary, auto-chain to next scramble
+            let next = generate_scramble();
+            let action = st.inner.session.start_scramble(&next);
+            if !action.is_empty() { actions.push(action); }
         }
     }
 }
@@ -905,6 +900,7 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     rouxflow_render::queue_move_anim(slice_notation.clone(), 0.15);
 
                     // Scramble: pass individual face moves (scrambles never use M/S/E)
+                    let flow_before = st.inner.session.get_flow_state_enum();
                     if let (
                         CubeEvent::Move { face: f1, direction: d1, .. },
                         CubeEvent::Move { face: f2, direction: d2, .. },
@@ -924,8 +920,11 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                         actions.push(action_json);
                     }
 
-                    // Flow coordinator after slice move
-                    flow_coordinate(st, timestamp, &mut actions, None);
+                    // Only coordinate if scramble handling didn't already transition
+                    let flow_after = st.inner.session.get_flow_state_enum();
+                    if flow_before == flow_after {
+                        flow_coordinate(st, timestamp, &mut actions, None);
+                    }
 
                     i += 2;
                     continue;
@@ -944,6 +943,9 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     st.cube_logic.apply_move(&notation);
                     rouxflow_render::queue_move_anim(notation.clone(), 0.15);
 
+                    // Track flow state before scramble handling
+                    let flow_before = st.inner.session.get_flow_state_enum();
+
                     let action = st.inner.session.handle_scramble_move(&notation, timestamp);
                     if !action.is_empty() {
                         actions.push(action);
@@ -955,8 +957,12 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                         }
                     }
 
-                    // Flow coordinator: react to moves based on current state
-                    flow_coordinate(st, timestamp, &mut actions, Some(&notation));
+                    // Only run flow coordinator if scramble handling didn't already transition state
+                    // (prevents last scramble move from skipping Inspection)
+                    let flow_after = st.inner.session.get_flow_state_enum();
+                    if flow_before == flow_after {
+                        flow_coordinate(st, timestamp, &mut actions, Some(&notation));
+                    }
                 }
                 CubeEvent::Gyro { quaternion, .. } => {
                     // Update cube_logic orientation for the 3D renderer
