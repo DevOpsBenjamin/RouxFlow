@@ -1,6 +1,6 @@
 [package]
 name = "rouxflow-core"
-version = "0.0.21"
+version = "0.0.22"
 edition = "2024"
 description = "Core logic for RouxFlow - Roux method speedcubing trainer"
 authors = ["DevOpsBen"]
