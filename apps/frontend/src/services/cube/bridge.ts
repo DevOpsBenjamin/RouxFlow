@@ -537,18 +537,6 @@ export async function disconnect(): Promise<void> {
 }
 
 // --- Storage operations (delegated to WASM StorageManager) ---
-// These still use WasmStorageManager for cube operations (not migrated yet)
-
-export async function getSessions(): Promise<any[]> {
-    const storage = await getStorage()
-    const json = await storage.get_sessions_json()
-    return JSON.parse(json)
-}
-
-export async function createSession(session: any) {
-    const storage = await getStorage()
-    await storage.create_session_json(JSON.stringify(session))
-}
 
 export async function getCubes(userId: string | null = null): Promise<SavedCube[]> {
     const storage = await getStorage()

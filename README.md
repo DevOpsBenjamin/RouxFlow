@@ -7,15 +7,15 @@
 - **Phase split analysis**: Automatic detection of FB, SB, CMLL, and LSE.
 - **LSE Mastery**: Granular breakdown of EO, UL/UR, and L4E.
 - **Performance Coaching**: Identify inefficiencies and CFOP-style habits.
-- **Cross-platform**: Available on Web and Desktop.
+- **PWA**: Available on any device with a modern browser.
 
 ## 🛠️ Built With
 
 - **WASM / Rust**: High-performance core logic.
 - **Vue 3**: Reactive and modern user interface.
-- **Tauri**: Lightweight desktop application wrapper.
 - **Web Bluetooth**: Seamless smart cube integration.
+- **PWA**: Offline-first progressive web app.
 
 ---
 
-*Built with 🦀 and 🧊 by DevOpsBen & Gemini.*
+*Built with 🦀 and 🧊 by DevOpsBen, Gemini & Claude.*

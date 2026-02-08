@@ -38,7 +38,8 @@
       "WebFetch(domain:api.github.com)",
       "WebFetch(domain:crates.io)",
       "WebFetch(domain:kociemba.org)",
-      "Bash(pnpm run build:*)"
+      "Bash(pnpm run build:*)",
+      "Bash(del \"C:\\\\GIT\\\\DevOps\\\\RouxFlow\\\\apps\\\\frontend\\\\src\\\\components\\\\cube\\\\SyncStatus.vue\")"
     ]
   }
 }
