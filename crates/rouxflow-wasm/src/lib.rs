@@ -1244,6 +1244,29 @@ pub fn cm_record_solve(time_ms: u32, moves_json: &str) -> String {
     })
 }
 
+// ========== Session Stats Queries ==========
+
+#[wasm_bindgen]
+pub fn cm_get_session_stats_json() -> String {
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(|| "{}".to_string(), |st| st.inner.session.get_session_stats_json())
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_get_solve_list_json() -> String {
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(|| "[]".to_string(), |st| st.inner.session.get_solve_list_json())
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_get_solve_by_id_json(solve_id: &str) -> String {
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(|| "null".to_string(), |st| st.inner.session.get_solve_by_id_json(solve_id))
+    })
+}
+
 // ========== Flow + Scramble Queries ==========
 
 #[wasm_bindgen]

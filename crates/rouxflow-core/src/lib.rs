@@ -2,6 +2,7 @@ pub mod app_state;
 pub mod bluetooth_manager;
 pub mod cube;
 pub mod session;
+pub mod stats;
 pub mod storage;
 pub mod timer_manager;
 

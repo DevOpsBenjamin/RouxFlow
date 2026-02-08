@@ -51,6 +51,9 @@ import init, {
     cm_get_inspection_remaining,
     cm_generate_new_scramble,
     cm_get_pending_scramble,
+    cm_get_session_stats_json,
+    cm_get_solve_list_json,
+    cm_get_solve_by_id_json,
 } from '../../wasm/rouxflow/rouxflow_wasm'
 import { logger } from '../../utils/logger'
 import type { SavedCube } from '../../stores/bluetooth'
@@ -200,6 +203,9 @@ export {
     cm_get_inspection_remaining,
     cm_generate_new_scramble,
     cm_get_pending_scramble,
+    cm_get_session_stats_json,
+    cm_get_solve_list_json,
+    cm_get_solve_by_id_json,
 }
 
 // Wrapper functions that parse JSON from WASM (avoids wasm_bindgen alloc churn)

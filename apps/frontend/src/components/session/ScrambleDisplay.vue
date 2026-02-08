@@ -62,11 +62,6 @@ const ss = computed(() => timer.scrambleState)
       </template>
     </div>
 
-    <!-- No scramble yet (Idle + solved) -->
-    <div v-else-if="timer.flowState === 'Idle'" class="text-slate-500 text-[2vmin]">
-      Make a move to generate a scramble
-    </div>
-
     <!-- Progress indicator -->
     <div v-if="ss.total > 0 && timer.flowState === 'Scrambling'" class="mt-[1vh] text-[1.5vmin] text-slate-600 uppercase font-bold tracking-widest">
       Move {{ ss.index }} of {{ ss.total }}

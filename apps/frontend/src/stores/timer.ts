@@ -131,6 +131,14 @@ export const useTimerStore = defineStore('timer', () => {
         }
     })
 
+    // Auto-generate scramble when cube is solved and flow is Idle.
+    // immediate: true fires on initial load (WASM is already initialized by this point).
+    watch([flowState, isCubeSolved], ([flow, solved]) => {
+        if (flow === 'Idle' && solved) {
+            generateScramble()
+        }
+    }, { immediate: true })
+
     return {
         time,
         isRunning,

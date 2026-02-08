@@ -8,6 +8,9 @@ import {
     cm_switch_session,
     cm_create_session_persist,
     cm_load_active_session_solves,
+    cm_get_session_stats_json,
+    cm_get_solve_list_json,
+    cm_get_solve_by_id_json,
     onWasmStateChanged,
 } from '../services/cube/bridge'
 import { logger } from '../utils/logger'
@@ -51,6 +54,34 @@ export const useSessionStore = defineStore('session', () => {
         } catch { return [] }
     })
 
+    const sessionStats = computed(() => {
+        _wasmTick.value
+        try {
+            return JSON.parse(cm_get_session_stats_json())
+        } catch { return null }
+    })
+
+    const solveList = computed(() => {
+        _wasmTick.value
+        try {
+            return JSON.parse(cm_get_solve_list_json())
+        } catch { return [] }
+    })
+
+    const selectedSolveId = ref<string | null>(null)
+
+    const selectedSolve = computed(() => {
+        if (!selectedSolveId.value) return null
+        try {
+            const json = cm_get_solve_by_id_json(selectedSolveId.value)
+            return json && json !== 'null' ? JSON.parse(json) : null
+        } catch { return null }
+    })
+
+    function selectSolve(id: string | null) {
+        selectedSolveId.value = id
+    }
+
     // ========== Actions ==========
 
     async function createSession(name: string, type: SessionType) {
@@ -80,6 +111,11 @@ export const useSessionStore = defineStore('session', () => {
         activeSession,
         activeSessionId,
         activeSessionSolves,
+        sessionStats,
+        solveList,
+        selectedSolveId,
+        selectedSolve,
+        selectSolve,
         createSession,
         switchSession,
         bumpWasm,

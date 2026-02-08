@@ -28,6 +28,8 @@ struct SolveRecord {
     moves: String, // JSON-encoded Vec<String>
     date: i64,
     is_valid: bool,
+    #[serde(default)]
+    scramble: Option<String>,
 }
 
 // Intermediate struct for serializing sessions to IndexedDB
@@ -152,6 +154,7 @@ impl Storage for LocalStorage {
                     moves,
                     date: record.date,
                     is_valid: record.is_valid,
+                    scramble: record.scramble,
                 };
                 solve_map.entry(record.session_id).or_default().push(solve);
             }
@@ -216,6 +219,7 @@ impl Storage for LocalStorage {
             moves: serde_json::to_string(&solve.moves).unwrap_or_default(),
             date: solve.date,
             is_valid: solve.is_valid,
+            scramble: solve.scramble.clone(),
         };
 
         store.put(&to_js(&record)?, None).await
@@ -246,6 +250,7 @@ impl Storage for LocalStorage {
                         moves,
                         date: record.date,
                         is_valid: record.is_valid,
+                        scramble: record.scramble,
                     });
                 }
             }

@@ -17,6 +17,8 @@ pub struct Solve {
     pub moves: Vec<String>,
     pub date: i64,
     pub is_valid: bool,
+    #[serde(default)]
+    pub scramble: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -66,8 +68,8 @@ pub struct ScrambleValidator {
     pub scramble: Vec<String>,
     /// Expanded for validation: ["R", "U", "U", "L'"] — double moves split into quarter turns
     expanded: Vec<String>,
-    /// True for positions that are halves of a double move (accept either CW or CCW)
-    is_double_half: Vec<bool>,
+    /// 0 = normal, 1 = first half of double (any direction), 2 = second half (must match first)
+    double_kind: Vec<u8>,
     /// Maps each expanded index → original scramble index (for display highlighting)
     display_map: Vec<usize>,
     /// Current position in expanded sequence
@@ -81,22 +83,22 @@ impl ScrambleValidator {
     pub fn new(scramble_str: &str) -> Self {
         let scramble: Vec<String> = scramble_str.split_whitespace().map(|s| s.to_string()).collect();
         let mut expanded = Vec::new();
-        let mut is_double_half = Vec::new();
+        let mut double_kind = Vec::new();
         let mut display_map = Vec::new();
 
         for (i, m) in scramble.iter().enumerate() {
             if m.ends_with("2") {
-                // "U2" → two quarter turns "U", "U" — accept either U or U'
+                // "U2" → two quarter turns: first accepts any direction, second must match
                 let face = &m[..m.len()-1];
                 expanded.push(face.to_string());
                 expanded.push(face.to_string());
-                is_double_half.push(true);
-                is_double_half.push(true);
+                double_kind.push(1); // first half: any direction of same face
+                double_kind.push(2); // second half: must match first half exactly
                 display_map.push(i);
                 display_map.push(i);
             } else {
                 expanded.push(m.clone());
-                is_double_half.push(false);
+                double_kind.push(0); // normal: exact match
                 display_map.push(i);
             }
         }
@@ -104,7 +106,7 @@ impl ScrambleValidator {
         Self {
             scramble,
             expanded,
-            is_double_half,
+            double_kind,
             display_map,
             current_index: 0,
             last_move_time: 0.0,
@@ -135,16 +137,24 @@ impl ScrambleValidator {
 
         // 1. Check if it's the expected move and we have no pending mistakes
         if self.mistakes.is_empty() && self.current_index < self.expanded.len() {
-            let matches = if self.is_double_half[self.current_index] {
-                // For double-move halves: accept any quarter turn of same face (U or U' for U2)
-                Self::same_face(move_str, &self.expanded[self.current_index])
-            } else {
-                move_str == self.expanded[self.current_index]
+            let matches = match self.double_kind[self.current_index] {
+                1 => {
+                    // First half of double: accept any quarter turn of same face (D or D' for D2)
+                    Self::same_face(move_str, &self.expanded[self.current_index])
+                }
+                2 => {
+                    // Second half of double: must match exactly what was done for the first half
+                    move_str == self.expanded[self.current_index - 1]
+                }
+                _ => {
+                    // Normal move: exact match
+                    move_str == self.expanded[self.current_index]
+                }
             };
 
             if matches {
-                // Store actual move so undo logic works correctly
-                if self.is_double_half[self.current_index] {
+                // For first half of double, store actual move so second half can match it
+                if self.double_kind[self.current_index] == 1 {
                     self.expanded[self.current_index] = move_str.to_string();
                 }
                 self.current_index += 1;
@@ -283,8 +293,10 @@ impl SessionManager {
         }
     }
 
-    /// Populate active session's solves from storage
-    pub fn load_solves_into_active(&mut self, solves: Vec<Solve>) {
+    /// Populate active session's solves from storage.
+    /// Sorts by date to ensure chronological order (IndexedDB returns by key/UUID).
+    pub fn load_solves_into_active(&mut self, mut solves: Vec<Solve>) {
+        solves.sort_by_key(|s| s.date);
         if let Some(session) = &mut self.active_session {
             session.solves = solves.clone();
             // Also sync into sessions list
@@ -437,12 +449,15 @@ impl SessionManager {
 
     pub fn record_solve(&mut self, time_ms: u32, moves_json: &str) -> String {
         let moves: Vec<String> = serde_json::from_str(moves_json).unwrap_or_default();
+        let scramble = self.scramble_validator.as_ref()
+            .map(|v| v.scramble.join(" "));
         let solve = Solve {
             id: uuid::Uuid::new_v4().to_string(),
             time: time_ms,
             moves,
             date: chrono::Utc::now().timestamp_millis(),
             is_valid: true,
+            scramble,
         };
 
         self.flow_state = FlowState::Summary;
@@ -534,6 +549,40 @@ impl SessionManager {
 
     pub fn get_pending_scramble(&self) -> Option<&str> {
         self.pending_scramble.as_deref()
+    }
+
+    // ========== Stats Queries ==========
+
+    pub fn get_session_stats_json(&self) -> String {
+        match &self.active_session {
+            Some(s) => {
+                let stats = crate::stats::compute_session_stats(&s.solves, s.session_type);
+                serde_json::to_string(&stats).unwrap_or_else(|_| "{}".to_string())
+            }
+            None => "{}".to_string(),
+        }
+    }
+
+    pub fn get_solve_list_json(&self) -> String {
+        match &self.active_session {
+            Some(s) => {
+                let list = crate::stats::compute_solve_list(&s.solves);
+                serde_json::to_string(&list).unwrap_or_else(|_| "[]".to_string())
+            }
+            None => "[]".to_string(),
+        }
+    }
+
+    pub fn get_solve_by_id_json(&self, solve_id: &str) -> String {
+        match &self.active_session {
+            Some(s) => {
+                match s.solves.iter().find(|solve| solve.id == solve_id) {
+                    Some(solve) => serde_json::to_string(solve).unwrap_or_else(|_| "null".to_string()),
+                    None => "null".to_string(),
+                }
+            }
+            None => "null".to_string(),
+        }
     }
 
     // ========== Flow State Enum Access ==========
