@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
-import { useUIStore } from '../../stores/ui'
 
+const router = useRouter()
 const auth = useAuthStore()
-const ui = useUIStore()
 
 const newDisplayName = ref(auth.user?.user_metadata?.display_name || auth.user?.user_metadata?.full_name || '')
 const isSaving = ref(false)
@@ -29,7 +29,7 @@ async function handleSave() {
 }
 
 function goBack() {
-  ui.setHome()
+  router.push({ name: 'Home' })
 }
 </script>
 
@@ -87,7 +87,7 @@ function goBack() {
         <h3 class="text-white font-medium">Session Settings</h3>
         <p class="text-xs text-slate-500">More settings coming soon...</p>
       </div>
-      <button @click="auth.signOut(); ui.setLanding()" class="px-6 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm font-medium rounded-xl border border-red-500/20 transition-all">
+      <button @click="auth.signOut(); router.push({ name: 'Landing' })" class="px-6 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm font-medium rounded-xl border border-red-500/20 transition-all">
         {{ auth.isAuthenticated ? 'Sign Out' : 'Exit Guest Mode' }}
       </button>
     </div>

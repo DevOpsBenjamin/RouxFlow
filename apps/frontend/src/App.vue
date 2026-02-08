@@ -38,8 +38,8 @@ watch(() => bt.isConnected, (connected) => {
     />
     <OfflineIndicator />
 
-    <!-- Show Navbar if NOT on Landing -->
-    <Navbar v-if="$route.name !== 'Landing'">
+    <!-- Show Navbar if NOT on Landing, Welcome, or Terms -->
+    <Navbar v-if="!['Landing', 'Welcome', 'Terms'].includes($route.name as string)">
       <template #actions>
         <!-- Custom actions can go here if needed -->
       </template>

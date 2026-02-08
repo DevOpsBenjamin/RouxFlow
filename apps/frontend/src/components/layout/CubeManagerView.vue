@@ -79,8 +79,8 @@ const isGyroSupported = computed(() => {
                   <h3 class="text-[1.8vmin] font-bold text-white">Gyro</h3>
                </div>
 
-               <p class="text-[1.2vmin] text-slate-400 mb-[2vh] leading-relaxed flex-1">
-                 Align physical cube to screen.
+               <p class="text-[2vmin] text-slate-400 mb-[2vh] leading-relaxed flex-1">
+                 Position your cube with white on top and green facing you, then press the button to sync the 3D view with your cube's orientation.
                </p>
 
                <button
@@ -103,8 +103,8 @@ const isGyroSupported = computed(() => {
                   <h3 class="text-[1.8vmin] font-bold text-white">Reset</h3>
                </div>
 
-               <p class="text-[1.2vmin] text-slate-400 mb-[2vh] leading-relaxed flex-1">
-                 Reset cube to solved state.
+               <p class="text-[2vmin] text-slate-400 mb-[2vh] leading-relaxed flex-1">
+                 If your cube is out of sync (e.g. after using it without battery), solve it first, then press this button to reset the synchronization.
                </p>
 
                <button
@@ -124,22 +124,22 @@ const isGyroSupported = computed(() => {
 
              <div class="space-y-[1.5vh]">
                 <div class="flex justify-between items-center p-[1.5vmin] rounded-[1.5vmin] bg-white/5">
-                   <span class="text-[1.4vmin] text-slate-500">Battery</span>
-                   <span class="text-[1.4vmin] font-bold" :class="bt.deviceInfo?.battery_level != null ? 'text-emerald-400' : 'text-slate-600'">
+                   <span class="text-[2vmin] text-slate-500">Battery</span>
+                   <span class="text-[2vmin] font-bold" :class="bt.deviceInfo?.battery_level != null ? 'text-emerald-400' : 'text-slate-600'">
                      {{ bt.deviceInfo?.battery_level != null ? bt.deviceInfo.battery_level + '%' : 'Polling...' }}
                    </span>
                 </div>
                 <div class="flex justify-between items-center p-[1.5vmin] rounded-[1.5vmin] bg-white/5">
-                   <span class="text-[1.4vmin] text-slate-500">Firmware</span>
-                   <span class="text-[1.4vmin] font-mono text-white">{{ bt.deviceInfo?.sw_version || '--' }}</span>
+                   <span class="text-[2vmin] text-slate-500">Firmware</span>
+                   <span class="text-[2vmin] font-mono text-white">{{ bt.deviceInfo?.sw_version || '--' }}</span>
                 </div>
                 <div class="flex justify-between items-center p-[1.5vmin] rounded-[1.5vmin] bg-white/5">
-                   <span class="text-[1.4vmin] text-slate-500">Hardware</span>
-                   <span class="text-[1.4vmin] font-mono text-white">{{ bt.deviceInfo?.hw_version || '--' }}</span>
+                   <span class="text-[2vmin] text-slate-500">Hardware</span>
+                   <span class="text-[2vmin] font-mono text-white">{{ bt.deviceInfo?.hw_version || '--' }}</span>
                 </div>
                 <div class="flex justify-between items-center p-[1.5vmin] rounded-[1.5vmin] bg-white/5">
-                   <span class="text-[1.4vmin] text-slate-500">Gyroscope</span>
-                   <span class="text-[1.4vmin] font-bold" :class="bt.deviceInfo?.has_gyro ? 'text-emerald-400' : 'text-slate-600'">
+                   <span class="text-[2vmin] text-slate-500">Gyroscope</span>
+                   <span class="text-[2vmin] font-bold" :class="bt.deviceInfo?.has_gyro ? 'text-emerald-400' : 'text-slate-600'">
                      {{ bt.deviceInfo?.has_gyro ? 'Supported' : 'Not Available' }}
                    </span>
                 </div>

@@ -29,7 +29,8 @@
       "Bash(sort:*)",
       "Bash(pnpm add:*)",
       "Bash(timeout 20 pnpm dev:*)",
-      "Bash(pnpm build:*)"
+      "Bash(pnpm build:*)",
+      "Bash(pnpm build:wasm:*)"
     ]
   }
 }

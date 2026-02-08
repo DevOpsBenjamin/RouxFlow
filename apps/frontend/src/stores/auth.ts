@@ -230,6 +230,22 @@ export const useAuthStore = defineStore('auth', () => {
         cacheSessionOffline()
     }
 
+    async function acceptDataConsent() {
+        if (!user.value) return
+
+        if (!isOnline.value) {
+            throw new Error('Cannot update consent while offline. Please check your network connection.')
+        }
+
+        const { data, error } = await supabase.auth.updateUser({
+            data: { data_consent_accepted: true }
+        })
+        if (error) throw error
+
+        user.value = data.user
+        cacheSessionOffline()
+    }
+
     return {
         user,
         session,
@@ -244,6 +260,7 @@ export const useAuthStore = defineStore('auth', () => {
         signInWithEmail,
         signUpWithEmail,
         signOut,
-        updateDisplayName
+        updateDisplayName,
+        acceptDataConsent
     }
 })

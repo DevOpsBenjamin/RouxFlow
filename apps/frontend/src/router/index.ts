@@ -8,6 +8,16 @@ const routes = [
     component: () => import('../components/layout/LandingView.vue')
   },
   {
+    path: '/welcome',
+    name: 'Welcome',
+    component: () => import('../components/layout/WelcomePage.vue')
+  },
+  {
+    path: '/terms',
+    name: 'Terms',
+    component: () => import('../components/layout/TermsOfUsePage.vue')
+  },
+  {
     path: '/home',
     name: 'Home',
     component: () => import('../components/layout/HomeView.vue')
@@ -58,6 +68,12 @@ const router = createRouter({
 })
 
 router.beforeEach((to, _from, next) => {
+  // First-visit redirect: show Welcome page if user has never seen it
+  if (!localStorage.getItem('rouxflow_welcomed') && to.name !== 'Welcome' && to.name !== 'Terms') {
+    next({ name: 'Welcome' })
+    return
+  }
+
   if (to.meta.requiresCube && !cm_is_connected()) {
     next({ name: 'BluetoothRequired', query: { from: to.name as string } })
     return

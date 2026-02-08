@@ -8,9 +8,9 @@ import SessionPicker from '../session/SessionPicker.vue'
 import ScrambleDisplay from '../session/ScrambleDisplay.vue'
 import { useTimerStore } from '../../stores/timer'
 import { useSessionStore } from '../../stores/session'
-import { useUIStore } from '../../stores/ui'
+import { useRouter } from 'vue-router'
 
-const ui = useUIStore()
+const router = useRouter()
 const timer = useTimerStore()
 const sessionStore = useSessionStore()
 
@@ -90,7 +90,7 @@ const isWCAMode = computed(() => sessionStore.activeSession?.session_type === 'W
 
            <div class="flex gap-[4vmin] justify-center w-full">
              <button 
-                @click="ui.openAnalysis('current')" 
+                @click="router.push({ name: 'Analysis', params: { solveId: 'current' } })"
                 class="flex-1 py-[3vh] px-[4vw] rounded-[3vmin] bg-slate-800 text-slate-300 font-bold text-[3vmin] hover:bg-slate-700 hover:text-white transition-all transform hover:scale-105 active:scale-95"
              >
                 Deep Analysis

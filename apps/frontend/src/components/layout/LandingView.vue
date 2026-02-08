@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useUIStore } from '../../stores/ui'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 
-const ui = useUIStore()
+const router = useRouter()
 const auth = useAuthStore()
 
 const isLoading = ref(false)
@@ -14,7 +14,7 @@ const email = ref('')
 const password = ref('')
 
 async function continueAsGuest() {
-  ui.setHome()
+  router.push({ name: 'Home' })
 }
 
 async function loginWithGoogle() {
@@ -50,7 +50,7 @@ async function handleEmailAuth() {
       alert('Check your email to confirm your account!')
     } else {
       await auth.signInWithEmail(email.value, password.value)
-      ui.setHome()
+      router.push({ name: 'Home' })
     }
   } catch (e: any) {
     error.value = e.message || 'Authentication failed'
@@ -190,8 +190,8 @@ async function handleEmailAuth() {
     <!-- Footer -->
     <footer class="text-center mt-auto pt-8 w-full max-w-lg">
       <p class="text-[10px] text-slate-600 uppercase tracking-widest font-bold">
-        By continuing, you agree to our 
-        <a href="#" class="text-indigo-400 hover:underline">Terms of Service</a>
+        By continuing, you agree to our
+        <a @click.prevent="router.push({ name: 'Terms' })" href="#" class="text-indigo-400 hover:underline cursor-pointer">Terms of Service</a>
       </p>
     </footer>
   </div>

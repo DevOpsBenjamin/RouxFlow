@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useUIStore } from '../../stores/ui'
+import { useRouter } from 'vue-router'
 
-const ui = useUIStore()
+const router = useRouter()
 </script>
 
 <template>
@@ -29,7 +29,7 @@ const ui = useUIStore()
 
       <div class="pt-4">
         <button 
-          @click="ui.setHome()"
+          @click="router.push({ name: 'Home' })"
           class="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all"
         >
           Back to Dashboard

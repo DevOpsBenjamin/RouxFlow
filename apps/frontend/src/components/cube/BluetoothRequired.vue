@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useUIStore } from '../../stores/ui'
 import { useBluetoothStore } from '../../stores/bluetooth'
 
-const ui = useUIStore()
 const bt = useBluetoothStore()
 const router = useRouter()
 const route = useRoute()
@@ -44,7 +42,7 @@ watch(() => bt.isConnected, (connected) => {
       </p>
 
       <button
-        @click="ui.setSupportedCubes()"
+        @click="router.push({ name: 'SupportedCubes' })"
         class="text-indigo-400 hover:text-indigo-300 font-semibold text-sm underline underline-offset-4 transition-colors"
       >
         View Supported Cubes →

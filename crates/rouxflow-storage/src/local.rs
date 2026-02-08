@@ -88,7 +88,11 @@ impl Storage for LocalStorage {
                             cubes.push(cube);
                         }
                     }
-                    None => cubes.push(cube),
+                    None => {
+                        if cube.user_id.is_none() {
+                            cubes.push(cube);
+                        }
+                    }
                 }
             }
         }
