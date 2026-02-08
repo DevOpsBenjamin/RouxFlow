@@ -670,22 +670,45 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
         let mut i = 0;
         while i < events.len() {
             // Lookahead: try to merge adjacent Move events into slice notation (M/S/E)
+            // The cube firmware reports L+R' for an M move. We apply both individual
+            // face moves to keep facelets in sync with the cube's internal tracking,
+            // but queue a single slice animation and record the slice notation.
             if i + 1 < events.len() {
                 if let Some(slice_notation) = try_merge_slice(&events[i], &events[i + 1]) {
-                    st.cube_logic.apply_move(&slice_notation);
+                    // Apply both individual face moves for correct facelet state
+                    if let (
+                        CubeEvent::Move { face: f1, direction: d1, .. },
+                        CubeEvent::Move { face: f2, direction: d2, .. },
+                    ) = (&events[i], &events[i + 1]) {
+                        let n1 = CubeMove { face: *f1, amount: *d1 }.notation();
+                        let n2 = CubeMove { face: *f2, amount: *d2 }.notation();
+                        st.cube_logic.apply_move(&n1);
+                        st.cube_logic.apply_move(&n2);
+                    }
                     st.inner.update_facelets(&st.cube_logic.facelets());
+
+                    // Record and animate as single slice move
                     st.inner.record_move(slice_notation.clone());
                     rouxflow_render::queue_move_anim(slice_notation.clone(), 0.15);
 
-                    let action = st.inner.handle_scramble_move(&slice_notation, timestamp);
-                    if !action.is_empty() {
-                        actions.push(action);
-                    } else {
-                        let action_json = serde_json::to_string(&CoreAction::Move(slice_notation))
-                            .unwrap_or_default();
-                        if !action_json.is_empty() {
-                            actions.push(action_json);
-                        }
+                    // Scramble: pass individual face moves (scrambles never use M/S/E)
+                    if let (
+                        CubeEvent::Move { face: f1, direction: d1, .. },
+                        CubeEvent::Move { face: f2, direction: d2, .. },
+                    ) = (&events[i], &events[i + 1]) {
+                        let n1 = CubeMove { face: *f1, amount: *d1 }.notation();
+                        let n2 = CubeMove { face: *f2, amount: *d2 }.notation();
+                        let a1 = st.inner.handle_scramble_move(&n1, timestamp);
+                        if !a1.is_empty() { actions.push(a1); }
+                        let a2 = st.inner.handle_scramble_move(&n2, timestamp);
+                        if !a2.is_empty() { actions.push(a2); }
+                    }
+
+                    // Emit slice move action to frontend
+                    let action_json = serde_json::to_string(&CoreAction::Move(slice_notation))
+                        .unwrap_or_default();
+                    if !action_json.is_empty() {
+                        actions.push(action_json);
                     }
 
                     i += 2; // Skip both events

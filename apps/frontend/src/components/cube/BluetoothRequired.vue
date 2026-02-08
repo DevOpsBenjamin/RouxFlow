@@ -1,7 +1,25 @@
 <script setup lang="ts">
+import { watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useUIStore } from '../../stores/ui'
+import { useBluetoothStore } from '../../stores/bluetooth'
 
 const ui = useUIStore()
+const bt = useBluetoothStore()
+const router = useRouter()
+const route = useRoute()
+
+// When cube connects, navigate back to the origin route
+watch(() => bt.isConnected, (connected) => {
+  if (connected) {
+    const from = route.query.from as string
+    if (from) {
+      router.push({ name: from })
+    } else {
+      router.push({ name: 'Session' })
+    }
+  }
+})
 </script>
 
 <template>
@@ -10,7 +28,7 @@ const ui = useUIStore()
       <div class="absolute inset-0 bg-indigo-500/20 blur-3xl rounded-full"></div>
       <div class="relative text-8xl animate-bounce duration-[2000ms]">🧊</div>
     </div>
-    
+
     <div class="max-w-md space-y-4">
       <h2 class="text-4xl font-black italic tracking-tighter text-white uppercase leading-none">
         Bluetooth Cube <span class="text-indigo-400">Required</span>
@@ -24,8 +42,8 @@ const ui = useUIStore()
       <p class="text-slate-500 text-sm">
         Use the <span class="text-indigo-400 font-bold">🔌 Cubes</span> menu in the header to connect your cube.
       </p>
-      
-      <button 
+
+      <button
         @click="ui.setSupportedCubes()"
         class="text-indigo-400 hover:text-indigo-300 font-semibold text-sm underline underline-offset-4 transition-colors"
       >

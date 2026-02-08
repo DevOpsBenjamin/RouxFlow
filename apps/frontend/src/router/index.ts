@@ -59,7 +59,7 @@ const router = createRouter({
 
 router.beforeEach((to, _from, next) => {
   if (to.meta.requiresCube && !cm_is_connected()) {
-    next({ name: 'BluetoothRequired' })
+    next({ name: 'BluetoothRequired', query: { from: to.name as string } })
     return
   }
 

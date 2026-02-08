@@ -18,6 +18,13 @@ watch(() => auth.isAuthenticated, (isLogged) => {
     router.push({ name: 'Home' })
   }
 })
+
+// Redirect to BluetoothRequired when cube disconnects on a requiresCube page
+watch(() => bt.isConnected, (connected) => {
+  if (!connected && router.currentRoute.value.meta.requiresCube) {
+    router.push({ name: 'BluetoothRequired', query: { from: router.currentRoute.value.name as string } })
+  }
+})
 </script>
 
 <template>
