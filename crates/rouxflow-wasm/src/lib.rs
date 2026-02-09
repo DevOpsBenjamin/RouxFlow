@@ -730,10 +730,13 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                 actions.push(action_json);
             }
 
-            // Flow coordination (only if scramble didn't already transition)
-            let flow_after = st.inner.session.get_flow_state_enum();
-            if flow_before == flow_after {
-                flow_coordinate(st, timestamp, &mut actions, Some(&imove.notation));
+            // Flow coordination: only for face/slice moves, not rotations
+            // (rotations during inspection should not start the solve timer)
+            if imove.kind != rouxflow_core::move_interpreter::MoveKind::Rotation {
+                let flow_after = st.inner.session.get_flow_state_enum();
+                if flow_before == flow_after {
+                    flow_coordinate(st, timestamp, &mut actions, Some(&imove.notation));
+                }
             }
         }
 
@@ -856,12 +859,23 @@ pub fn cm_update_timer(timestamp: f64) -> String {
         };
         st.inner.timer.update(timestamp);
 
-        // Check inspection timeout
+        // Check inspection timeout → DNF
         if st.inner.session.get_flow_state_enum() == rouxflow_core::session::FlowState::Inspection {
             if st.inner.session.is_inspection_expired(timestamp) {
-                let action = st.inner.start_solving(timestamp);
-                if !action.is_empty() {
-                    return action;
+                let mut actions = Vec::new();
+                // Record DNF solve
+                let action = st.inner.record_dnf(timestamp);
+                if !action.is_empty() { actions.push(action); }
+                // Chain to next scramble
+                let next = generate_scramble();
+                let action2 = st.inner.session.start_scramble(&next);
+                if !action2.is_empty() { actions.push(action2); }
+                if !actions.is_empty() {
+                    return if actions.len() == 1 {
+                        actions.into_iter().next().unwrap()
+                    } else {
+                        format!("[{}]", actions.join(","))
+                    };
                 }
             }
         }
@@ -1009,8 +1023,7 @@ pub fn cm_get_scramble_state() -> String {
 }
 
 #[wasm_bindgen]
-pub fn cm_get_inspection_remaining() -> f64 {
-    let now = js_sys::Date::now() / 1000.0;
+pub fn cm_get_inspection_remaining(now: f64) -> f64 {
     APP_STATE.with(|s| {
         s.borrow().as_ref().map_or(0.0, |st| st.inner.session.get_inspection_remaining(now))
     })

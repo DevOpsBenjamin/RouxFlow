@@ -48,6 +48,12 @@ impl AppState {
         self.timer.record_interpreted_move(m);
     }
 
+    /// Record a DNF (inspection timeout): stops timer and saves DNF solve.
+    pub fn record_dnf(&mut self, timestamp: f64) -> String {
+        self.timer.stop(timestamp);
+        self.session.record_dnf()
+    }
+
     /// Disconnect: clears bluetooth state, stops timer, resets interpreter.
     pub fn disconnect(&mut self) {
         self.bluetooth.disconnect();

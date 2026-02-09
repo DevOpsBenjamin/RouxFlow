@@ -23,6 +23,7 @@ pub struct SolveListEntry {
     pub turns: usize,
     pub tps: f64,
     pub is_best: bool,
+    pub penalty: Option<String>,
 }
 
 /// Trimmed mean of `n` values: remove best and worst, average the rest.
@@ -75,7 +76,10 @@ pub fn compute_tps(solve: &Solve) -> f64 {
 
 pub fn compute_session_stats(solves: &[Solve], session_type: SessionType) -> SessionStats {
     // Sort by date to ensure chronological order (current Ao5 = last 5 chronologically)
-    let mut valid: Vec<&Solve> = solves.iter().filter(|s| s.is_valid).collect();
+    // Exclude DNF solves from numerical stats
+    let mut valid: Vec<&Solve> = solves.iter()
+        .filter(|s| s.is_valid && s.penalty.is_none())
+        .collect();
     valid.sort_by_key(|s| s.date);
     let times: Vec<u32> = valid.iter().map(|s| s.time).collect();
 
@@ -124,20 +128,26 @@ pub fn compute_solve_list(solves: &[Solve]) -> Vec<SolveListEntry> {
     let mut sorted: Vec<&Solve> = solves.iter().filter(|s| s.is_valid).collect();
     sorted.sort_by_key(|s| s.date);
 
-    let best_time = sorted.iter().map(|s| s.time).min();
+    // Best time only among non-DNF solves
+    let best_time = sorted.iter()
+        .filter(|s| s.penalty.is_none())
+        .map(|s| s.time)
+        .min();
 
     let mut entries: Vec<SolveListEntry> = sorted
         .iter()
         .enumerate()
         .map(|(i, s)| {
             let tps = compute_tps(s);
+            let is_dnf = s.penalty.as_deref() == Some("DNF");
             SolveListEntry {
                 id: s.id.clone(),
                 index: i + 1,
                 time_ms: s.time,
                 turns: s.moves.len(),
                 tps,
-                is_best: best_time == Some(s.time),
+                is_best: !is_dnf && best_time == Some(s.time),
+                penalty: s.penalty.clone(),
             }
         })
         .collect();
@@ -160,6 +170,7 @@ mod tests {
             is_valid: true,
             scramble: None,
             timed_moves: None,
+            penalty: None,
         }
     }
 

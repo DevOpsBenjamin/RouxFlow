@@ -43,11 +43,11 @@ function formatTps(tps: number): string {
           ]"
         >
           <span class="text-[1.6vmin] text-slate-600 font-mono w-[3.5vmin] text-right shrink-0">#{{ entry.index }}</span>
-          <span :class="['text-[2.5vmin] font-mono font-bold flex-1', entry.is_best ? 'text-emerald-400' : 'text-slate-200']">
-            {{ formatTime(entry.time_ms) }}
+          <span :class="['text-[2.5vmin] font-mono font-bold flex-1', entry.penalty === 'DNF' ? 'text-rose-400' : entry.is_best ? 'text-emerald-400' : 'text-slate-200']">
+            {{ entry.penalty === 'DNF' ? 'DNF' : formatTime(entry.time_ms) }}
           </span>
-          <span class="text-[1.8vmin] text-slate-400 font-mono w-[6vmin] text-right">{{ entry.turns }}</span>
-          <span class="text-[1.8vmin] text-slate-500 font-mono w-[6vmin] text-right">{{ formatTps(entry.tps) }}</span>
+          <span class="text-[1.8vmin] text-slate-400 font-mono w-[6vmin] text-right">{{ entry.penalty === 'DNF' ? '-' : entry.turns }}</span>
+          <span class="text-[1.8vmin] text-slate-500 font-mono w-[6vmin] text-right">{{ entry.penalty === 'DNF' ? '-' : formatTps(entry.tps) }}</span>
         </button>
       </div>
     </template>

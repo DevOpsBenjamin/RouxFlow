@@ -32,6 +32,8 @@ struct SolveRecord {
     scramble: Option<String>,
     #[serde(default)]
     timed_moves: Option<String>, // JSON-encoded Vec<TimedMove>
+    #[serde(default)]
+    penalty: Option<String>,
 }
 
 // Intermediate struct for serializing sessions to IndexedDB
@@ -160,6 +162,7 @@ impl Storage for LocalStorage {
                     is_valid: record.is_valid,
                     scramble: record.scramble,
                     timed_moves,
+                    penalty: record.penalty,
                 };
                 solve_map.entry(record.session_id).or_default().push(solve);
             }
@@ -227,6 +230,7 @@ impl Storage for LocalStorage {
             scramble: solve.scramble.clone(),
             timed_moves: solve.timed_moves.as_ref()
                 .map(|tm| serde_json::to_string(tm).unwrap_or_default()),
+            penalty: solve.penalty.clone(),
         };
 
         store.put(&to_js(&record)?, None).await
@@ -261,6 +265,7 @@ impl Storage for LocalStorage {
                         is_valid: record.is_valid,
                         scramble: record.scramble,
                         timed_moves,
+                        penalty: record.penalty,
                     });
                 }
             }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { ensureWasm, init_renderer, update_render_state, cm_get_facelets, cm_get_orientation, cm_is_timer_running, cm_update_timer } from '../../services/cube/bridge'
+import { ensureWasm, init_renderer, update_render_state, cm_get_facelets, cm_get_orientation, cm_is_timer_running, updateTimer } from '../../services/cube/bridge'
 import { logger } from '../../utils/logger'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -20,7 +20,7 @@ function renderLoop() {
   // Timer update (WASM calculates time)
   if (cm_is_timer_running()) {
     const timestamp = performance.now() / 1000.0
-    cm_update_timer(timestamp)
+    updateTimer(timestamp)
   }
 
   rafHandle = requestAnimationFrame(renderLoop)

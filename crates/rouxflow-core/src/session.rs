@@ -29,6 +29,8 @@ pub struct Solve {
     pub scramble: Option<String>,
     #[serde(default)]
     pub timed_moves: Option<Vec<TimedMove>>,
+    #[serde(default)]
+    pub penalty: Option<String>,  // "DNF" or "+2"
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -471,6 +473,26 @@ impl SessionManager {
             is_valid: true,
             scramble,
             timed_moves,
+            penalty: None,
+        };
+
+        self.flow_state = FlowState::Summary;
+        self.save_solve_internal(solve)
+    }
+
+    /// Record a DNF solve (inspection timeout — no moves made).
+    pub fn record_dnf(&mut self) -> String {
+        let scramble = self.scramble_validator.as_ref()
+            .map(|v| v.scramble.join(" "));
+        let solve = Solve {
+            id: uuid::Uuid::new_v4().to_string(),
+            time: 0,
+            moves: Vec::new(),
+            date: chrono::Utc::now().timestamp_millis(),
+            is_valid: true,
+            scramble,
+            timed_moves: None,
+            penalty: Some("DNF".to_string()),
         };
 
         self.flow_state = FlowState::Summary;

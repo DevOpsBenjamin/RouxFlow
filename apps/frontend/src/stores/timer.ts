@@ -11,7 +11,7 @@ import {
     cm_get_pending_scramble,
     cm_reset_flow,
     cm_generate_new_scramble,
-    cm_update_timer,
+    updateTimer,
     onWasmStateChanged,
 } from '../services/cube/bridge'
 
@@ -70,7 +70,7 @@ export const useTimerStore = defineStore('timer', () => {
 
     const inspectionRemaining = computed(() => {
         _wasmTick.value
-        return cm_get_inspection_remaining()
+        return cm_get_inspection_remaining(performance.now() / 1000.0)
     })
 
     const scrambleState = computed(() => {
@@ -108,7 +108,7 @@ export const useTimerStore = defineStore('timer', () => {
         if (rafId) return
         const tick = () => {
             const now = performance.now() / 1000.0
-            cm_update_timer(now)
+            updateTimer(now)
             bumpWasm()
             rafId = requestAnimationFrame(tick)
         }

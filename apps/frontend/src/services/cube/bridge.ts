@@ -161,6 +161,22 @@ async function getStorage(): Promise<WasmStorageManager> {
 }
 
 // Re-export WASM functions directly — WASM is guaranteed loaded before Vue mounts
+/// Wrapper for cm_update_timer that also processes returned actions (e.g. DNF on inspection timeout).
+export function updateTimer(timestamp: number): void {
+    const actionsJson = cm_update_timer(timestamp)
+    if (actionsJson) {
+        try {
+            const actions = actionsJson.startsWith('[') ? JSON.parse(actionsJson) : [JSON.parse(actionsJson)]
+            for (const action of actions) {
+                handleCoreAction(action)
+            }
+        } catch (e) {
+            logger.error('Failed to parse timer actions', e)
+        }
+        _notifyWasmStateChanged()
+    }
+}
+
 export {
     init_renderer,
     set_gyro_enabled,
