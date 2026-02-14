@@ -707,6 +707,14 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     if st.inner.calibrator.is_active() {
                         st.inner.calibrator.feed(&q);
                     }
+
+                    // Zone tracking: log orientation changes during inspection/solving
+                    if !st.inner.calibrator.is_active() && st.inner.calibrator.home().is_some() {
+                        let zone_logs = st.inner.calibrator.track_orientation(&q);
+                        for log_msg in &zone_logs {
+                            debug!("{}", log_msg);
+                        }
+                    }
                 }
                 CubeEvent::Battery { level } => {
                     st.inner.bluetooth.update_battery(*level);
@@ -755,34 +763,47 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
 
         // ===== Dispatch phase: process each interpreted move =====
         for imove in &interpreted {
-            // Log interpreted move
-            debug!("[move] {} kind={:?} raw={:?} gyro_delta={:?}",
-                imove.notation, imove.kind,
-                imove.raw_face_moves.iter().map(|(f,d)| CubeMove{face:*f, amount:*d}.notation()).collect::<Vec<_>>(),
-                imove.gyro_delta);
+            // Remap notation from body frame to home frame using gyro zone state.
+            // Raw face moves (for cube_logic and scramble validation) stay in body frame.
+            let remapped = st.inner.calibrator.remap_notation(&imove.notation);
+            let was_remapped = remapped != imove.notation;
 
-            // Apply raw face moves to cube_logic (correct facelet state)
+            // Log interpreted move (show remapped if different)
+            if was_remapped {
+                debug!("[move] {} -> {} kind={:?} raw={:?} gyro_delta={:?}",
+                    imove.notation, remapped, imove.kind,
+                    imove.raw_face_moves.iter().map(|(f,d)| CubeMove{face:*f, amount:*d}.notation()).collect::<Vec<_>>(),
+                    imove.gyro_delta);
+            } else {
+                debug!("[move] {} kind={:?} raw={:?} gyro_delta={:?}",
+                    imove.notation, imove.kind,
+                    imove.raw_face_moves.iter().map(|(f,d)| CubeMove{face:*f, amount:*d}.notation()).collect::<Vec<_>>(),
+                    imove.gyro_delta);
+            }
+
+            // Apply raw face moves to cube_logic (correct facelet state — always body frame)
             for &(face, dir) in &imove.raw_face_moves {
                 let notation = CubeMove { face, amount: dir }.notation();
                 st.cube_logic.apply_move(&notation);
             }
 
-            // Record interpreted move in timer (notation + timed_move)
-            st.inner.record_interpreted_move(imove);
+            // Record interpreted move in timer with remapped notation
+            let mut remapped_move = imove.clone();
+            remapped_move.notation = remapped.clone();
+            st.inner.record_interpreted_move(&remapped_move);
 
-            // Animate interpreted notation — skip Rotation and Wide moves since
+            // Animate remapped notation — skip Rotation and Wide moves since
             // the gyro already drives the renderer orientation continuously.
-            // Animating a discrete 90° on top of the live gyro would desync.
             // Face and Slice moves are safe: body doesn't rotate, only layers turn.
             match imove.kind {
                 rouxflow_core::move_interpreter::MoveKind::Face
                 | rouxflow_core::move_interpreter::MoveKind::Slice => {
-                    rouxflow_render::queue_move_anim(imove.notation.clone(), 0.15);
+                    rouxflow_render::queue_move_anim(remapped.clone(), 0.15);
                 }
                 _ => {} // Rotation/Wide: gyro + facelet update handles the visual
             }
 
-            // Scramble validation: feed raw face moves (scrambles = face moves only)
+            // Scramble validation: feed raw face moves (scrambles = body frame, always)
             let flow_before = st.inner.session.get_flow_state_enum();
             for &(face, dir) in &imove.raw_face_moves {
                 let notation = CubeMove { face, amount: dir }.notation();
@@ -800,8 +821,12 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
             {
                 match st.inner.calibrator.finalize() {
                     Some(home) => {
-                        debug!("[calibration] finalized home=({:.4}, {:.4}, {:.4}, {:.4})",
-                            home.x, home.y, home.z, home.w);
+                        debug!("[calibration] finalized home=({:.4}, {:.4}, {:.4}, {:.4}) samples={}",
+                            home.x, home.y, home.z, home.w, st.inner.calibrator.sample_count());
+                        if let Some(axes_str) = st.inner.calibrator.debug_home_axes() {
+                            debug!("[calibration] home axes: {}", axes_str);
+                        }
+                        debug!("[calibration] initial zones: {}", st.inner.calibrator.debug_zones());
                         if let Some((ox, oy, oz, ow)) = st.inner.calibrator.compute_render_offset() {
                             debug!("[calibration] applying gyro offset=({:.4}, {:.4}, {:.4}, {:.4})",
                                 ox, oy, oz, ow);
@@ -814,8 +839,8 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                 }
             }
 
-            // Emit CoreAction::Move with interpreted notation
-            let action_json = serde_json::to_string(&CoreAction::Move(imove.notation.clone()))
+            // Emit CoreAction::Move with remapped notation
+            let action_json = serde_json::to_string(&CoreAction::Move(remapped.clone()))
                 .unwrap_or_default();
             if !action_json.is_empty() {
                 actions.push(action_json);
@@ -825,7 +850,7 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
             // (rotations during inspection should not start the solve timer)
             if imove.kind != rouxflow_core::move_interpreter::MoveKind::Rotation {
                 if flow_before == flow_after {
-                    flow_coordinate(st, timestamp, &mut actions, Some(&imove.notation));
+                    flow_coordinate(st, timestamp, &mut actions, Some(&remapped));
                 }
             }
         }

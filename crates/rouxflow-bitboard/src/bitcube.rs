@@ -71,6 +71,10 @@ impl BitCube {
                 "E" => self.rotate_e(),
                 "r" => { self.rotate_r(); self.rotate_m_prime(); },
                 "l" => { self.rotate_l(); self.rotate_m(); },
+                "f" => { self.rotate_f(); self.rotate_s(); },
+                "b" => { self.rotate_b(); self.rotate_s_prime(); },
+                "u" => { self.rotate_u(); self.rotate_e_prime(); },
+                "d" => { self.rotate_d(); self.rotate_e(); },
                 "x" => { self.rotate_r(); self.rotate_m_prime(); self.rotate_l_prime(); },
                 "y" => { self.rotate_u(); self.rotate_e_prime(); self.rotate_d_prime(); },
                 "z" => { self.rotate_f(); self.rotate_s(); self.rotate_b_prime(); },
@@ -293,6 +297,7 @@ impl BitCube {
     #[inline(always)] pub fn rotate_f_prime(&mut self) { for _ in 0..3 { self.rotate_f(); } }
     #[inline(always)] pub fn rotate_b_prime(&mut self) { for _ in 0..3 { self.rotate_b(); } }
     #[inline(always)] pub fn rotate_m_prime(&mut self) { for _ in 0..3 { self.rotate_m(); } }
+    #[inline(always)] pub fn rotate_s_prime(&mut self) { for _ in 0..3 { self.rotate_s(); } }
     #[inline(always)] pub fn rotate_e_prime(&mut self) { for _ in 0..3 { self.rotate_e(); } }
 
     // --- Bitmask constants for phase detection ---

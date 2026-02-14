@@ -44,6 +44,10 @@ struct PendingFaceMove {
     wall_ms: f64,
 }
 
+/// Suppress standalone gyro-only rotation detection for this long after emitting
+/// a Slice/Wide/Rotation move, since those inherently cause body rotation.
+const ROTATION_SUPPRESSION_MS: f64 = 200.0;
+
 pub struct MoveInterpreter {
     config: InterpreterConfig,
     pending: Vec<PendingFaceMove>,
@@ -51,6 +55,8 @@ pub struct MoveInterpreter {
     anchor_gyro: Option<Quaternion>,
     /// Accumulated rotation delta (x, y, z) in radians since last anchor
     accum_rotation: [f32; 3],
+    /// Wall-clock time of last emitted Slice/Wide/Rotation move (for suppression)
+    last_body_move_ms: f64,
 }
 
 impl MoveInterpreter {
@@ -61,6 +67,7 @@ impl MoveInterpreter {
             last_gyro: None,
             anchor_gyro: None,
             accum_rotation: [0.0; 3],
+            last_body_move_ms: 0.0,
         }
     }
 
@@ -69,6 +76,7 @@ impl MoveInterpreter {
         self.last_gyro = None;
         self.anchor_gyro = None;
         self.accum_rotation = [0.0; 3];
+        self.last_body_move_ms = 0.0;
     }
 
     pub fn set_has_gyro(&mut self, has_gyro: bool) {
@@ -113,6 +121,10 @@ impl MoveInterpreter {
                     if let Some((notation, kind)) = self.classify_pair(f1, d1, f2, d2) {
                         let ts = self.compute_timestamp(self.pending[0].wall_ms, solve_start_ms);
                         let gyro_delta = self.capture_gyro_delta(&kind);
+                        // Track body-movement moves for suppression
+                        if matches!(kind, MoveKind::Slice | MoveKind::Wide | MoveKind::Rotation) {
+                            self.last_body_move_ms = wall_ms;
+                        }
                         result.push(InterpretedMove {
                             notation,
                             timestamp_ms: ts,
@@ -131,7 +143,11 @@ impl MoveInterpreter {
                 if wall_ms - self.pending[0].wall_ms > self.config.merge_window_ms {
                     let p = self.pending.remove(0);
                     let ts = self.compute_timestamp(p.wall_ms, solve_start_ms);
-                    result.push(self.emit_single_or_wide(p.face, p.direction, ts));
+                    let emitted = self.emit_single_or_wide(p.face, p.direction, ts);
+                    if matches!(emitted.kind, MoveKind::Wide) {
+                        self.last_body_move_ms = wall_ms;
+                    }
+                    result.push(emitted);
                     self.update_anchor();
                     continue;
                 }
@@ -142,7 +158,11 @@ impl MoveInterpreter {
                 if wall_ms - self.pending[0].wall_ms > self.config.merge_window_ms {
                     let p = self.pending.remove(0);
                     let ts = self.compute_timestamp(p.wall_ms, solve_start_ms);
-                    result.push(self.emit_single_or_wide(p.face, p.direction, ts));
+                    let emitted = self.emit_single_or_wide(p.face, p.direction, ts);
+                    if matches!(emitted.kind, MoveKind::Wide) {
+                        self.last_body_move_ms = wall_ms;
+                    }
+                    result.push(emitted);
                     self.update_anchor();
                     continue;
                 }
@@ -153,10 +173,14 @@ impl MoveInterpreter {
         }
 
         // Gyro-only rotation check (no pending face moves, has gyro, accumulated rotation is large)
-        if self.pending.is_empty() && self.config.has_gyro {
+        // Suppressed for a short window after Slice/Wide/Rotation moves, since those
+        // inherently cause body rotation that would trigger false standalone rotations.
+        let suppressed = wall_ms - self.last_body_move_ms < ROTATION_SUPPRESSION_MS;
+        if self.pending.is_empty() && self.config.has_gyro && !suppressed {
             if let Some(rotation) = self.check_gyro_rotation() {
                 let ts = self.compute_timestamp(wall_ms, solve_start_ms);
                 let gyro_delta = Some(self.accum_rotation);
+                self.last_body_move_ms = wall_ms;
                 result.push(InterpretedMove {
                     notation: rotation,
                     timestamp_ms: ts,
@@ -171,37 +195,21 @@ impl MoveInterpreter {
         result
     }
 
-    /// Classify a pair of opposite-face moves. With gyro, may upgrade to rotation.
-    fn classify_pair(&self, f1: Face, d1: i8, f2: Face, d2: i8) -> Option<(String, MoveKind)> {
-        let (slice_face_1, _slice_face_2, axis_index) = match (f1, f2) {
-            (Face::R, Face::L) | (Face::L, Face::R) => (Face::L, Face::R, 0), // M axis (x)
-            (Face::F, Face::B) | (Face::B, Face::F) => (Face::F, Face::B, 2), // S axis (z)
-            (Face::U, Face::D) | (Face::D, Face::U) => (Face::D, Face::U, 1), // E axis (y)
+    /// Classify a pair of opposite-face moves as a slice (M/E/S).
+    /// Opposite-face pairs are always slices — real whole-cube rotations (x/y/z)
+    /// are detected by standalone gyro-only rotation, not from face move pairs.
+    /// The gyro/zone tracking handles orientation updates separately.
+    fn classify_pair(&self, f1: Face, d1: i8, f2: Face, _d2: i8) -> Option<(String, MoveKind)> {
+        let (slice_face_1, axis_index) = match (f1, f2) {
+            (Face::R, Face::L) | (Face::L, Face::R) => (Face::L, 0), // M axis
+            (Face::F, Face::B) | (Face::B, Face::F) => (Face::F, 2), // S axis
+            (Face::U, Face::D) | (Face::D, Face::U) => (Face::D, 1), // E axis
             _ => return None,
         };
 
         // Determine slice direction: M follows L, E follows D, S follows F
-        let dir = if f1 == slice_face_1 { d1 } else { d2 };
+        let dir = if f1 == slice_face_1 { d1 } else { _d2 };
         let suffix = if dir > 0 { "" } else { "'" };
-
-        // Check if gyro says this is a rotation rather than a slice
-        if self.config.has_gyro {
-            let threshold = self.config.rotation_threshold_rad;
-            let accum = self.accum_rotation[axis_index].abs();
-            if accum >= threshold {
-                let rotation_names = ["x", "y", "z"];
-                // For rotations: x follows R, y follows U, z follows F
-                let rotation_dir = match axis_index {
-                    0 => if f1 == Face::R { d1 } else { d2 }, // x follows R
-                    1 => if f1 == Face::U { d1 } else { d2 }, // y follows U
-                    2 => if f1 == Face::F { d1 } else { d2 }, // z follows F
-                    _ => unreachable!(),
-                };
-                let rot_suffix = if rotation_dir > 0 { "" } else { "'" };
-                let notation = format!("{}{}", rotation_names[axis_index], rot_suffix);
-                return Some((notation, MoveKind::Rotation));
-            }
-        }
 
         let slice_names = ["M", "E", "S"];
         let notation = format!("{}{}", slice_names[axis_index], suffix);
@@ -573,7 +581,7 @@ mod tests {
     }
 
     #[test]
-    fn slice_to_rotation_upgrade_with_gyro() {
+    fn pair_always_slice_even_with_high_gyro() {
         let mut config = default_config();
         config.has_gyro = true;
         let mut interp = MoveInterpreter::new(config);
@@ -582,25 +590,26 @@ mod tests {
         let identity = Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
         interp.feed_gyro(&identity, 90.0);
 
-        // Simulate 90° rotation around x axis (R+L' axis)
+        // Simulate 90° rotation around x axis
         let angle = std::f32::consts::FRAC_PI_2;
         let half = angle / 2.0;
         let rotated = Quaternion { x: half.sin(), y: 0.0, z: 0.0, w: half.cos() };
         interp.feed_gyro(&rotated, 95.0);
 
-        // Feed R + L' (would be M' without gyro, but with 90° x rotation → x)
+        // Feed R + L' → always classified as slice M' (never upgraded to rotation)
+        // Real rotations come from standalone gyro detection, not face move pairs.
         interp.feed_face_move(Face::R, 1, 100.0);
         interp.feed_face_move(Face::L, -1, 100.0);
 
         let moves = interp.flush(100.0, 0.0);
         assert_eq!(moves.len(), 1);
-        assert_eq!(moves[0].notation, "x");
-        assert_eq!(moves[0].kind, MoveKind::Rotation);
+        assert_eq!(moves[0].notation, "M'");
+        assert_eq!(moves[0].kind, MoveKind::Slice);
         assert_eq!(moves[0].raw_face_moves.len(), 2);
     }
 
     #[test]
-    fn no_slice_upgrade_without_enough_rotation() {
+    fn pair_always_slice_with_small_gyro() {
         let mut config = default_config();
         config.has_gyro = true;
         let mut interp = MoveInterpreter::new(config);
@@ -609,13 +618,13 @@ mod tests {
         let identity = Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
         interp.feed_gyro(&identity, 90.0);
 
-        // Small rotation (10°) — not enough to upgrade
+        // Small rotation (10°)
         let angle = 10.0_f32.to_radians();
         let half = angle / 2.0;
         let rotated = Quaternion { x: half.sin(), y: 0.0, z: 0.0, w: half.cos() };
         interp.feed_gyro(&rotated, 95.0);
 
-        // Feed R + L' → should stay as slice (M')
+        // Feed R + L' → slice M'
         interp.feed_face_move(Face::R, 1, 100.0);
         interp.feed_face_move(Face::L, -1, 100.0);
 
@@ -778,16 +787,15 @@ mod tests {
 
     #[test]
     fn pair_wins_over_wide() {
-        // L' + R within window → slice/rotation pair, NOT wide
-        // Even with gyro rotation, the pair classification should take priority
+        // L' + R within window → always slice pair, NOT wide, NOT rotation
         let mut interp = gyro_interp_with_rotation(0, 1.5);
         interp.feed_face_move(Face::L, -1, 100.0);
         interp.feed_face_move(Face::R, 1, 100.0);
         let moves = interp.flush(100.0, 0.0);
         assert_eq!(moves.len(), 1);
-        // With 1.5 rad rotation (> rotation_threshold 1.2), pair upgrades to rotation
-        assert_eq!(moves[0].notation, "x");
-        assert_eq!(moves[0].kind, MoveKind::Rotation);
+        // Pairs are always slices — real rotations come from standalone gyro only
+        assert_eq!(moves[0].notation, "M'");
+        assert_eq!(moves[0].kind, MoveKind::Slice);
         assert_eq!(moves[0].raw_face_moves.len(), 2);
     }
 

@@ -560,6 +560,29 @@ export async function disconnect(): Promise<void> {
     logger.info('Disconnected from cube')
 }
 
+// --- Solve analysis ---
+// Will be powered by rouxflow-wasm-analyzer (lazy-loaded Web Worker) in the future.
+
+export interface StepSegment {
+    step: 'FB' | 'SB' | 'CMLL' | 'LSE'
+    start_move: number
+    end_move: number
+    move_count: number
+    time_ms: number | null
+}
+
+export interface SolveAnalysis {
+    steps: StepSegment[]
+    orientation: string | null
+    total_moves: number
+}
+
+/// Placeholder: will call the analyzer WASM worker when available.
+export function analyzeSolve(_solve: { scramble?: string | null; moves: string[]; timed_moves?: any[] | null }): SolveAnalysis | null {
+    // TODO: call rouxflow-wasm-analyzer Web Worker
+    return null
+}
+
 // --- Solve operations ---
 
 export async function deleteSolve(solveId: string): Promise<void> {
