@@ -666,6 +666,7 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
 
         let wall_ms = timestamp * 1000.0;
         let mut actions: Vec<String> = Vec::new();
+        let mut latest_gyro_q: Option<rouxflow_core::cube::Quaternion> = None;
 
         // ===== Feed phase: push events into interpreter =====
         for event in &events {
@@ -708,13 +709,9 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                         st.inner.calibrator.feed(&q);
                     }
 
-                    // Zone tracking: log orientation changes during inspection/solving
-                    if !st.inner.calibrator.is_active() && st.inner.calibrator.home().is_some() {
-                        let zone_logs = st.inner.calibrator.track_orientation(&q);
-                        for log_msg in &zone_logs {
-                            debug!("{}", log_msg);
-                        }
-                    }
+                    // Store latest gyro for zone tracking after dispatch
+                    // (must happen after dispatch so compensate_slice is applied first)
+                    latest_gyro_q = Some(q);
                 }
                 CubeEvent::Battery { level } => {
                     st.inner.bluetooth.update_battery(*level);
@@ -811,10 +808,6 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
             // Use the RAW (body-frame) notation since that's what the hardware produced.
             if imove.kind == rouxflow_core::move_interpreter::MoveKind::Slice {
                 st.inner.calibrator.compensate_slice(&imove.notation);
-                // Update renderer offset to account for new core offset
-                if let Some((ox, oy, oz, ow)) = st.inner.calibrator.compute_render_offset_compensated() {
-                    rouxflow_render::set_gyro_offset(ox, oy, oz, ow);
-                }
                 debug!("[slice-compensate] {} -> core_offset updated, zones: {}",
                     imove.notation, st.inner.calibrator.debug_zones());
             }
@@ -843,9 +836,8 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                             debug!("[calibration] home axes: {}", axes_str);
                         }
                         debug!("[calibration] initial zones: {}", st.inner.calibrator.debug_zones());
-                        // Use compensated offset (accounts for any accumulated core offset,
-                        // though it should be identity right after finalize)
-                        if let Some((ox, oy, oz, ow)) = st.inner.calibrator.compute_render_offset_compensated() {
+                        // At finalize, core_offset is identity, so simple offset = conj(home)
+                        if let Some((ox, oy, oz, ow)) = st.inner.calibrator.compute_render_offset() {
                             debug!("[calibration] applying gyro offset=({:.4}, {:.4}, {:.4}, {:.4})",
                                 ox, oy, oz, ow);
                             rouxflow_render::set_gyro_offset(ox, oy, oz, ow);
@@ -876,6 +868,17 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
         // Consume pending zone rotations if a standalone gyro rotation was emitted
         if interpreted.iter().any(|m| m.kind == rouxflow_core::move_interpreter::MoveKind::Rotation) {
             st.inner.calibrator.consume_zone_rotations();
+        }
+
+        // Zone tracking: runs AFTER dispatch so compensate_slice has been applied.
+        // This ensures zones see the correct core_offset (no one-packet lag).
+        if let Some(ref gq) = latest_gyro_q {
+            if !st.inner.calibrator.is_active() && st.inner.calibrator.home().is_some() {
+                let zone_logs = st.inner.calibrator.track_orientation(gq);
+                for log_msg in &zone_logs {
+                    debug!("{}", log_msg);
+                }
+            }
         }
 
         if actions.is_empty() {
@@ -940,7 +943,10 @@ pub fn cm_get_orientation() -> String {
             || "[0,0,0,1]".to_string(),
             |st| {
                 if let Some(q) = st.cube_logic.orientation {
-                    format!("[{},{},{},{}]", q.x, q.y, q.z, q.w)
+                    // Return shell orientation (compensated for slice-induced core rotation)
+                    // so the renderer shows the user's actual cube shell position.
+                    let shell = st.inner.calibrator.compute_shell_quaternion(&q);
+                    format!("[{},{},{},{}]", shell.x, shell.y, shell.z, shell.w)
                 } else {
                     "[0,0,0,1]".to_string()
                 }

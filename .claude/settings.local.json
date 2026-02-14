@@ -42,7 +42,11 @@
       "Bash(del \"C:\\\\GIT\\\\DevOps\\\\RouxFlow\\\\apps\\\\frontend\\\\src\\\\components\\\\cube\\\\SyncStatus.vue\")",
       "Bash(npx vue-tsc:*)",
       "Bash(pnpm --filter frontend build:*)",
-      "Bash(pnpm build:table:*)"
+      "Bash(pnpm build:table:*)",
+      "Bash(pnpm --filter admin exec:*)",
+      "Bash(timeout 8 pnpm admin:*)",
+      "Bash(python3:*)",
+      "Bash(node -e:*)"
     ]
   }
 }

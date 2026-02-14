@@ -377,7 +377,7 @@ impl GyroCalibrator {
             _ => return,
         };
 
-        self.core_offset = quat_mul(&self.core_offset, &delta);
+        self.core_offset = quat_mul(&delta, &self.core_offset);
         // Normalize to prevent drift
         let len = (self.core_offset.x * self.core_offset.x
             + self.core_offset.y * self.core_offset.y
@@ -396,19 +396,11 @@ impl GyroCalibrator {
         &self.core_offset
     }
 
-    /// Compute the renderer gyro offset accounting for both home orientation and core offset.
-    /// Returns conjugate(home * core_offset_inverse) so the renderer shows shell orientation.
-    pub fn compute_render_offset_compensated(&self) -> Option<(f32, f32, f32, f32)> {
-        let home = self.home?;
-        // The renderer needs: offset such that offset * raw_gyro = shell_display_rotation
-        // shell_orientation = conjugate(home) * raw_gyro * conjugate(core_offset)
-        // For the renderer: offset = conjugate(home) works for the left multiply,
-        // but the core_offset is a right multiply. Since the renderer only does
-        // left-multiply offset, we fold core_offset into home:
-        // effective_home = home * core_offset
-        // offset = conjugate(effective_home)
-        let effective = quat_mul(&home, &self.core_offset);
-        Some((-effective.x, -effective.y, -effective.z, effective.w))
+    /// Compute the shell quaternion from a raw gyro (core) quaternion.
+    /// Since Q_core = Q_shell * core_offset, we get:
+    /// Q_shell = Q_core * conjugate(core_offset)
+    pub fn compute_shell_quaternion(&self, q_core: &Quaternion) -> Quaternion {
+        quat_mul(q_core, &quat_conjugate(&self.core_offset))
     }
 
     /// Remap a move notation from cube body frame to home frame based on current zones.
@@ -1062,20 +1054,43 @@ mod tests {
     }
 
     #[test]
-    fn test_render_offset_compensated_at_identity() {
+    fn test_compute_shell_quaternion_no_offset() {
         let mut cal = GyroCalibrator::new();
         cal.start();
         let identity = q(0.0, 0.0, 0.0, 1.0);
         for _ in 0..20 { cal.feed(&identity); }
         cal.finalize().unwrap();
 
-        // No slices → compensated offset == regular offset
-        let regular = cal.compute_render_offset().unwrap();
-        let compensated = cal.compute_render_offset_compensated().unwrap();
-        assert!(approx_eq(regular.0, compensated.0));
-        assert!(approx_eq(regular.1, compensated.1));
-        assert!(approx_eq(regular.2, compensated.2));
-        assert!(approx_eq(regular.3, compensated.3));
+        // No slices → core_offset is identity → shell == core
+        let core_q = q(0.1, 0.2, 0.3, 0.9274);
+        let shell = cal.compute_shell_quaternion(&core_q);
+        assert!(approx_eq(shell.x, core_q.x));
+        assert!(approx_eq(shell.y, core_q.y));
+        assert!(approx_eq(shell.z, core_q.z));
+        assert!(approx_eq(shell.w, core_q.w));
+    }
+
+    #[test]
+    fn test_compute_shell_quaternion_after_m_slice() {
+        let mut cal = GyroCalibrator::new();
+        cal.start();
+        let identity = q(0.0, 0.0, 0.0, 1.0);
+        for _ in 0..20 { cal.feed(&identity); }
+        cal.finalize().unwrap();
+
+        // M slice: core rotates x' (−90° around x)
+        cal.compensate_slice("M");
+
+        // If the core shows x' rotation (from M), the shell should be at identity
+        let half = std::f32::consts::FRAC_PI_4;
+        let core_x_neg = q(-half.sin(), 0.0, 0.0, half.cos()); // x' rotation
+        let shell = cal.compute_shell_quaternion(&core_x_neg);
+        // shell = core * conj(core_offset), where core_offset = delta_M (x' rotation)
+        // shell = x'_rot * conj(x'_rot) = identity
+        assert!(approx_eq(shell.x, 0.0));
+        assert!(approx_eq(shell.y, 0.0));
+        assert!(approx_eq(shell.z, 0.0));
+        assert!(approx_eq(shell.w, 1.0));
     }
 
     // ========== Notation Remapping Tests ==========

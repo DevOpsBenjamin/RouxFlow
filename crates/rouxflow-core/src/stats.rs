@@ -256,6 +256,7 @@ mod tests {
             timed_moves: None,
             penalty: None,
             deleted_at: None,
+            integrity: None,
         }
     }
 
@@ -270,6 +271,7 @@ mod tests {
             timed_moves: None,
             penalty: Some("DNF".to_string()),
             deleted_at: None,
+            integrity: None,
         }
     }
 

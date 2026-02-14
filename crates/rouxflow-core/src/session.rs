@@ -35,6 +35,8 @@ pub struct Solve {
     pub penalty: Option<String>,  // "DNF" or "+2"
     #[serde(default)]
     pub deleted_at: Option<i64>,
+    #[serde(default)]
+    pub integrity: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -459,7 +461,7 @@ impl SessionManager {
         self.save_solve_internal(solve)
     }
 
-    fn save_solve_internal(&mut self, solve: Solve) -> String {
+    fn save_solve_internal(&mut self, mut solve: Solve) -> String {
         if let Some(session) = &mut self.active_session {
             // WCA Integrity: 1h limit
             if let SessionType::WCA = session.session_type {
@@ -476,6 +478,9 @@ impl SessionManager {
                     return serde_json::to_string(&CoreAction::Error("WCA Session full".into())).unwrap();
                 }
             }
+
+            // Sign solve integrity before persisting
+            solve.integrity = Some(crate::integrity::sign_solve(&solve));
 
             // Push solve into active session's in-memory solves
             session.solves.push(solve.clone());
@@ -581,6 +586,7 @@ impl SessionManager {
             timed_moves,
             penalty: None,
             deleted_at: None,
+            integrity: None,
         };
 
         self.flow_state = FlowState::Summary;
@@ -601,6 +607,7 @@ impl SessionManager {
             timed_moves: None,
             penalty: Some("DNF".to_string()),
             deleted_at: None,
+            integrity: None,
         };
 
         self.flow_state = FlowState::Summary;

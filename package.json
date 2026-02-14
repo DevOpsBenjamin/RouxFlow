@@ -4,6 +4,7 @@
     "dev": "pnpm --filter frontend dev",
     "build": "pnpm --filter frontend build",
     "build:wasm": "pnpm --filter frontend run build:wasm",
+    "admin": "pnpm --filter admin dev",
     "build:table": "cd crates/rouxflow-ai && cargo run --bin gen-tables"
   }
 }

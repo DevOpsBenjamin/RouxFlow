@@ -12,12 +12,12 @@ const auth = useAuthStore()
 const bt = useBluetoothStore()
 const router = useRouter()
 
-// Auto-navigate to home after login
+// Auto-navigate to home after login (immediate: catches OAuth redirect where user is already authed at mount)
 watch(() => auth.isAuthenticated, (isLogged) => {
   if (isLogged && router.currentRoute.value.name === 'Landing') {
     router.push({ name: 'Home' })
   }
-})
+}, { immediate: true })
 
 // Redirect to BluetoothRequired when cube disconnects on a requiresCube page
 watch(() => bt.isConnected, (connected) => {

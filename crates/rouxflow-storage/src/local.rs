@@ -36,6 +36,8 @@ struct SolveRecord {
     penalty: Option<String>,
     #[serde(default)]
     deleted_at: Option<i64>,
+    #[serde(default)]
+    integrity: Option<String>,
 }
 
 // Intermediate struct for serializing sessions to IndexedDB
@@ -169,6 +171,7 @@ impl Storage for LocalStorage {
                     timed_moves,
                     penalty: record.penalty,
                     deleted_at: record.deleted_at,
+                    integrity: record.integrity,
                 };
                 solve_map.entry(record.session_id).or_default().push(solve);
             }
@@ -254,6 +257,7 @@ impl Storage for LocalStorage {
                 .map(|tm| serde_json::to_string(tm).unwrap_or_default()),
             penalty: solve.penalty.clone(),
             deleted_at: solve.deleted_at,
+            integrity: solve.integrity.clone(),
         };
 
         store.put(&to_js(&record)?, None).await
@@ -290,6 +294,7 @@ impl Storage for LocalStorage {
                         timed_moves,
                         penalty: record.penalty,
                         deleted_at: record.deleted_at,
+                        integrity: record.integrity,
                     });
                 }
             }
