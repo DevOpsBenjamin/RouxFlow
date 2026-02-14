@@ -1,29 +1,46 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { cm_set_inspection_duration, cm_get_inspection_duration } from '../../services/cube/bridge'
+import {
+  cm_set_inspection_duration,
+  cm_get_inspection_duration,
+  cm_get_pickup_mode,
+  cm_set_pickup_mode,
+  cm_save_active_session,
+} from '../../services/cube/bridge'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
 
 const inspectionOptions = [
-  { label: 'Off', value: 0 },
-  { label: '5s', value: 5 },
-  { label: '10s', value: 10 },
+  { label: 'Infinite', value: 0 },
   { label: '15s (WCA)', value: 15 },
-  { label: '30s', value: 30 },
+]
+
+const pickupOptions = [
+  { label: 'None', value: 'None', desc: 'Timer starts at first move' },
+  { label: 'Fixed (+400ms)', value: 'Fixed', desc: 'Adds 200ms pickup + 200ms putdown' },
+  { label: 'Gyro', value: 'Gyro', desc: 'Detects pickup/putdown via gyroscope' },
 ]
 
 const inspectionDuration = ref(15)
+const pickupMode = ref('None')
 
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
     inspectionDuration.value = cm_get_inspection_duration()
+    pickupMode.value = cm_get_pickup_mode()
   }
 })
 
 function setInspection(seconds: number) {
   inspectionDuration.value = seconds
   cm_set_inspection_duration(seconds)
+}
+
+async function setPickupMode(mode: string) {
+  pickupMode.value = mode
+  cm_set_pickup_mode(mode)
+  await cm_save_active_session()
 }
 </script>
 
@@ -58,7 +75,28 @@ function setInspection(seconds: number) {
               >{{ opt.label }}</button>
             </div>
             <p class="text-[1.2vmin] text-slate-600 mt-[1vh]">
-              Time to inspect the cube after completing the scramble. Set to 0 to skip inspection and start solving immediately.
+              Time to inspect the cube after completing the scramble. Infinite = no timeout.
+            </p>
+          </div>
+
+          <!-- Pickup Mode -->
+          <div>
+            <div class="text-[1.5vmin] text-slate-500 font-bold uppercase tracking-wider mb-[1.5vh]">Pickup Time</div>
+            <div class="flex flex-wrap gap-[1vmin]">
+              <button
+                v-for="opt in pickupOptions"
+                :key="opt.value"
+                @click="setPickupMode(opt.value)"
+                :class="[
+                  'px-[2vmin] py-[1vh] rounded-[1vmin] text-[1.6vmin] font-bold transition-all',
+                  pickupMode === opt.value
+                    ? 'bg-indigo-500 text-white'
+                    : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                ]"
+              >{{ opt.label }}</button>
+            </div>
+            <p class="text-[1.2vmin] text-slate-600 mt-[1vh]">
+              {{ pickupOptions.find(o => o.value === pickupMode)?.desc ?? '' }}
             </p>
           </div>
         </div>

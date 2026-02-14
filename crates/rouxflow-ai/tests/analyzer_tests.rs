@@ -1,4 +1,4 @@
-use rouxflow_ai::{analyze_solve, RouxStep, BitCube};
+use rouxflow_ai::{analyze_solve_legacy, RouxStep, BitCube};
 
 /// Helper: apply moves to a solved cube and return it.
 fn cube_after(moves: &str) -> BitCube {
@@ -77,9 +77,9 @@ fn test_is_solved_after_identity_scramble() {
 // ---- Analyzer integration tests ----
 
 #[test]
-fn test_analyze_solved_cube_no_moves() {
+fn test_analyze_solve_legacyd_cube_no_moves() {
     // Scramble: empty (cube is already solved), no solve moves
-    let result = analyze_solve("", &[], None);
+    let result = analyze_solve_legacy("", &[], None);
     // All 4 phases should be detected immediately (0-length segments)
     assert_eq!(result.steps.len(), 4);
     assert_eq!(result.steps[0].step, RouxStep::FB);
@@ -97,7 +97,7 @@ fn test_analyze_r_scramble_r_prime_solve() {
     // Scramble "R" breaks SB only. Solve "R'" restores it.
     // FB, CMLL corners are preserved through R moves.
     let moves = vec!["R'".to_string()];
-    let result = analyze_solve("R", &moves, None);
+    let result = analyze_solve_legacy("R", &moves, None);
 
     // FB should be detected pre-solve (0 moves)
     assert!(result.steps.iter().any(|s| s.step == RouxStep::FB));
@@ -131,7 +131,7 @@ fn test_analyze_detects_all_four_phases() {
     let moves: Vec<String> = vec!["L", "R", "U'", "M'"]
         .into_iter().map(String::from).collect();
 
-    let result = analyze_solve(scramble, &moves, None);
+    let result = analyze_solve_legacy(scramble, &moves, None);
 
     // We should get some phases detected. The exact boundaries depend on
     // which orientation the analyzer picks and whether intermediate states satisfy checks.
@@ -152,7 +152,7 @@ fn test_analyze_orientation_detection() {
     // After y2 normalization, the R block becomes the L block (FB)
     let scramble = "L";
     let moves: Vec<String> = vec!["L'"].into_iter().map(String::from).collect();
-    let result = analyze_solve(scramble, &moves, None);
+    let result = analyze_solve_legacy(scramble, &moves, None);
 
     // The analyzer should find that FB is solved in some orientation after L'
     // Since R block is always intact, it could detect FB on the Red/Yellow orientation before L'
@@ -165,7 +165,7 @@ fn test_analyze_with_timed_moves() {
     let moves: Vec<String> = vec!["R'".to_string()];
     let timed = vec![("R'".to_string(), 500u32)];
     let timed_refs: Vec<(String, u32)> = timed;
-    let result = analyze_solve(scramble, &moves, Some(&timed_refs));
+    let result = analyze_solve_legacy(scramble, &moves, Some(&timed_refs));
 
     // Check that time info is populated
     for step in &result.steps {
@@ -180,7 +180,7 @@ fn test_analyze_phases_in_order() {
     let moves: Vec<String> = "U' L' U L F' L F L U L' U L' U' L U' L U2 L' U' R U R' U R U2 R' U' M U M' U2 M U M'"
         .split_whitespace().map(String::from).collect();
 
-    let result = analyze_solve(scramble, &moves, None);
+    let result = analyze_solve_legacy(scramble, &moves, None);
 
     let mut prev_step_order = 0;
     for step in &result.steps {
@@ -200,7 +200,7 @@ fn test_analyze_move_indices_consistent() {
     let scramble = "R U R' F2";
     let moves: Vec<String> = "L D' L' r U R' U2 M' U M"
         .split_whitespace().map(String::from).collect();
-    let result = analyze_solve(scramble, &moves, None);
+    let result = analyze_solve_legacy(scramble, &moves, None);
 
     // Verify segment boundaries are consistent
     for (i, step) in result.steps.iter().enumerate() {

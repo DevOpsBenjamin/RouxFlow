@@ -58,6 +58,13 @@ import init, {
     cm_delete_solve,
     cm_set_inspection_duration,
     cm_get_inspection_duration,
+    cm_get_pickup_mode,
+    cm_set_pickup_mode,
+    cm_save_active_session,
+    cm_get_gyro_stats,
+    cm_reset_gyro_stats,
+    cm_is_cube_stable,
+    cm_drain_solve_telemetry,
 } from '../../wasm/rouxflow/rouxflow_wasm'
 import { logger } from '../../utils/logger'
 import type { SavedCube } from '../../stores/bluetooth'
@@ -73,6 +80,7 @@ let storageInitPromise: Promise<WasmStorageManager> | null = null
 let bleCharacteristic: BluetoothRemoteGATTCharacteristic | null = null
 let commandCharacteristic: BluetoothRemoteGATTCharacteristic | null = null
 let batteryPollInterval: ReturnType<typeof setInterval> | null = null
+let connectedDevice: BluetoothDevice | null = null
 
 export async function ensureWasm(userId?: string | null) {
     if (wasmReady) return
@@ -230,6 +238,12 @@ export {
     cm_delete_solve,
     cm_set_inspection_duration,
     cm_get_inspection_duration,
+    cm_get_pickup_mode,
+    cm_set_pickup_mode,
+    cm_save_active_session,
+    cm_get_gyro_stats,
+    cm_reset_gyro_stats,
+    cm_is_cube_stable,
 }
 
 // Wrapper functions that parse JSON from WASM (avoids wasm_bindgen alloc churn)
@@ -314,6 +328,13 @@ async function handleCoreAction(action: any) {
                 } catch (e) {
                     logger.error('Failed to persist solve:', e)
                 }
+            }
+            // Drain raw solve telemetry for future analyzer
+            const telemetryJson = cm_drain_solve_telemetry()
+            if (telemetryJson && telemetryJson !== 'null') {
+                const telemetry = JSON.parse(telemetryJson)
+                logger.info(`Telemetry: ${telemetry.scramble_gyro.length} scramble gyro, ${telemetry.solve_gyro.length} solve gyro, ${telemetry.solve_moves.length} moves`)
+                ;(window as any).__solveTelemetry = telemetry
             }
             _notifyWasmStateChanged()
             break
@@ -471,6 +492,13 @@ export async function finalizeConnection(device: BluetoothDevice, cubeDef: any, 
             }
         }
 
+        // Listen for unexpected disconnection (cube in charging box, out of range, etc.)
+        if (connectedDevice) {
+            connectedDevice.removeEventListener('gattserverdisconnected', onGattDisconnected)
+        }
+        connectedDevice = device
+        device.addEventListener('gattserverdisconnected', onGattDisconnected)
+
         // Start periodic battery polling (cube won't push battery on its own)
         startBatteryPoll()
 
@@ -540,9 +568,38 @@ function stopBatteryPoll() {
     }
 }
 
+/// Handle unexpected GATT disconnection (cube in charging box, out of range, powered off)
+function onGattDisconnected() {
+    logger.warn('GATT disconnected unexpectedly — cleaning up')
+    stopBatteryPoll()
+
+    // Clean up BLE references (don't try to stopNotifications — GATT is already gone)
+    if (bleCharacteristic) {
+        bleCharacteristic.removeEventListener('characteristicvaluechanged', blePacketHandler)
+        bleCharacteristic = null
+    }
+    commandCharacteristic = null
+
+    if (connectedDevice) {
+        connectedDevice.removeEventListener('gattserverdisconnected', onGattDisconnected)
+        connectedDevice = null
+    }
+
+    // Update WASM state so cm_is_connected() returns false
+    cm_disconnect()
+
+    // Notify Vue stores so UI updates immediately
+    _notifyWasmStateChanged()
+}
+
 /// Disconnect from cube
 export async function disconnect(): Promise<void> {
     stopBatteryPoll()
+
+    if (connectedDevice) {
+        connectedDevice.removeEventListener('gattserverdisconnected', onGattDisconnected)
+        connectedDevice = null
+    }
 
     if (bleCharacteristic) {
         try {

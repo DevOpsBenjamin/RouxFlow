@@ -53,6 +53,13 @@ onMounted(() => {
         Learn
       </button>
       <button
+        @click="router.push({ name: 'Analysis' })"
+        class="hover:text-white transition-colors"
+        :class="{ 'text-indigo-400': $route.name === 'Analysis' || $route.name === 'AnalysisDetail' }"
+      >
+        Analysis
+      </button>
+      <button
         @click="router.push({ name: 'Stats' })"
         class="hover:text-white transition-colors"
         :class="{ 'text-indigo-400': $route.name === 'Stats' }"
@@ -72,6 +79,13 @@ onMounted(() => {
         :class="{ 'text-indigo-400': $route.name === 'CubeManager' }"
       >
         Cube Manager
+      </button>
+      <button
+        @click="router.push({ name: 'TimingTest' })"
+        class="hover:text-white transition-colors"
+        :class="{ 'text-indigo-400': $route.name === 'TimingTest' }"
+      >
+        Timing Test
       </button>
     </nav>
 

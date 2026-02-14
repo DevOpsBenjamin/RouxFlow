@@ -13,6 +13,8 @@ fn make_solve() -> Solve {
         penalty: None,
         deleted_at: None,
         integrity: None,
+        reaction_ms: None,
+        putdown_delay_ms: None,
     }
 }
 
@@ -95,6 +97,8 @@ fn dnf_solve_gets_valid_signature() {
         penalty: Some("DNF".to_string()),
         deleted_at: None,
         integrity: None,
+        reaction_ms: None,
+        putdown_delay_ms: None,
     };
     solve.integrity = Some(sign_solve(&solve));
     assert!(verify_solve(&solve));

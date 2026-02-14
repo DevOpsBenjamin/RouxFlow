@@ -36,8 +36,14 @@ const inspectionColor = computed(() => {
         <div :class="['font-mono font-black tracking-tighter tabular-nums leading-none transition-colors duration-300', inspectionColor, compact ? 'text-[8vmin]' : 'text-[15vmin]']">
           {{ inspectionSeconds }}
         </div>
-        <div class="mt-[1vh] text-slate-500 uppercase tracking-widest text-[1.5vmin] font-bold">
-          Inspection
+        <div class="mt-[1vh] flex items-center gap-[1vmin]">
+          <div
+            :class="['w-[1.5vmin] h-[1.5vmin] rounded-full transition-colors duration-200',
+              timer.isCubeStable ? 'bg-emerald-400' : 'bg-rose-400']"
+          ></div>
+          <span class="text-slate-500 uppercase tracking-widest text-[1.5vmin] font-bold">
+            {{ timer.isCubeStable ? 'On table' : 'Picked up' }}
+          </span>
         </div>
       </template>
 
@@ -46,11 +52,18 @@ const inspectionColor = computed(() => {
         <div :class="['font-mono tracking-tighter tabular-nums text-slate-50 leading-none', compact ? 'text-[6vmin] font-light' : 'text-[15vmin] font-light']">
           {{ timer.formattedTime }}
         </div>
-        <div v-if="!compact || timer.flowState === 'Solving'" class="mt-[1vh] text-slate-500 uppercase tracking-widest text-[1.5vmin] font-bold">
-          {{ timer.flowState === 'Solving' ? 'Solving...' :
-             timer.flowState === 'Summary' ? 'Complete' :
-             timer.flowState === 'Scrambling' ? 'Scrambling...' :
-             'Ready to flow' }}
+        <div v-if="!compact || timer.flowState === 'Solving'" class="mt-[1vh] flex items-center justify-center gap-[1vmin]">
+          <div
+            v-if="timer.flowState === 'Summary'"
+            :class="['w-[1.5vmin] h-[1.5vmin] rounded-full transition-colors duration-200',
+              timer.isCubeStable ? 'bg-emerald-400' : 'bg-rose-400 animate-pulse']"
+          ></div>
+          <span class="text-slate-500 uppercase tracking-widest text-[1.5vmin] font-bold">
+            {{ timer.flowState === 'Solving' ? 'Solving...' :
+               timer.flowState === 'Summary' ? (timer.isCubeStable ? 'Complete' : 'Put cube down...') :
+               timer.flowState === 'Scrambling' ? 'Scrambling...' :
+               'Ready to flow' }}
+          </span>
         </div>
       </template>
     </div>

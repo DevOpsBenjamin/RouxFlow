@@ -103,6 +103,7 @@ watch(() => ss.value.accepted_count, (newCount, oldCount) => {
             :class="[
               'transition-colors duration-200 px-[0.3vmin]',
               idx < ss.index ? 'text-emerald-400/70' :
+              idx === ss.index && ss.half_done ? 'text-amber-400 font-bold scale-110' :
               idx === ss.index && !ss.correction_move ? 'text-white font-bold scale-110' :
               'text-slate-600'
             ]"

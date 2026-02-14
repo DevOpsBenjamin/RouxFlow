@@ -7,6 +7,7 @@ pub mod move_interpreter;
 pub mod session;
 pub mod stats;
 pub mod storage;
+pub mod telemetry;
 pub mod timer_manager;
 
 pub use app_state::AppState;

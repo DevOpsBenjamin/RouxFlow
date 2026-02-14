@@ -81,9 +81,14 @@ const routes = [
     component: () => import('../components/layout/ProfileView.vue')
   },
   {
-    path: '/analysis/:solveId?',
+    path: '/analysis',
     name: 'Analysis',
-    component: () => import('../components/layout/SolveAnalysis.vue'),
+    component: () => import('../components/layout/AnalysisListView.vue'),
+  },
+  {
+    path: '/analysis/:solveId',
+    name: 'AnalysisDetail',
+    component: () => import('../components/layout/AnalysisDetailView.vue'),
     props: true
   },
   {
@@ -95,6 +100,12 @@ const routes = [
     path: '/bluetooth-required',
     name: 'BluetoothRequired',
     component: () => import('../components/cube/BluetoothRequired.vue')
+  },
+  {
+    path: '/timing-test',
+    name: 'TimingTest',
+    component: () => import('../components/layout/TimingTestView.vue'),
+    meta: { requiresCube: true }
   }
 ]
 

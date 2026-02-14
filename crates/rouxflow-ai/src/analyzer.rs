@@ -67,7 +67,7 @@ const ORIENTATIONS: [(Orientation, &str); 8] = [
 /// `scramble` — space-separated scramble string (e.g. "R U R' F2 D")
 /// `moves` — ordered solve moves
 /// `timed_moves` — optional (move_str, cumulative_ms) pairs for time-per-step calculation
-pub fn analyze_solve(
+pub fn analyze_solve_legacy(
     scramble: &str,
     moves: &[String],
     timed_moves: Option<&[(String, u32)]>,

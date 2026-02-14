@@ -257,6 +257,8 @@ mod tests {
             penalty: None,
             deleted_at: None,
             integrity: None,
+            reaction_ms: None,
+            putdown_delay_ms: None,
         }
     }
 
@@ -272,6 +274,8 @@ mod tests {
             penalty: Some("DNF".to_string()),
             deleted_at: None,
             integrity: None,
+            reaction_ms: None,
+            putdown_delay_ms: None,
         }
     }
 

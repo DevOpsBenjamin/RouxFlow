@@ -46,7 +46,8 @@
       "Bash(pnpm --filter admin exec:*)",
       "Bash(timeout 8 pnpm admin:*)",
       "Bash(python3:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(wc:*)"
     ]
   }
 }
