@@ -94,7 +94,7 @@ impl Storage for CloudStorage {
         Ok(())
     }
 
-    async fn get_sessions(&self) -> Result<Vec<Session>, StorageError> {
+    async fn get_sessions(&self, _user_id: Option<&str>) -> Result<Vec<Session>, StorageError> {
         // Cloud sessions not yet implemented
         Ok(Vec::new())
     }

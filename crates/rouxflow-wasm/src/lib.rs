@@ -208,9 +208,9 @@ impl WasmStorageManager {
 
     // --- Sessions ---
 
-    pub async fn get_sessions_json(&self) -> Result<String, JsValue> {
+    pub async fn get_sessions_json(&self, user_id: Option<String>) -> Result<String, JsValue> {
         use rouxflow_core::storage::Storage;
-        let sessions = self.inner.get_sessions()
+        let sessions = self.inner.get_sessions(user_id.as_deref())
             .await
             .map_err(|e| JsValue::from_str(&e.message))?;
         serde_json::to_string(&sessions).map_err(|e| JsValue::from_str(&e.to_string()))
@@ -297,9 +297,9 @@ pub fn cm_init() {
 }
 
 /// Initialize storage, load sessions, ensure DefaultSession, set active, load solves.
-/// Call once after cm_init().
+/// Call once after cm_init(). Pass user_id if the user is authenticated.
 #[wasm_bindgen]
-pub async fn cm_init_storage(supabase_url: Option<String>, supabase_key: Option<String>) -> Result<(), JsValue> {
+pub async fn cm_init_storage(supabase_url: Option<String>, supabase_key: Option<String>, user_id: Option<String>) -> Result<(), JsValue> {
     use rouxflow_core::storage::Storage;
 
     // Create StorageManager
@@ -313,16 +313,19 @@ pub async fn cm_init_storage(supabase_url: Option<String>, supabase_key: Option<
         *s.borrow_mut() = Some(storage.clone());
     });
 
-    // Load sessions from IndexedDB
-    let sessions = storage.get_sessions().await
+    // Load sessions from IndexedDB (filtered by user)
+    let sessions = storage.get_sessions(user_id.as_deref()).await
         .map_err(|e| JsValue::from_str(&e.message))?;
 
     // Load into AppState and ensure default session
-    let default_session_to_persist = APP_STATE.with(|s| {
+    let (default_session_to_persist, default_id) = APP_STATE.with(|s| {
         let mut state = s.borrow_mut();
         let st = state.as_mut().expect("cm_init must be called before cm_init_storage");
+        st.inner.session.set_user_id(user_id);
         st.inner.session.load_sessions(sessions);
-        st.inner.session.ensure_default_session()
+        let default_id = st.inner.session.default_session_id();
+        let new_session = st.inner.session.ensure_default_session();
+        (new_session, default_id)
     });
 
     // Persist new default session if it was just created
@@ -335,11 +338,11 @@ pub async fn cm_init_storage(supabase_url: Option<String>, supabase_key: Option<
     APP_STATE.with(|s| {
         let mut state = s.borrow_mut();
         let st = state.as_mut().unwrap();
-        st.inner.session.set_active_session_by_id(rouxflow_core::session::DEFAULT_SESSION_ID);
+        st.inner.session.set_active_session_by_id(&default_id);
     });
 
     // Load solves for active session
-    let solves = storage.get_solves(rouxflow_core::session::DEFAULT_SESSION_ID).await
+    let solves = storage.get_solves(&default_id).await
         .map_err(|e| JsValue::from_str(&e.message))?;
 
     APP_STATE.with(|s| {
@@ -566,8 +569,8 @@ fn flow_coordinate(st: &mut WasmAppState, timestamp: f64, actions: &mut Vec<Stri
 
     match flow {
         FlowState::Idle => {
-            // If cube is solved in Idle, auto-generate scramble
-            if st.cube_logic.is_solved() {
+            // If cube is solved in Idle, auto-generate scramble (unless WCA session is full)
+            if st.cube_logic.is_solved() && !st.inner.session.is_wca_full() {
                 let scramble = generate_scramble();
                 debug!("[flow] Idle -> Scrambling (auto, cube solved)");
                 let action = st.inner.session.start_scramble(&scramble);
@@ -600,26 +603,37 @@ fn flow_coordinate(st: &mut WasmAppState, timestamp: f64, actions: &mut Vec<Stri
                 let moves_json = st.inner.timer.get_moves_json();
                 let action = st.inner.record_solve(timestamp, time_ms, &moves_json);
                 if !action.is_empty() { actions.push(action); }
-                // Skip Summary: immediately start next scramble
-                let next = generate_scramble();
-                debug!("[flow] chaining to next scramble");
-                let action2 = st.inner.session.start_scramble(&next);
-                if !action2.is_empty() {
-                    debug!("[calibration] started (next scramble)");
-                    st.inner.calibrator.start();
-                    actions.push(action2);
+                // Skip Summary: immediately start next scramble (unless WCA session is full)
+                if !st.inner.session.is_wca_full() {
+                    let next = generate_scramble();
+                    debug!("[flow] chaining to next scramble");
+                    let action2 = st.inner.session.start_scramble(&next);
+                    if !action2.is_empty() {
+                        debug!("[calibration] started (next scramble)");
+                        st.inner.calibrator.start();
+                        actions.push(action2);
+                    }
+                } else {
+                    debug!("[flow] WCA session full — not generating next scramble");
+                    let action2 = st.inner.session.reset_flow();
+                    if !action2.is_empty() { actions.push(action2); }
                 }
             }
         }
         FlowState::Summary => {
-            // Fallback: if somehow in Summary, auto-chain to next scramble
-            debug!("[flow] Summary -> Scrambling (fallback chain)");
-            let next = generate_scramble();
-            let action = st.inner.session.start_scramble(&next);
-            if !action.is_empty() {
-                debug!("[calibration] started (summary chain)");
-                st.inner.calibrator.start();
-                actions.push(action);
+            if !st.inner.session.is_wca_full() {
+                // Fallback: if somehow in Summary, auto-chain to next scramble
+                debug!("[flow] Summary -> Scrambling (fallback chain)");
+                let next = generate_scramble();
+                let action = st.inner.session.start_scramble(&next);
+                if !action.is_empty() {
+                    debug!("[calibration] started (summary chain)");
+                    st.inner.calibrator.start();
+                    actions.push(action);
+                }
+            } else {
+                let action = st.inner.session.reset_flow();
+                if !action.is_empty() { actions.push(action); }
             }
         }
     }
@@ -756,8 +770,17 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
             // Record interpreted move in timer (notation + timed_move)
             st.inner.record_interpreted_move(imove);
 
-            // Animate interpreted notation
-            rouxflow_render::queue_move_anim(imove.notation.clone(), 0.15);
+            // Animate interpreted notation — skip Rotation and Wide moves since
+            // the gyro already drives the renderer orientation continuously.
+            // Animating a discrete 90° on top of the live gyro would desync.
+            // Face and Slice moves are safe: body doesn't rotate, only layers turn.
+            match imove.kind {
+                rouxflow_core::move_interpreter::MoveKind::Face
+                | rouxflow_core::move_interpreter::MoveKind::Slice => {
+                    rouxflow_render::queue_move_anim(imove.notation.clone(), 0.15);
+                }
+                _ => {} // Rotation/Wide: gyro + facelet update handles the visual
+            }
 
             // Scramble validation: feed raw face moves (scrambles = face moves only)
             let flow_before = st.inner.session.get_flow_state_enum();
@@ -926,6 +949,13 @@ pub fn cm_update_timer(timestamp: f64) -> String {
         };
         st.inner.timer.update(timestamp);
 
+        // Check scramble move timeout → invalidate (stays visible until next BLE move resets flow)
+        if st.inner.session.get_flow_state_enum() == rouxflow_core::session::FlowState::Scrambling {
+            if st.inner.session.check_scramble_timeout(timestamp) {
+                debug!("[flow] Scramble move timeout -> invalidated");
+            }
+        }
+
         // Check inspection timeout → DNF
         if st.inner.session.get_flow_state_enum() == rouxflow_core::session::FlowState::Inspection {
             if st.inner.session.is_inspection_expired(timestamp) {
@@ -934,13 +964,19 @@ pub fn cm_update_timer(timestamp: f64) -> String {
                 // Record DNF solve
                 let action = st.inner.record_dnf(timestamp);
                 if !action.is_empty() { actions.push(action); }
-                // Chain to next scramble
-                let next = generate_scramble();
-                let action2 = st.inner.session.start_scramble(&next);
-                if !action2.is_empty() {
-                    debug!("[calibration] started (DNF chain)");
-                    st.inner.calibrator.start();
-                    actions.push(action2);
+                // Chain to next scramble (unless WCA full)
+                if !st.inner.session.is_wca_full() {
+                    let next = generate_scramble();
+                    let action2 = st.inner.session.start_scramble(&next);
+                    if !action2.is_empty() {
+                        debug!("[calibration] started (DNF chain)");
+                        st.inner.calibrator.start();
+                        actions.push(action2);
+                    }
+                } else {
+                    debug!("[flow] WCA session full after DNF — not generating next scramble");
+                    let action2 = st.inner.session.reset_flow();
+                    if !action2.is_empty() { actions.push(action2); }
                 }
                 if !actions.is_empty() {
                     return if actions.len() == 1 {
@@ -1088,6 +1124,13 @@ pub fn cm_delete_solve(solve_id: &str) -> String {
 // ========== Flow + Scramble Queries ==========
 
 #[wasm_bindgen]
+pub fn cm_is_wca_session_full() -> bool {
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or(false, |st| st.inner.session.is_wca_full())
+    })
+}
+
+#[wasm_bindgen]
 pub fn cm_is_cube_solved() -> bool {
     APP_STATE.with(|s| {
         s.borrow().as_ref().map_or(true, |st| st.cube_logic.is_solved())
@@ -1100,8 +1143,8 @@ pub fn cm_reset_flow() -> String {
         s.borrow_mut().as_mut().map_or_else(String::new, |st| {
             debug!("[flow] cm_reset_flow called");
             let action = st.inner.session.reset_flow();
-            // If cube is solved, auto-generate a scramble
-            if st.cube_logic.is_solved() {
+            // If cube is solved, auto-generate a scramble (unless WCA full)
+            if st.cube_logic.is_solved() && !st.inner.session.is_wca_full() {
                 let scramble = generate_scramble();
                 let action2 = st.inner.session.start_scramble(&scramble);
                 if !action2.is_empty() {
@@ -1116,9 +1159,9 @@ pub fn cm_reset_flow() -> String {
 }
 
 #[wasm_bindgen]
-pub fn cm_get_scramble_state() -> String {
+pub fn cm_get_scramble_state(now: f64) -> String {
     APP_STATE.with(|s| {
-        s.borrow().as_ref().map_or_else(|| "{}".to_string(), |st| st.inner.session.get_scramble_state_json())
+        s.borrow().as_ref().map_or_else(|| "{}".to_string(), |st| st.inner.session.get_scramble_state_json(now))
     })
 }
 
@@ -1130,9 +1173,29 @@ pub fn cm_get_inspection_remaining(now: f64) -> f64 {
 }
 
 #[wasm_bindgen]
+pub fn cm_set_inspection_duration(seconds: f64) {
+    APP_STATE.with(|s| {
+        if let Some(st) = s.borrow_mut().as_mut() {
+            st.inner.session.set_inspection_duration(seconds);
+        }
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_get_inspection_duration() -> f64 {
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or(15.0, |st| st.inner.session.get_inspection_duration())
+    })
+}
+
+#[wasm_bindgen]
 pub fn cm_generate_new_scramble() -> String {
     APP_STATE.with(|s| {
         s.borrow_mut().as_mut().map_or_else(String::new, |st| {
+            if st.inner.session.is_wca_full() {
+                debug!("[flow] cm_generate_new_scramble: WCA session full, skipping");
+                return String::new();
+            }
             let scramble = generate_scramble();
             debug!("[flow] cm_generate_new_scramble called");
             debug!("[calibration] started (new scramble generated)");

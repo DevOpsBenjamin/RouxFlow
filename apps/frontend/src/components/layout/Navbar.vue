@@ -53,6 +53,13 @@ onMounted(() => {
         Learn
       </button>
       <button
+        @click="router.push({ name: 'Stats' })"
+        class="hover:text-white transition-colors"
+        :class="{ 'text-indigo-400': $route.name === 'Stats' }"
+      >
+        Stats
+      </button>
+      <button
         @click="router.push({ name: 'Leaderboard' })"
         class="hover:text-white transition-colors"
         :class="{ 'text-indigo-400': $route.name === 'Leaderboard' }"

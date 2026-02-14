@@ -58,13 +58,13 @@ impl TimerManager {
 
     pub fn record_move(&mut self, move_str: String) {
         if self.state.is_running {
-            self.state.moves.push(move_str);
+            self.push_consolidated(move_str);
         }
     }
 
     pub fn record_interpreted_move(&mut self, m: &InterpretedMove) {
         if self.state.is_running {
-            self.state.moves.push(m.notation.clone());
+            self.push_consolidated(m.notation.clone());
             self.state.timed_moves.push(TimedMove {
                 n: m.notation.clone(),
                 t: m.timestamp_ms,
@@ -72,6 +72,24 @@ impl TimerManager {
                 g: m.gyro_delta,
             });
         }
+    }
+
+    /// Consolidate consecutive identical quarter-turn moves into double moves.
+    /// "D" + "D" → "D2", "D'" + "D'" → "D2", "r" + "r" → "r2", etc.
+    /// timed_moves stay raw for detailed analysis.
+    fn push_consolidated(&mut self, notation: String) {
+        if notation.ends_with('2') {
+            self.state.moves.push(notation);
+            return;
+        }
+        if let Some(last) = self.state.moves.last_mut() {
+            if !last.ends_with('2') && last.as_str() == notation {
+                let face = last.trim_end_matches('\'');
+                *last = format!("{}2", face);
+                return;
+            }
+        }
+        self.state.moves.push(notation);
     }
 
     pub fn get_state_json(&self) -> String {

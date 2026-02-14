@@ -6,6 +6,7 @@ import {
     cm_get_flow_state,
     cm_get_timer_state,
     cm_is_cube_solved,
+    cm_is_wca_session_full,
     cm_get_scramble_state,
     cm_get_inspection_remaining,
     cm_get_pending_scramble,
@@ -76,10 +77,15 @@ export const useTimerStore = defineStore('timer', () => {
     const scrambleState = computed(() => {
         _wasmTick.value
         try {
-            return JSON.parse(cm_get_scramble_state())
+            return JSON.parse(cm_get_scramble_state(performance.now() / 1000.0))
         } catch {
             return { scramble: [], index: 0, total: 0, is_ready: false, is_invalid: false, expected_move: null, correction_move: null }
         }
+    })
+
+    const isWcaFull = computed(() => {
+        _wasmTick.value
+        return cm_is_wca_session_full()
     })
 
     const pendingScramble = computed(() => {
@@ -124,7 +130,7 @@ export const useTimerStore = defineStore('timer', () => {
 
     // Watch flowState to start/stop animation loop
     watch(flowState, (state) => {
-        if (state === 'Inspection' || state === 'Solving') {
+        if (state === 'Scrambling' || state === 'Inspection' || state === 'Solving') {
             startTick()
         } else {
             stopTick()
@@ -146,6 +152,7 @@ export const useTimerStore = defineStore('timer', () => {
         currentMoves,
         formattedTime,
         isCubeSolved,
+        isWcaFull,
         inspectionRemaining,
         scrambleState,
         pendingScramble,

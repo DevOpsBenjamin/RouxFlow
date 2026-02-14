@@ -3,10 +3,12 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { useBluetoothStore } from '../../stores/bluetooth'
+import { useSessionStore } from '../../stores/session'
 
 const router = useRouter()
 const auth = useAuthStore()
 const bt = useBluetoothStore()
+const session = useSessionStore()
 
 // Data ownership modal
 const showDataNotice = ref(false)
@@ -29,7 +31,6 @@ async function acknowledgeDataNotice() {
     try {
       await auth.acceptDataConsent()
     } catch {
-      // If offline, fall back to localStorage
       localStorage.setItem('rouxflow_data_notice_seen', 'true')
     }
   } else {
@@ -38,24 +39,55 @@ async function acknowledgeDataNotice() {
   showDataNotice.value = false
 }
 
-function startSolving() {
-  router.push({ name: 'Session' })
+// Real stats from WASM via session store
+const stats = computed(() => session.sessionStats)
+const recentSolves = computed(() => session.solveList?.slice(0, 5) ?? [])
+const hasData = computed(() => stats.value && stats.value.solve_count > 0)
+
+function formatTime(ms: number | null | undefined): string {
+  if (ms == null) return '--'
+  const seconds = ms / 1000
+  return seconds.toFixed(2)
 }
 
-// Mock data for placeholder stats
-const mockStats = {
-  best: '14.23',
-  ao5: '16.87',
-  ao12: '17.42',
-  total: '127'
-}
-
-const mockSolves = [
-  { time: '15.32', scramble: "R U R' U' R' F R2 U' R' U'", ao5: '16.87', date: 'Today' },
-  { time: '14.23', scramble: "F R U' R' U R U R' F'", ao5: '17.01', date: 'Today' },
-  { time: '16.91', scramble: "R' U' F R U R' U' F'", ao5: '17.55', date: 'Yesterday' },
-  { time: '18.04', scramble: "U R U' R' U' F R F'", ao5: '18.12', date: 'Yesterday' },
-  { time: '17.56', scramble: "R U2 R' U' R U' R'", ao5: '18.30', date: 'Yesterday' },
+// Feature cards
+const features = [
+  {
+    name: 'Timer',
+    description: 'Start a Roux solving session',
+    route: 'Session',
+    icon: 'timer',
+    gradient: 'from-indigo-600 to-cyan-600',
+    hoverGradient: 'hover:from-indigo-500 hover:to-cyan-500',
+    requiresCube: true,
+  },
+  {
+    name: 'Learn',
+    description: 'Tutorials, sample solves & drills',
+    route: 'LearnTutorial',
+    icon: 'learn',
+    gradient: 'from-purple-600 to-pink-600',
+    hoverGradient: 'hover:from-purple-500 hover:to-pink-500',
+    requiresCube: true,
+  },
+  {
+    name: 'Stats',
+    description: 'Detailed analytics & trends',
+    route: 'Stats',
+    icon: 'stats',
+    gradient: 'from-emerald-600 to-teal-600',
+    hoverGradient: 'hover:from-emerald-500 hover:to-teal-500',
+    requiresCube: false,
+  },
+  {
+    name: 'Leaderboard',
+    description: 'See top solvers',
+    route: 'Leaderboard',
+    icon: 'leaderboard',
+    gradient: 'from-amber-600 to-orange-600',
+    hoverGradient: 'hover:from-amber-500 hover:to-orange-500',
+    requiresCube: false,
+  },
 ]
 </script>
 
@@ -156,83 +188,112 @@ const mockSolves = [
     </div>
 
     <!-- State 3: Cube connected -->
-    <div v-else-if="bt.isConnected" class="space-y-4">
-      <!-- Connection status bar -->
-      <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl px-5 py-3 flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-          <div class="flex items-center gap-2 text-sm">
-            <span class="text-emerald-300 font-semibold">{{ bt.connectedDeviceName || 'Cube' }}</span>
-            <span v-if="bt.deviceInfo?.protocol" class="text-slate-500">{{ bt.deviceInfo.protocol }}</span>
-            <span v-if="bt.deviceInfo?.battery != null" class="text-slate-400 flex items-center gap-1">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h14a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V9a2 2 0 012-2zm18 4h-2" />
-              </svg>
-              {{ bt.deviceInfo.battery }}%
-            </span>
-          </div>
+    <div v-else-if="bt.isConnected" class="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl px-5 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <div class="flex items-center gap-2 text-sm">
+          <span class="text-emerald-300 font-semibold">{{ bt.connectedDeviceName || 'Cube' }}</span>
+          <span v-if="bt.deviceInfo?.protocol" class="text-slate-500">{{ bt.deviceInfo.protocol }}</span>
+          <span v-if="bt.deviceInfo?.battery != null" class="text-slate-400 flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h14a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V9a2 2 0 012-2zm18 4h-2" />
+            </svg>
+            {{ bt.deviceInfo.battery }}%
+          </span>
         </div>
-        <button
-          @click="router.push({ name: 'CubeManager' })"
-          class="text-slate-400 hover:text-white text-xs font-medium transition-colors"
-        >
-          Manage Cube
-        </button>
       </div>
-
-      <!-- Start Solving CTA -->
       <button
-        @click="startSolving"
-        class="group relative w-full overflow-hidden bg-gradient-to-r from-indigo-600 to-cyan-600 rounded-3xl p-8 text-center hover:from-indigo-500 hover:to-cyan-500 transition-all hover:shadow-2xl hover:shadow-indigo-500/20 active:scale-[0.99]"
+        @click="router.push({ name: 'CubeManager' })"
+        class="text-slate-400 hover:text-white text-xs font-medium transition-colors"
       >
-        <div class="relative space-y-2">
-          <h3 class="text-3xl font-black text-white">Start Solving</h3>
-          <p class="text-indigo-100/80 text-sm">Open the timer and begin your Roux training session</p>
+        Manage Cube
+      </button>
+    </div>
+
+    <!-- Quick Stats Bar (real data) -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="bg-slate-900/50 border border-white/5 rounded-2xl p-4 text-center">
+        <p class="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1">Best</p>
+        <p class="text-2xl font-black text-white font-mono">{{ formatTime(stats?.best_ms) }}</p>
+      </div>
+      <div class="bg-slate-900/50 border border-white/5 rounded-2xl p-4 text-center">
+        <p class="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1">Best Ao5</p>
+        <p class="text-2xl font-black text-white font-mono">{{ formatTime(stats?.best_ao5_ms) }}</p>
+      </div>
+      <div class="bg-slate-900/50 border border-white/5 rounded-2xl p-4 text-center">
+        <p class="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1">Best Ao12</p>
+        <p class="text-2xl font-black text-white font-mono">{{ formatTime(stats?.best_ao12_ms) }}</p>
+      </div>
+      <div class="bg-slate-900/50 border border-white/5 rounded-2xl p-4 text-center">
+        <p class="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1">Solves</p>
+        <p class="text-2xl font-black text-white font-mono">{{ stats?.solve_count ?? 0 }}</p>
+      </div>
+    </div>
+
+    <!-- Feature Cards Grid -->
+    <div class="grid grid-cols-2 gap-3">
+      <button
+        v-for="feature in features"
+        :key="feature.name"
+        @click="router.push({ name: feature.route })"
+        class="group relative overflow-hidden rounded-2xl p-5 text-left transition-all hover:scale-[1.02] active:scale-[0.98] bg-gradient-to-br shadow-lg"
+        :class="[feature.gradient, feature.hoverGradient, `shadow-${feature.gradient.split('-')[1]}-500/10`]"
+      >
+        <div class="relative">
+          <!-- Icon -->
+          <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center mb-3">
+            <svg v-if="feature.icon === 'timer'" class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <svg v-else-if="feature.icon === 'learn'" class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+            <svg v-else-if="feature.icon === 'stats'" class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <svg v-else-if="feature.icon === 'leaderboard'" class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-bold text-white">{{ feature.name }}</h3>
+          <p class="text-sm text-white/60 mt-0.5">{{ feature.description }}</p>
         </div>
-        <svg class="absolute right-6 top-1/2 -translate-y-1/2 w-8 h-8 text-white/30 group-hover:text-white/60 group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+        <svg class="absolute right-4 bottom-4 w-5 h-5 text-white/20 group-hover:text-white/40 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
         </svg>
       </button>
     </div>
 
-    <!-- Quick Stats Row (mock data) -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 opacity-70">
-      <div class="bg-slate-900/50 border border-white/5 rounded-2xl p-4 text-center relative">
-        <span class="absolute top-2 right-2 text-[9px] text-slate-600 font-bold uppercase tracking-wider">Demo</span>
-        <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-1">Best</p>
-        <p class="text-2xl font-black text-white">{{ mockStats.best }}</p>
+    <!-- Recent Solves -->
+    <div v-if="hasData" class="bg-slate-900/50 border border-white/5 rounded-2xl overflow-hidden">
+      <div class="px-5 py-3 border-b border-white/5 flex items-center justify-between">
+        <h3 class="text-sm font-bold text-white">Recent Solves</h3>
+        <button
+          @click="router.push({ name: 'Stats' })"
+          class="text-xs text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
+        >
+          View All
+        </button>
       </div>
-      <div class="bg-slate-900/50 border border-white/5 rounded-2xl p-4 text-center relative">
-        <span class="absolute top-2 right-2 text-[9px] text-slate-600 font-bold uppercase tracking-wider">Demo</span>
-        <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-1">Ao5</p>
-        <p class="text-2xl font-black text-white">{{ mockStats.ao5 }}</p>
-      </div>
-      <div class="bg-slate-900/50 border border-white/5 rounded-2xl p-4 text-center relative">
-        <span class="absolute top-2 right-2 text-[9px] text-slate-600 font-bold uppercase tracking-wider">Demo</span>
-        <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-1">Ao12</p>
-        <p class="text-2xl font-black text-white">{{ mockStats.ao12 }}</p>
-      </div>
-      <div class="bg-slate-900/50 border border-white/5 rounded-2xl p-4 text-center relative">
-        <span class="absolute top-2 right-2 text-[9px] text-slate-600 font-bold uppercase tracking-wider">Demo</span>
-        <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-1">Total</p>
-        <p class="text-2xl font-black text-white">{{ mockStats.total }}</p>
+      <div class="divide-y divide-white/5">
+        <div
+          v-for="solve in recentSolves"
+          :key="solve.id"
+          class="px-5 py-3 flex items-center gap-4"
+        >
+          <span class="text-lg font-bold font-mono w-20" :class="solve.is_best ? 'text-emerald-400' : 'text-white'">
+            {{ solve.penalty === 'DNF' ? 'DNF' : formatTime(solve.time_ms) }}
+          </span>
+          <span v-if="solve.penalty === '+2'" class="text-[10px] text-amber-400 font-bold">+2</span>
+          <span class="text-xs text-slate-500 font-mono">{{ solve.turns }} moves</span>
+          <span class="text-xs text-slate-600 ml-auto">{{ solve.tps.toFixed(1) }} TPS</span>
+        </div>
       </div>
     </div>
 
-    <!-- Recent Solves (mock data) -->
-    <div class="bg-slate-900/50 border border-white/5 rounded-2xl overflow-hidden opacity-70 relative">
-      <div class="px-5 py-3 border-b border-white/5 flex items-center justify-between">
-        <h3 class="text-sm font-bold text-white">Recent Solves</h3>
-        <span class="text-[9px] text-slate-600 font-bold uppercase tracking-wider">Placeholder</span>
-      </div>
-      <div class="divide-y divide-white/5">
-        <div v-for="(solve, i) in mockSolves" :key="i" class="px-5 py-3 flex items-center gap-4">
-          <span class="text-lg font-bold text-white w-16">{{ solve.time }}</span>
-          <span class="text-xs text-slate-500 font-mono truncate flex-1">{{ solve.scramble }}</span>
-          <span class="text-xs text-slate-400 hidden sm:inline">Ao5: {{ solve.ao5 }}</span>
-          <span class="text-xs text-slate-600 w-16 text-right">{{ solve.date }}</span>
-        </div>
-      </div>
+    <!-- Empty state when no solves yet -->
+    <div v-else class="bg-slate-900/30 border border-dashed border-white/5 rounded-2xl p-8 text-center">
+      <p class="text-sm text-slate-500">No solves yet. Connect your cube and start a session!</p>
     </div>
 
     <!-- Data Ownership Modal -->

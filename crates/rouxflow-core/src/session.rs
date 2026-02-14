@@ -44,6 +44,8 @@ pub struct Session {
     pub session_type: SessionType,
     pub solves: Vec<Solve>,
     pub first_solve_at: Option<i64>,
+    #[serde(default)]
+    pub user_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -64,6 +66,16 @@ pub struct ScrambleState {
     pub is_invalid: bool,
     pub expected_move: Option<String>,
     pub correction_move: Option<String>,
+    pub mistake_count: usize,
+    /// True when we're on the second half of a double move (e.g. first D of D2 was done).
+    pub half_done: bool,
+    /// Internal move counter — increments on every accepted expanded move (including each half of D2).
+    pub accepted_count: usize,
+    /// Milliseconds elapsed since the last correct scramble move (or since scramble start).
+    pub move_elapsed_ms: u32,
+    /// Configured timeout per move in ms. None = no timeout.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub move_timeout_ms: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -79,24 +91,34 @@ pub enum CoreAction {
     Error(String),
 }
 
+/// Max uncorrected mistakes in Free mode before invalidation (cube is too far gone).
+const FREE_MODE_MAX_MISTAKE_STACK: usize = 4;
+
 pub struct ScrambleValidator {
     /// Original scramble for display: ["R", "U2", "L'"]
     pub scramble: Vec<String>,
     /// Expanded for validation: ["R", "U", "U", "L'"] — double moves split into quarter turns
     expanded: Vec<String>,
     /// 0 = normal, 1 = first half of double (any direction), 2 = second half (must match first)
-    double_kind: Vec<u8>,
+    pub(crate) double_kind: Vec<u8>,
     /// Maps each expanded index → original scramble index (for display highlighting)
     display_map: Vec<usize>,
     /// Current position in expanded sequence
     pub current_index: usize,
+    /// Wall-clock time (seconds) of last correct move (or scramble start)
     last_move_time: f64,
+    /// Wall-clock time (seconds) when scramble started
+    start_time: f64,
     pub is_invalid: bool,
     mistakes: Vec<String>,
+    /// Total mistake count (never decremented, even when mistakes are undone)
+    total_mistakes: usize,
+    /// WCA mode: strict 3-total-mistake invalidation. Free mode: only invalidate on deep mistake stack.
+    wca_mode: bool,
 }
 
 impl ScrambleValidator {
-    pub fn new(scramble_str: &str) -> Self {
+    pub fn new(scramble_str: &str, wca_mode: bool) -> Self {
         let scramble: Vec<String> = scramble_str.split_whitespace().map(|s| s.to_string()).collect();
         let mut expanded = Vec::new();
         let mut double_kind = Vec::new();
@@ -126,9 +148,18 @@ impl ScrambleValidator {
             display_map,
             current_index: 0,
             last_move_time: 0.0,
+            start_time: 0.0,
             is_invalid: false,
             mistakes: Vec::new(),
+            total_mistakes: 0,
+            wca_mode,
         }
+    }
+
+    /// Set start time (called when scramble begins, so elapsed tracking works from the start).
+    pub fn set_start_time(&mut self, timestamp: f64) {
+        self.start_time = timestamp;
+        self.last_move_time = timestamp;
     }
 
     fn get_inverse(m: &str) -> String {
@@ -141,38 +172,22 @@ impl ScrambleValidator {
         }
     }
 
-    /// Check if two moves target the same face (e.g. "D" and "D'" both target D)
-    fn same_face(a: &str, b: &str) -> bool {
-        a.chars().next() == b.chars().next()
-    }
-
     pub fn handle_move(&mut self, move_str: &str, timestamp: f64) -> bool {
         if self.is_invalid {
             return false;
         }
 
-        // 1. Check if it's the expected move and we have no pending mistakes
-        if self.mistakes.is_empty() && self.current_index < self.expanded.len() {
-            let matches = match self.double_kind[self.current_index] {
-                1 => {
-                    // First half of double: accept any quarter turn of same face (D or D' for D2)
-                    Self::same_face(move_str, &self.expanded[self.current_index])
-                }
-                2 => {
-                    // Second half of double: must match exactly what was done for the first half
-                    move_str == self.expanded[self.current_index - 1]
-                }
-                _ => {
-                    // Normal move: exact match
-                    move_str == self.expanded[self.current_index]
-                }
-            };
+        // Set start time on the very first move
+        if self.start_time <= 0.0 {
+            self.start_time = timestamp;
+            self.last_move_time = timestamp;
+        }
 
-            if matches {
-                // For first half of double, store actual move so second half can match it
-                if self.double_kind[self.current_index] == 1 {
-                    self.expanded[self.current_index] = move_str.to_string();
-                }
+        // 1. Check if it's the expected move and we have no pending mistakes
+        //    All moves (including both halves of D2) require exact match.
+        //    D2 expands to [D, D] — both must be D. Doing D' is a mistake.
+        if self.mistakes.is_empty() && self.current_index < self.expanded.len() {
+            if move_str == self.expanded[self.current_index] {
                 self.current_index += 1;
                 self.last_move_time = timestamp;
                 return true;
@@ -183,24 +198,43 @@ impl ScrambleValidator {
         if !self.mistakes.is_empty() {
             if move_str == Self::get_inverse(self.mistakes.last().unwrap()) {
                 self.mistakes.pop();
+                self.last_move_time = timestamp; // fresh 3s for next move
                 return true;
             }
         }
 
         // 3. Check if it's an undo of the previous correct move
+        //    BUT: don't allow undoing the first half of a double move when we're on the second half.
+        //    e.g. F2 = [F, F]: after first F accepted, F' should be a mistake, not an undo.
         if self.mistakes.is_empty() && self.current_index > 0 {
-            if move_str == Self::get_inverse(&self.expanded[self.current_index - 1]) {
-                self.current_index -= 1;
-                return true;
+            let on_second_half = self.current_index < self.double_kind.len()
+                && self.double_kind[self.current_index] == 2;
+            if !on_second_half {
+                if move_str == Self::get_inverse(&self.expanded[self.current_index - 1]) {
+                    self.current_index -= 1;
+                    self.last_move_time = timestamp;
+                    return true;
+                }
             }
         }
 
-        // 4. Otherwise, it's a mistake
+        // 4. Otherwise, it's a mistake — reset timer so correction gets its own 3s window
         self.mistakes.push(move_str.to_string());
+        self.total_mistakes += 1;
+        self.last_move_time = timestamp;
 
-        // If too many mistakes (tolerance = 3), mark invalid
-        if self.mistakes.len() > 3 {
-            self.is_invalid = true;
+        if self.wca_mode {
+            // WCA: 3 total mistakes (even corrected) invalidate the scramble.
+            // Prevents R R' loops to stall for extra inspection time.
+            if self.total_mistakes >= 3 {
+                self.is_invalid = true;
+            }
+        } else {
+            // Free: invalidate only when uncorrected mistakes pile up too deep.
+            // The cube is too far from expected state to recover.
+            if self.mistakes.len() >= FREE_MODE_MAX_MISTAKE_STACK {
+                self.is_invalid = true;
+            }
         }
 
         true // Still processing, but might be invalid
@@ -235,12 +269,49 @@ impl ScrambleValidator {
             self.display_map[self.current_index]
         }
     }
+
+    /// Total mistakes made (includes undone mistakes).
+    pub fn total_mistakes(&self) -> usize {
+        self.total_mistakes
+    }
+
+    /// Milliseconds elapsed since last correct move (or scramble start).
+    pub fn move_elapsed_ms(&self, now: f64) -> u32 {
+        if self.last_move_time <= 0.0 {
+            return 0;
+        }
+        ((now - self.last_move_time) * 1000.0).max(0.0) as u32
+    }
 }
+
+/// Consolidate consecutive identical quarter-turn moves into double notation.
+/// ["D", "D", "R'"] → ["D2", "R'"]
+pub fn consolidate_moves(moves: &[String]) -> Vec<String> {
+    let mut result = Vec::with_capacity(moves.len());
+    let mut i = 0;
+    while i < moves.len() {
+        if !moves[i].ends_with('2') && i + 1 < moves.len() && moves[i] == moves[i + 1] {
+            let face = moves[i].trim_end_matches('\'');
+            result.push(format!("{}2", face));
+            i += 2;
+        } else {
+            result.push(moves[i].clone());
+            i += 1;
+        }
+    }
+    result
+}
+
+/// WCA scramble move timeout: 3 seconds per move.
+pub const WCA_SCRAMBLE_MOVE_TIMEOUT_MS: u32 = 3_000;
 
 pub struct SessionManager {
     sessions: Vec<Session>,
     active_session: Option<Session>,
     scramble_validator: Option<ScrambleValidator>,
+
+    // Current user (None = guest)
+    current_user_id: Option<String>,
 
     // Motion fields
     last_orientation: Option<Quaternion>,
@@ -264,6 +335,7 @@ impl SessionManager {
             sessions: Vec::new(),
             active_session: None,
             scramble_validator: None,
+            current_user_id: None,
             last_orientation: None,
             is_stable: true,
             stable_since: 0.0,
@@ -274,6 +346,15 @@ impl SessionManager {
         }
     }
 
+    /// Set the current user ID. Call before loading sessions.
+    pub fn set_user_id(&mut self, user_id: Option<String>) {
+        self.current_user_id = user_id;
+    }
+
+    pub fn get_user_id(&self) -> Option<&str> {
+        self.current_user_id.as_deref()
+    }
+
     // ========== Session List Management ==========
 
     /// Bulk load sessions from storage (replaces in-memory list)
@@ -281,19 +362,29 @@ impl SessionManager {
         self.sessions = sessions;
     }
 
-    /// Ensure the DefaultSession exists. Returns Some(session) if a new one was
-    /// created (caller should persist it), or None if it already exists.
+    /// Compute the default session ID for the current user.
+    pub fn default_session_id(&self) -> String {
+        match &self.current_user_id {
+            Some(uid) => format!("default_{}", uid),
+            None => DEFAULT_SESSION_ID.to_string(),
+        }
+    }
+
+    /// Ensure the DefaultSession exists for the current user.
+    /// Returns Some(session) if a new one was created (caller should persist it).
     pub fn ensure_default_session(&mut self) -> Option<Session> {
-        if self.sessions.iter().any(|s| s.id == DEFAULT_SESSION_ID) {
+        let default_id = self.default_session_id();
+        if self.sessions.iter().any(|s| s.id == default_id) {
             return None;
         }
 
         let session = Session {
-            id: DEFAULT_SESSION_ID.to_string(),
+            id: default_id,
             name: DEFAULT_SESSION_NAME.to_string(),
             session_type: SessionType::Free,
             solves: Vec::new(),
             first_solve_at: None,
+            user_id: self.current_user_id.clone(),
         };
         self.sessions.push(session.clone());
         Some(session)
@@ -311,12 +402,20 @@ impl SessionManager {
 
     /// Populate active session's solves from storage.
     /// Sorts by date to ensure chronological order (IndexedDB returns by key/UUID).
+    /// Also recomputes `first_solve_at` from the earliest valid solve if not already set.
     pub fn load_solves_into_active(&mut self, mut solves: Vec<Solve>) {
         solves.sort_by_key(|s| s.date);
         if let Some(session) = &mut self.active_session {
+            // Recompute first_solve_at from earliest valid (non-deleted) solve
+            if session.first_solve_at.is_none() {
+                session.first_solve_at = solves.iter()
+                    .find(|s| s.is_valid && s.deleted_at.is_none())
+                    .map(|s| s.date);
+            }
             session.solves = solves.clone();
             // Also sync into sessions list
             if let Some(s) = self.sessions.iter_mut().find(|s| s.id == session.id) {
+                s.first_solve_at = session.first_solve_at;
                 s.solves = solves;
             }
         }
@@ -426,6 +525,7 @@ impl SessionManager {
             session_type,
             solves: Vec::new(),
             first_solve_at: None,
+            user_id: self.current_user_id.clone(),
         };
         self.sessions.push(session.clone());
         self.active_session = Some(session.clone());
@@ -433,7 +533,9 @@ impl SessionManager {
     }
 
     pub fn start_scramble(&mut self, scramble: &str) -> String {
-        self.scramble_validator = Some(ScrambleValidator::new(scramble));
+        let wca = self.active_session.as_ref()
+            .is_some_and(|s| matches!(s.session_type, SessionType::WCA));
+        self.scramble_validator = Some(ScrambleValidator::new(scramble, wca));
         self.flow_state = FlowState::Scrambling;
         serde_json::to_string(&CoreAction::FlowStateChanged(self.flow_state)).unwrap_or_default()
     }
@@ -522,6 +624,31 @@ impl SessionManager {
         self.scramble_validator.as_ref().map(|v| v.is_invalid).unwrap_or(false)
     }
 
+    /// Check if the current scramble move has timed out (WCA only).
+    /// Only applies after the first move — the first move has no timeout
+    /// (user can pause between scrambles, like waiting for a scrambler in WCA).
+    /// Returns true if the scramble was just invalidated.
+    pub fn check_scramble_timeout(&mut self, now: f64) -> bool {
+        let is_wca = self.active_session.as_ref()
+            .is_some_and(|s| matches!(s.session_type, SessionType::WCA));
+        if !is_wca {
+            return false;
+        }
+        if let Some(v) = &mut self.scramble_validator {
+            if v.is_invalid || v.is_ready() || v.current_index == 0 {
+                return false;
+            }
+            if v.last_move_time > 0.0 {
+                let elapsed_ms = ((now - v.last_move_time) * 1000.0).max(0.0) as u32;
+                if elapsed_ms >= WCA_SCRAMBLE_MOVE_TIMEOUT_MS {
+                    v.is_invalid = true;
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     pub fn get_scramble_index(&self) -> usize {
         self.scramble_validator.as_ref().map(|v| v.display_index()).unwrap_or(0)
     }
@@ -556,18 +683,40 @@ impl SessionManager {
         }
     }
 
+    /// Set inspection duration in seconds. WCA = 15s (enforced), Free = configurable.
+    pub fn set_inspection_duration(&mut self, seconds: f64) {
+        self.inspection_duration = seconds;
+    }
+
+    pub fn get_inspection_duration(&self) -> f64 {
+        self.inspection_duration
+    }
+
     // ========== Scramble State ==========
 
-    pub fn get_scramble_state_json(&self) -> String {
+    pub fn get_scramble_state_json(&self, now: f64) -> String {
+        let is_wca = self.active_session.as_ref()
+            .is_some_and(|s| matches!(s.session_type, SessionType::WCA));
+        let move_timeout = if is_wca { Some(WCA_SCRAMBLE_MOVE_TIMEOUT_MS) } else { None };
+
         let state = match &self.scramble_validator {
-            Some(v) => ScrambleState {
-                scramble: v.scramble.clone(),
-                index: v.display_index(),
-                total: v.scramble.len(),
-                is_ready: v.is_ready(),
-                is_invalid: v.is_invalid,
-                expected_move: v.get_expected_move().map(|s| s.to_string()),
-                correction_move: v.get_correction_move(),
+            Some(v) => {
+                let half = v.current_index < v.double_kind.len()
+                    && v.double_kind[v.current_index] == 2;
+                ScrambleState {
+                    scramble: v.scramble.clone(),
+                    index: v.display_index(),
+                    total: v.scramble.len(),
+                    is_ready: v.is_ready(),
+                    is_invalid: v.is_invalid,
+                    expected_move: v.get_expected_move().map(|s| s.to_string()),
+                    correction_move: v.get_correction_move(),
+                    mistake_count: v.total_mistakes(),
+                    half_done: half,
+                    accepted_count: v.current_index,
+                    move_elapsed_ms: v.move_elapsed_ms(now),
+                    move_timeout_ms: move_timeout,
+                }
             },
             None => ScrambleState {
                 scramble: Vec::new(),
@@ -577,6 +726,11 @@ impl SessionManager {
                 is_invalid: false,
                 expected_move: None,
                 correction_move: None,
+                mistake_count: 0,
+                half_done: false,
+                accepted_count: 0,
+                move_elapsed_ms: 0,
+                move_timeout_ms: None,
             },
         };
         serde_json::to_string(&state).unwrap_or_else(|_| "{}".to_string())
@@ -597,7 +751,8 @@ impl SessionManager {
     pub fn get_session_stats_json(&self) -> String {
         match &self.active_session {
             Some(s) => {
-                let stats = crate::stats::compute_session_stats(&s.solves, s.session_type);
+                let now_ms = chrono::Utc::now().timestamp_millis();
+                let stats = crate::stats::compute_session_stats(&s.solves, s.session_type, s.first_solve_at, now_ms);
                 serde_json::to_string(&stats).unwrap_or_else(|_| "{}".to_string())
             }
             None => "{}".to_string(),
@@ -618,7 +773,11 @@ impl SessionManager {
         match &self.active_session {
             Some(s) => {
                 match s.solves.iter().find(|solve| solve.id == solve_id) {
-                    Some(solve) => serde_json::to_string(solve).unwrap_or_else(|_| "null".to_string()),
+                    Some(solve) => {
+                        let mut display = solve.clone();
+                        display.moves = consolidate_moves(&display.moves);
+                        serde_json::to_string(&display).unwrap_or_else(|_| "null".to_string())
+                    }
                     None => "null".to_string(),
                 }
             }
@@ -650,6 +809,16 @@ impl SessionManager {
         }
 
         serde_json::to_string(&CoreAction::Error("Solve not found".into())).unwrap()
+    }
+
+    // ========== WCA Session Queries ==========
+
+    /// Returns true if the active session is WCA and has 5 valid (non-deleted) solves.
+    pub fn is_wca_full(&self) -> bool {
+        self.active_session.as_ref().is_some_and(|s| {
+            matches!(s.session_type, SessionType::WCA)
+                && s.solves.iter().filter(|v| v.is_valid && v.deleted_at.is_none()).count() >= 5
+        })
     }
 
     // ========== Flow State Enum Access ==========

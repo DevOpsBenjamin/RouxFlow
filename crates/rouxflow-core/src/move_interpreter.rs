@@ -312,19 +312,34 @@ impl MoveInterpreter {
         let ay = self.accum_rotation[1].abs();
         let az = self.accum_rotation[2].abs();
 
-        // Find dominant axis
-        if ax >= threshold && ax > ay && ax > az {
-            let suffix = if self.accum_rotation[0] > 0.0 { "" } else { "'" };
-            Some(format!("x{}", suffix))
-        } else if ay >= threshold && ay > ax && ay > az {
-            let suffix = if self.accum_rotation[1] > 0.0 { "" } else { "'" };
-            Some(format!("y{}", suffix))
-        } else if az >= threshold && az > ax && az > ay {
-            let suffix = if self.accum_rotation[2] > 0.0 { "" } else { "'" };
-            Some(format!("z{}", suffix))
+        // Find dominant axis — must be at least 2x the other two axes
+        // to avoid false positives from diagonal tilts where all components
+        // are roughly equal.
+        let (dominant_val, dominant_idx) = if ax >= ay && ax >= az {
+            (ax, 0)
+        } else if ay >= ax && ay >= az {
+            (ay, 1)
         } else {
-            None
+            (az, 2)
+        };
+
+        if dominant_val < threshold {
+            return None;
         }
+
+        // Dominance check: the dominant axis must be at least 2x the others
+        let others_max = match dominant_idx {
+            0 => ay.max(az),
+            1 => ax.max(az),
+            _ => ax.max(ay),
+        };
+        if others_max > 0.0 && dominant_val / others_max < 2.0 {
+            return None;
+        }
+
+        let names = ["x", "y", "z"];
+        let suffix = if self.accum_rotation[dominant_idx] > 0.0 { "" } else { "'" };
+        Some(format!("{}{}", names[dominant_idx], suffix))
     }
 }
 

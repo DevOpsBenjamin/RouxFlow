@@ -11,11 +11,6 @@ const guides = [
     icon: '\u{1F44B}',
   },
   {
-    name: 'Color Neutrality',
-    description: 'How to plan your First Block from any angle. Training progression from dual-CN to full-CN.',
-    icon: '\u{1F308}',
-  },
-  {
     name: 'Inspection Strategy',
     description: 'What to look for in 15 seconds: FB planning, SB prediction, and advanced pre-planning.',
     icon: '\u{1F50D}',

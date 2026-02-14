@@ -14,10 +14,10 @@ app.use(router)
 
 // Initialize auth state
 const auth = useAuthStore(pinia)
-auth.init()
 
 async function start() {
-    await ensureWasm()
+    await auth.init()
+    await ensureWasm(auth.user?.id)
     console.log('[Main] WASM initialized')
     app.mount('#app')
 }

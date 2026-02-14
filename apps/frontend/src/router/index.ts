@@ -66,6 +66,11 @@ const routes = [
     ]
   },
   {
+    path: '/stats',
+    name: 'Stats',
+    component: () => import('../components/layout/StatsView.vue')
+  },
+  {
     path: '/leaderboard',
     name: 'Leaderboard',
     component: () => import('../components/layout/LeaderboardView.vue')

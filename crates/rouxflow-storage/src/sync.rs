@@ -77,8 +77,8 @@ impl Storage for StorageManager {
         Ok(())
     }
 
-    async fn get_sessions(&self) -> Result<Vec<Session>, StorageError> {
-        self.local.get_sessions().await
+    async fn get_sessions(&self, user_id: Option<&str>) -> Result<Vec<Session>, StorageError> {
+        self.local.get_sessions(user_id).await
     }
 
     async fn create_session(&self, session: &Session) -> Result<(), StorageError> {

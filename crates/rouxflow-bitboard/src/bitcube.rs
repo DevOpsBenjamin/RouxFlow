@@ -295,7 +295,39 @@ impl BitCube {
     #[inline(always)] pub fn rotate_m_prime(&mut self) { for _ in 0..3 { self.rotate_m(); } }
     #[inline(always)] pub fn rotate_e_prime(&mut self) { for _ in 0..3 { self.rotate_e(); } }
 
-    /// Check if First Block (FB) is solved on a specific color/orientation.
+    // --- Bitmask constants for phase detection ---
+    // L face bottom 2 rows: positions 39-44
+    const L_BLOCK: u64 = (1<<39)|(1<<40)|(1<<41)|(1<<42)|(1<<43)|(1<<44);
+    // R face bottom 2 rows: positions 12-17
+    const R_BLOCK: u64 = (1<<12)|(1<<13)|(1<<14)|(1<<15)|(1<<16)|(1<<17);
+    // D-layer bar masks (left/right columns)
+    const D_BAR_L: u64 = (1<<27)|(1<<30)|(1<<33);
+    const D_BAR_R: u64 = (1<<29)|(1<<32)|(1<<35);
+    // F bar masks (left/right edge stickers)
+    const F_BAR_L: u64 = (1<<21)|(1<<24);
+    const F_BAR_R: u64 = (1<<23)|(1<<26);
+    // B bar masks (left/right edge stickers)
+    const B_BAR_L: u64 = (1<<50)|(1<<53);
+    const B_BAR_R: u64 = (1<<48)|(1<<51);
+    // U-face corner positions (for CMLL)
+    const U_CORNERS: u64 = (1<<0)|(1<<2)|(1<<6)|(1<<8);
+    // Side corner pairs (for CMLL permutation)
+    const SIDE_PAIRS: [u64; 4] = [
+        (1<<18)|(1<<20),  // F top corners
+        (1<<9)|(1<<11),   // R top corners
+        (1<<36)|(1<<38),  // L top corners
+        (1<<45)|(1<<47),  // B top corners
+    ];
+    // Face masks for solved check
+    const FACE_MASKS: [u64; 6] = [
+        0x1FF,        // U: 0-8
+        0x1FF << 9,   // R: 9-17
+        0x1FF << 18,  // F: 18-26
+        0x1FF << 27,  // D: 27-35
+        0x1FF << 36,  // L: 36-44
+        0x1FF << 45,  // B: 45-53
+    ];
+
     pub fn get_color_at(&self, idx: usize) -> usize {
         for i in 0..6 {
             if (self.boards[i] & (1 << idx)) != 0 { return i; }
@@ -303,38 +335,88 @@ impl BitCube {
         0
     }
 
+    // --- Phase detection: pure bitmask where possible ---
+
     pub fn is_fb_solved(&self) -> bool {
-        // Default Roux orientation: Left=Orange(5), Down=Yellow(1), Front=Green(2), Back=Blue(3)
         self.is_fb_solved_ext(5, 1, 2, 3)
     }
 
+    /// Check FB with pure bitmask: 4 AND+CMP operations.
+    /// Centers are NOT checked (allows pseudo-blocks with misaligned M-slice).
     pub fn is_fb_solved_ext(&self, l: usize, d: usize, f: usize, b: usize) -> bool {
-        // Face L center check (40)
-        if self.get_color_at(40) != l { return false; }
-        
-        // Face L: 39..=44 must match center
-        for i in 39..=44 {
-            if self.get_color_at(i) != l { return false; }
+        self.boards[l] & Self::L_BLOCK == Self::L_BLOCK &&
+        self.boards[d] & Self::D_BAR_L == Self::D_BAR_L &&
+        self.boards[f] & Self::F_BAR_L == Self::F_BAR_L &&
+        self.boards[b] & Self::B_BAR_L == Self::B_BAR_L
+    }
+
+    pub fn is_sb_solved(&self) -> bool {
+        self.is_sb_solved_ext(4, 1, 2, 3)
+    }
+
+    /// Check SB with pure bitmask: 4 AND+CMP operations.
+    pub fn is_sb_solved_ext(&self, r: usize, d: usize, f: usize, b: usize) -> bool {
+        self.boards[r] & Self::R_BLOCK == Self::R_BLOCK &&
+        self.boards[d] & Self::D_BAR_R == Self::D_BAR_R &&
+        self.boards[f] & Self::F_BAR_R == Self::F_BAR_R &&
+        self.boards[b] & Self::B_BAR_R == Self::B_BAR_R
+    }
+
+    /// Check if CMLL is solved: all 4 U corners same color + each side corner pair same color.
+    pub fn is_cmll_solved(&self) -> bool {
+        if !self.boards.iter().any(|&b| b & Self::U_CORNERS == Self::U_CORNERS) { return false; }
+        Self::SIDE_PAIRS.iter().all(|&mask| self.boards.iter().any(|&b| b & mask == mask))
+    }
+
+    /// Check if UL and UR edges are placed (relative to corners, not centers).
+    /// Uses U-face corner color as reference because after CMLL the M-slice
+    /// centers may be misaligned while all 4 U corners are guaranteed same color.
+    pub fn is_ul_ur_placed(&self) -> bool {
+        let u_corner = self.get_color_at(0); // U-face corner — reliable after CMLL
+        let l_color = self.get_color_at(40);
+        let r_color = self.get_color_at(13);
+        self.get_color_at(3) == u_corner && self.get_color_at(37) == l_color &&
+        self.get_color_at(5) == u_corner && self.get_color_at(10) == r_color
+    }
+
+    /// Check if the 4 M-slice edges are correctly placed (relative to centers).
+    pub fn is_l4e_solved(&self) -> bool {
+        let u_c = self.get_color_at(4);
+        let f_c = self.get_color_at(22);
+        let d_c = self.get_color_at(31);
+        let b_c = self.get_color_at(49);
+        self.get_color_at(7) == u_c && self.get_color_at(19) == f_c &&  // UF
+        self.get_color_at(1) == u_c && self.get_color_at(46) == b_c &&  // UB
+        self.get_color_at(28) == d_c && self.get_color_at(25) == f_c && // DF
+        self.get_color_at(34) == d_c && self.get_color_at(52) == b_c    // DB
+    }
+
+    /// Count misoriented edges for EO phase (6 edges on U/D + M-slice).
+    pub fn count_bad_edges(&self) -> usize {
+        let u_ref = self.get_color_at(4);
+        let f_ref = self.get_color_at(22);
+        let edges = [(7, 19), (1, 46), (31, 25), (34, 52), (3, 37), (5, 10)];
+        let mut bad = 0;
+        for (st1, st2) in edges {
+            let (c1, c2) = (self.get_color_at(st1), self.get_color_at(st2));
+            if Self::is_bad_edge(c1, c2, u_ref, f_ref) { bad += 1; }
         }
-        
-        // D bar (27,30,33) match check
-        // NOTE: We IGNORE the D center check to allow "Pseudo-Blocks" (misaligned M-slice).
-        // The block is valid if the pieces are correct, even if centers are rotated (e.g. r2).
-        // let d_center = self.get_color_at(31); 
-        // if d_center != d { return false; } 
-        if self.get_color_at(27) != d || self.get_color_at(30) != d || self.get_color_at(33) != d { return false; }
-        
-        // F bar (21,24) match check
-        // let f_center = self.get_color_at(22);
-        // if f_center != f { return false; }
-        if self.get_color_at(21) != f || self.get_color_at(24) != f { return false; }
-        
-        // B bar (50,53) match check
-        // let b_center = self.get_color_at(49);
-        // if b_center != b { return false; }
-        if self.get_color_at(50) != b || self.get_color_at(53) != b { return false; }
-        
-        true
+        bad
+    }
+
+    /// Check if the entire cube is solved (each face is a single solid color).
+    pub fn is_solved(&self) -> bool {
+        Self::FACE_MASKS.iter().all(|&mask| self.boards.iter().any(|&b| b & mask == mask))
+    }
+
+    fn is_bad_edge(top_front: usize, side: usize, u_ref: usize, f_ref: usize) -> bool {
+        let u_opp = u_ref ^ 1; // opposite color index (W=0↔Y=1, G=2↔B=3, R=4↔O=5)
+        let f_opp = f_ref ^ 1;
+        if side == u_ref || side == u_opp { return true; }
+        if (side == f_ref || side == f_opp) && (top_front == u_ref || top_front == u_opp) {
+            return false;
+        }
+        false
     }
 
     // --- Global Rotation Helpers (Correct Bitwise) ---

@@ -42,7 +42,7 @@ pub trait Storage {
     async fn delete_cube(&self, id: &str, user_id: &str) -> Result<(), StorageError>;
 
     // Sessions & Solves
-    async fn get_sessions(&self) -> Result<Vec<Session>, StorageError>;
+    async fn get_sessions(&self, user_id: Option<&str>) -> Result<Vec<Session>, StorageError>;
     async fn create_session(&self, session: &Session) -> Result<(), StorageError>;
     async fn save_solve(&self, session_id: &str, solve: &Solve) -> Result<(), StorageError>;
     async fn get_solves(&self, session_id: &str) -> Result<Vec<Solve>, StorageError>;

@@ -13,6 +13,15 @@ pub struct SessionStats {
     pub best_ao12_ms: Option<u32>,
     pub mean_tps: Option<f64>,
     pub session_type: String,
+    /// WCA: milliseconds remaining in the 1-hour window. None if not WCA or no solves yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wca_remaining_ms: Option<i64>,
+    /// WCA: number of solves remaining (out of 5). None if not WCA.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wca_solves_remaining: Option<usize>,
+    /// WCA: true if session has 5 solves (complete).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub wca_complete: bool,
 }
 
 #[derive(Serialize)]
@@ -98,10 +107,27 @@ pub fn compute_tps(solve: &Solve) -> f64 {
     if solve.time == 0 {
         return 0.0;
     }
-    solve.moves.len() as f64 / (solve.time as f64 / 1000.0)
+    consolidated_move_count(&solve.moves) as f64 / (solve.time as f64 / 1000.0)
 }
 
-pub fn compute_session_stats(solves: &[Solve], session_type: SessionType) -> SessionStats {
+/// Count moves after consolidating consecutive identical quarter turns into doubles.
+/// e.g. ["D", "D", "R'"] → 2 (D2 + R')
+pub fn consolidated_move_count(moves: &[String]) -> usize {
+    let mut count = 0;
+    let mut i = 0;
+    while i < moves.len() {
+        count += 1;
+        // If current and next are identical quarter turns, they consolidate to one double
+        if !moves[i].ends_with('2') && i + 1 < moves.len() && moves[i] == moves[i + 1] {
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    count
+}
+
+pub fn compute_session_stats(solves: &[Solve], session_type: SessionType, first_solve_at: Option<i64>, now_ms: i64) -> SessionStats {
     // All valid solves sorted by date (deleted solves already filtered at storage level,
     // but also filter here for in-memory consistency after soft-delete)
     let mut all_solves: Vec<&Solve> = solves.iter()
@@ -147,6 +173,23 @@ pub fn compute_session_stats(solves: &[Solve], session_type: SessionType) -> Ses
         SessionType::WCA => "WCA".to_string(),
     };
 
+    let (wca_remaining_ms, wca_solves_remaining, wca_complete) = match session_type {
+        SessionType::WCA => {
+            let complete = all_solves.len() >= 5;
+            let remaining = if complete {
+                None // Don't show countdown when session is done
+            } else {
+                first_solve_at.map(|first| {
+                    let one_hour_ms: i64 = 3600 * 1000;
+                    (one_hour_ms - (now_ms - first)).max(0)
+                })
+            };
+            let solves_left = Some(5_usize.saturating_sub(all_solves.len()));
+            (remaining, solves_left, complete)
+        }
+        _ => (None, None, false),
+    };
+
     SessionStats {
         solve_count: all_solves.len(), // Total solves including DNF
         best_ms,
@@ -158,6 +201,9 @@ pub fn compute_session_stats(solves: &[Solve], session_type: SessionType) -> Ses
         best_ao12_ms,
         mean_tps,
         session_type: session_type_str,
+        wca_remaining_ms,
+        wca_solves_remaining,
+        wca_complete,
     }
 }
 
@@ -182,7 +228,7 @@ pub fn compute_solve_list(solves: &[Solve]) -> Vec<SolveListEntry> {
                 id: s.id.clone(),
                 index: i + 1,
                 time_ms: s.time,
-                turns: s.moves.len(),
+                turns: consolidated_move_count(&s.moves),
                 tps,
                 is_best: !is_dnf && best_time == Some(s.time),
                 penalty: s.penalty.clone(),
@@ -339,7 +385,7 @@ mod tests {
 
     #[test]
     fn test_session_stats_empty() {
-        let stats = compute_session_stats(&[], SessionType::Free);
+        let stats = compute_session_stats(&[], SessionType::Free, None, 0);
         assert_eq!(stats.solve_count, 0);
         assert_eq!(stats.best_ms, None);
         assert_eq!(stats.current_ao5_ms, None);
@@ -348,7 +394,7 @@ mod tests {
     #[test]
     fn test_session_stats_with_solves() {
         let solves: Vec<Solve> = (1..=5).map(|i| make_solve(&i.to_string(), i * 1000, 20)).collect();
-        let stats = compute_session_stats(&solves, SessionType::Free);
+        let stats = compute_session_stats(&solves, SessionType::Free, None, 0);
         assert_eq!(stats.solve_count, 5);
         assert_eq!(stats.best_ms, Some(1000));
         assert_eq!(stats.worst_ms, Some(5000));
@@ -366,7 +412,7 @@ mod tests {
             make_solve_at("4", 11050, 20, 4),
             make_solve_at("5", 10800, 20, 5),
         ];
-        let stats = compute_session_stats(&solves, SessionType::Free);
+        let stats = compute_session_stats(&solves, SessionType::Free, None, 0);
         assert_eq!(stats.solve_count, 5); // DNF counts in total
         assert_eq!(stats.best_ms, Some(9500)); // best excludes DNF
         assert_eq!(stats.current_ao5_ms, Some(10680)); // 1 DNF trimmed as worst
@@ -381,7 +427,7 @@ mod tests {
             make_dnf_at("4", 4),
             make_solve_at("5", 10800, 20, 5),
         ];
-        let stats = compute_session_stats(&solves, SessionType::Free);
+        let stats = compute_session_stats(&solves, SessionType::Free, None, 0);
         assert_eq!(stats.solve_count, 5);
         assert_eq!(stats.current_ao5_ms, None); // 2 DNFs → DNF average
     }
@@ -391,7 +437,7 @@ mod tests {
         let mut solves: Vec<Solve> = (1..=5).map(|i| make_solve_at(&i.to_string(), i * 1000, 20, i as i64)).collect();
         // Soft-delete solve #3
         solves[2].deleted_at = Some(99999);
-        let stats = compute_session_stats(&solves, SessionType::Free);
+        let stats = compute_session_stats(&solves, SessionType::Free, None, 0);
         assert_eq!(stats.solve_count, 4); // Only 4 solves visible
         assert_eq!(stats.current_ao5_ms, None); // Less than 5 solves → no ao5
     }
@@ -414,7 +460,7 @@ mod tests {
             .map(|(i, &t)| make_solve_at(&i.to_string(), t, 20, i as i64 + 1))
             .collect();
 
-        let stats = compute_session_stats(&solves, SessionType::Free);
+        let stats = compute_session_stats(&solves, SessionType::Free, None, 0);
 
         // Current Ao5 = last 5: [9100, 7500, 8300, 9400, 7600]
         // sorted: [7500, 7600, 8300, 9100, 9400] → trim → avg(7600, 8300, 9100) = 25000/3 = 8333.33
@@ -440,7 +486,7 @@ mod tests {
             make_solve_at("d", 11000, 20, 4),
         ];
 
-        let stats = compute_session_stats(&solves, SessionType::Free);
+        let stats = compute_session_stats(&solves, SessionType::Free, None, 0);
         // After sorting by date: [5000, 10000, 15000, 11000, 6000]
         // Ao5: trim 5000,15000 → avg(10000,11000,6000) = 9000 (exact)
         assert_eq!(stats.current_ao5_ms, Some(9000));

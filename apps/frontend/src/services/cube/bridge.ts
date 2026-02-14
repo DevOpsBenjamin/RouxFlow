@@ -46,6 +46,7 @@ import init, {
     cm_get_active_session_id,
     cm_switch_session,
     cm_is_cube_solved,
+    cm_is_wca_session_full,
     cm_reset_flow,
     cm_get_scramble_state,
     cm_get_inspection_remaining,
@@ -55,6 +56,8 @@ import init, {
     cm_get_solve_list_json,
     cm_get_solve_by_id_json,
     cm_delete_solve,
+    cm_set_inspection_duration,
+    cm_get_inspection_duration,
 } from '../../wasm/rouxflow/rouxflow_wasm'
 import { logger } from '../../utils/logger'
 import type { SavedCube } from '../../stores/bluetooth'
@@ -71,18 +74,18 @@ let bleCharacteristic: BluetoothRemoteGATTCharacteristic | null = null
 let commandCharacteristic: BluetoothRemoteGATTCharacteristic | null = null
 let batteryPollInterval: ReturnType<typeof setInterval> | null = null
 
-export async function ensureWasm() {
+export async function ensureWasm(userId?: string | null) {
     if (wasmReady) return
     await init()
     cm_init()
 
-    // Initialize storage (IndexedDB), load sessions, ensure DefaultSession
+    // Initialize storage (IndexedDB), load sessions filtered by user
     const url = import.meta.env.VITE_SUPABASE_URL || ''
     const key = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-    await cm_init_storage(url || undefined, key || undefined)
+    await cm_init_storage(url || undefined, key || undefined, userId || undefined)
 
     wasmReady = true
-    logger.info('WASM + storage initialized')
+    logger.info('WASM + storage initialized', userId ? `(user: ${userId.slice(0, 8)}...)` : '(guest)')
 
     // Expose gyro debug on window for console use
     ;(window as any).gyroDebug = {
@@ -215,6 +218,7 @@ export {
     cm_create_session_persist,
     cm_load_active_session_solves,
     cm_is_cube_solved,
+    cm_is_wca_session_full,
     cm_reset_flow,
     cm_get_scramble_state,
     cm_get_inspection_remaining,
@@ -224,6 +228,8 @@ export {
     cm_get_solve_list_json,
     cm_get_solve_by_id_json,
     cm_delete_solve,
+    cm_set_inspection_duration,
+    cm_get_inspection_duration,
 }
 
 // Wrapper functions that parse JSON from WASM (avoids wasm_bindgen alloc churn)

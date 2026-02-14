@@ -45,6 +45,8 @@ struct SessionRecord {
     name: String,
     session_type: String,
     first_solve_at: Option<i64>,
+    #[serde(default)]
+    user_id: Option<String>,
 }
 
 impl LocalStorage {
@@ -135,7 +137,7 @@ impl Storage for LocalStorage {
         Ok(())
     }
 
-    async fn get_sessions(&self) -> Result<Vec<Session>, StorageError> {
+    async fn get_sessions(&self, user_id: Option<&str>) -> Result<Vec<Session>, StorageError> {
         let tx = self.db.transaction(&["sessions", "solves"], TransactionMode::ReadOnly)
             .map_err(|e| StorageError { message: format!("Transaction error: {:?}", e) })?;
         let session_store = tx.store("sessions")
@@ -175,6 +177,20 @@ impl Storage for LocalStorage {
         let mut sessions = Vec::new();
         for value in all_sessions {
             if let Ok(record) = from_js::<SessionRecord>(value) {
+                // Filter by user_id: show user's sessions + unclaimed (legacy) sessions
+                match user_id {
+                    Some(uid) => {
+                        if record.user_id.as_deref() != Some(uid) && record.user_id.is_some() {
+                            continue; // belongs to a different user
+                        }
+                    }
+                    None => {
+                        if record.user_id.is_some() {
+                            continue; // guest only sees unclaimed sessions
+                        }
+                    }
+                }
+
                 let session_type = if record.session_type == "WCA" {
                     SessionType::WCA
                 } else {
@@ -187,6 +203,7 @@ impl Storage for LocalStorage {
                     session_type,
                     solves,
                     first_solve_at: record.first_solve_at,
+                    user_id: record.user_id,
                 });
             }
         }
@@ -208,6 +225,7 @@ impl Storage for LocalStorage {
                 SessionType::Free => "Free".to_string(),
             },
             first_solve_at: session.first_solve_at,
+            user_id: session.user_id.clone(),
         };
 
         store.put(&to_js(&record)?, None).await
