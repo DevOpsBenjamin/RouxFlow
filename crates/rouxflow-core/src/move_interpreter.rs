@@ -44,10 +44,6 @@ struct PendingFaceMove {
     wall_ms: f64,
 }
 
-/// Suppress standalone gyro-only rotation detection for this long after emitting
-/// a Slice/Wide/Rotation move, since those inherently cause body rotation.
-const ROTATION_SUPPRESSION_MS: f64 = 200.0;
-
 pub struct MoveInterpreter {
     config: InterpreterConfig,
     pending: Vec<PendingFaceMove>,
@@ -55,8 +51,10 @@ pub struct MoveInterpreter {
     anchor_gyro: Option<Quaternion>,
     /// Accumulated rotation delta (x, y, z) in radians since last anchor
     accum_rotation: [f32; 3],
-    /// Wall-clock time of last emitted Slice/Wide/Rotation move (for suppression)
-    last_body_move_ms: f64,
+    /// Zone-based gating: true when the GyroCalibrator has detected a real zone rotation.
+    /// Set by WASM layer before each flush call. Standalone gyro rotations are only
+    /// emitted when this is true, preventing false rotations from M-move body wobble.
+    zone_rotation_hint: bool,
 }
 
 impl MoveInterpreter {
@@ -67,7 +65,7 @@ impl MoveInterpreter {
             last_gyro: None,
             anchor_gyro: None,
             accum_rotation: [0.0; 3],
-            last_body_move_ms: 0.0,
+            zone_rotation_hint: false,
         }
     }
 
@@ -76,11 +74,17 @@ impl MoveInterpreter {
         self.last_gyro = None;
         self.anchor_gyro = None;
         self.accum_rotation = [0.0; 3];
-        self.last_body_move_ms = 0.0;
+        self.zone_rotation_hint = false;
     }
 
     pub fn set_has_gyro(&mut self, has_gyro: bool) {
         self.config.has_gyro = has_gyro;
+    }
+
+    /// Set by the WASM layer before each flush call. When true, standalone gyro
+    /// rotation detection is enabled. When false, only face/wide/slice moves are emitted.
+    pub fn set_zone_rotation_hint(&mut self, hint: bool) {
+        self.zone_rotation_hint = hint;
     }
 
     pub fn current_accum_rotation(&self) -> [f32; 3] {
@@ -121,10 +125,6 @@ impl MoveInterpreter {
                     if let Some((notation, kind)) = self.classify_pair(f1, d1, f2, d2) {
                         let ts = self.compute_timestamp(self.pending[0].wall_ms, solve_start_ms);
                         let gyro_delta = self.capture_gyro_delta(&kind);
-                        // Track body-movement moves for suppression
-                        if matches!(kind, MoveKind::Slice | MoveKind::Wide | MoveKind::Rotation) {
-                            self.last_body_move_ms = wall_ms;
-                        }
                         result.push(InterpretedMove {
                             notation,
                             timestamp_ms: ts,
@@ -144,9 +144,6 @@ impl MoveInterpreter {
                     let p = self.pending.remove(0);
                     let ts = self.compute_timestamp(p.wall_ms, solve_start_ms);
                     let emitted = self.emit_single_or_wide(p.face, p.direction, ts);
-                    if matches!(emitted.kind, MoveKind::Wide) {
-                        self.last_body_move_ms = wall_ms;
-                    }
                     result.push(emitted);
                     self.update_anchor();
                     continue;
@@ -159,9 +156,6 @@ impl MoveInterpreter {
                     let p = self.pending.remove(0);
                     let ts = self.compute_timestamp(p.wall_ms, solve_start_ms);
                     let emitted = self.emit_single_or_wide(p.face, p.direction, ts);
-                    if matches!(emitted.kind, MoveKind::Wide) {
-                        self.last_body_move_ms = wall_ms;
-                    }
                     result.push(emitted);
                     self.update_anchor();
                     continue;
@@ -172,15 +166,14 @@ impl MoveInterpreter {
             }
         }
 
-        // Gyro-only rotation check (no pending face moves, has gyro, accumulated rotation is large)
-        // Suppressed for a short window after Slice/Wide/Rotation moves, since those
-        // inherently cause body rotation that would trigger false standalone rotations.
-        let suppressed = wall_ms - self.last_body_move_ms < ROTATION_SUPPRESSION_MS;
-        if self.pending.is_empty() && self.config.has_gyro && !suppressed {
+        // Gyro-only rotation check: only emit standalone rotations when the zone tracker
+        // confirms a real orientation change occurred. This prevents false rotations from
+        // M-move body wobble (wobble is small, never causes zone transitions) while
+        // allowing fast M + x sequences (real x causes zone transitions).
+        if self.pending.is_empty() && self.config.has_gyro && self.zone_rotation_hint {
             if let Some(rotation) = self.check_gyro_rotation() {
                 let ts = self.compute_timestamp(wall_ms, solve_start_ms);
                 let gyro_delta = Some(self.accum_rotation);
-                self.last_body_move_ms = wall_ms;
                 result.push(InterpretedMove {
                     notation: rotation,
                     timestamp_ms: ts,
@@ -557,11 +550,32 @@ mod tests {
         let rotated = Quaternion { x: half.sin(), y: 0.0, z: 0.0, w: half.cos() };
         interp.feed_gyro(&rotated, 200.0);
 
+        // Zone-based gating: hint must be set (normally done by WASM from calibrator)
+        interp.set_zone_rotation_hint(true);
         let moves = interp.flush(250.0, 0.0);
         assert_eq!(moves.len(), 1);
         assert_eq!(moves[0].notation, "x");
         assert_eq!(moves[0].kind, MoveKind::Rotation);
         assert!(moves[0].raw_face_moves.is_empty());
+    }
+
+    #[test]
+    fn no_gyro_rotation_without_zone_hint() {
+        let mut config = default_config();
+        config.has_gyro = true;
+        let mut interp = MoveInterpreter::new(config);
+
+        let identity = Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
+        interp.feed_gyro(&identity, 100.0);
+
+        let angle = std::f32::consts::FRAC_PI_2;
+        let half = angle / 2.0;
+        let rotated = Quaternion { x: half.sin(), y: 0.0, z: 0.0, w: half.cos() };
+        interp.feed_gyro(&rotated, 200.0);
+
+        // No zone hint set → no rotation emitted (prevents false M-wobble rotations)
+        let moves = interp.flush(250.0, 0.0);
+        assert!(moves.is_empty());
     }
 
     #[test]

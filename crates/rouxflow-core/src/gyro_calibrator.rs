@@ -40,6 +40,12 @@ pub struct GyroCalibrator {
     enter_cos: f32,
     /// cos(exit_half_angle): dot must drop below this to leave a zone
     exit_cos: f32,
+
+    // --- Zone rotation detection (for standalone gyro rotation gating) ---
+    /// Last committed (non -1) zone per axis, for detecting axis-level rotations.
+    prev_committed_zone: [i8; 3],
+    /// Pending zone rotation detections. Consumed when the interpreter emits a standalone rotation.
+    pending_zone_rotations: u32,
 }
 
 impl GyroCalibrator {
@@ -53,6 +59,8 @@ impl GyroCalibrator {
             current_zones: [-1; 3],
             enter_cos: (ZONE_ENTER_HALF_ANGLE_DEG.to_radians()).cos(),
             exit_cos: (ZONE_EXIT_HALF_ANGLE_DEG.to_radians()).cos(),
+            prev_committed_zone: [-1; 3],
+            pending_zone_rotations: 0,
         }
     }
 
@@ -64,6 +72,8 @@ impl GyroCalibrator {
         self.home = None;
         self.home_axes = None;
         self.current_zones = [-1; 3];
+        self.prev_committed_zone = [-1; 3];
+        self.pending_zone_rotations = 0;
     }
 
     /// Feed a quaternion sample. Only accumulates while active.
@@ -152,6 +162,7 @@ impl GyroCalibrator {
         // Initialize current zones to home position
         // At home, the relative rotation is identity, so axes map to their standard dirs
         self.current_zones = [0, 2, 4]; // +X, +Y, +Z
+        self.prev_committed_zone = [0, 2, 4];
 
         Some(home_q)
     }
@@ -259,9 +270,14 @@ impl GyroCalibrator {
                             ZONE_NAMES[old_zone as usize],
                             ZONE_NAMES[new_zone as usize]));
                         self.current_zones[axis_idx] = new_zone;
+                        if self.prev_committed_zone[axis_idx] >= 0 && new_zone != self.prev_committed_zone[axis_idx] {
+                            self.pending_zone_rotations += 1;
+                        }
+                        self.prev_committed_zone[axis_idx] = new_zone;
                     } else if new_zone >= 0 {
                         // Re-entered same zone (shouldn't happen, but handle it)
                         self.current_zones[axis_idx] = new_zone;
+                        self.prev_committed_zone[axis_idx] = new_zone;
                     } else {
                         logs.push(format!("[zone] {} EXIT {} (angle: {:.1}°)",
                             axis_name, ZONE_NAMES[old_zone as usize],
@@ -278,6 +294,10 @@ impl GyroCalibrator {
                     logs.push(format!("[zone] {} ENTER {}",
                         axis_name, ZONE_NAMES[new_zone as usize]));
                     self.current_zones[axis_idx] = new_zone;
+                    if self.prev_committed_zone[axis_idx] >= 0 && new_zone != self.prev_committed_zone[axis_idx] {
+                        self.pending_zone_rotations += 1;
+                    }
+                    self.prev_committed_zone[axis_idx] = new_zone;
                 }
             }
         }
@@ -296,6 +316,19 @@ impl GyroCalibrator {
     /// Get current zone state for external use.
     pub fn current_zones(&self) -> &[i8; 3] {
         &self.current_zones
+    }
+
+    /// Returns true if the zone tracker has detected any axis-level rotations
+    /// that haven't been consumed yet. Used to gate standalone gyro rotation
+    /// detection in the MoveInterpreter — only emit x/y/z when zones actually changed.
+    pub fn has_pending_zone_rotation(&self) -> bool {
+        self.pending_zone_rotations > 0
+    }
+
+    /// Consume all pending zone rotation detections. Called after the interpreter
+    /// emits a standalone gyro rotation move.
+    pub fn consume_zone_rotations(&mut self) {
+        self.pending_zone_rotations = 0;
     }
 
     /// Remap a move notation from cube body frame to home frame based on current zones.
@@ -777,6 +810,77 @@ mod tests {
         // Y moved to +Z, Z moved to -Y (for x rotation)
         assert_eq!(cal.current_zones[1], 4); // Y → +Z
         assert_eq!(cal.current_zones[2], 3); // Z → -Y
+    }
+
+    #[test]
+    fn test_zone_rotation_detection() {
+        let mut cal = GyroCalibrator::new();
+        cal.start();
+        let identity = q(0.0, 0.0, 0.0, 1.0);
+        for _ in 0..20 { cal.feed(&identity); }
+        cal.finalize().unwrap();
+
+        // Initially no pending rotations
+        assert!(!cal.has_pending_zone_rotation());
+
+        // 90° x rotation causes Y and Z axes to change zones
+        let half = std::f32::consts::FRAC_PI_4;
+        let x_rot = q(half.sin(), 0.0, 0.0, half.cos());
+        cal.track_orientation(&x_rot);
+
+        // Should detect zone rotations (Y and Z axes both changed)
+        assert!(cal.has_pending_zone_rotation());
+
+        // Consuming clears pending
+        cal.consume_zone_rotations();
+        assert!(!cal.has_pending_zone_rotation());
+    }
+
+    #[test]
+    fn test_small_wobble_no_zone_rotation() {
+        let mut cal = GyroCalibrator::new();
+        cal.start();
+        let identity = q(0.0, 0.0, 0.0, 1.0);
+        for _ in 0..20 { cal.feed(&identity); }
+        cal.finalize().unwrap();
+
+        // Small tilt (15°) — well within the 40° exit threshold
+        let angle = 15.0f32.to_radians();
+        let half = angle / 2.0;
+        let tilt = q(half.sin(), 0.0, 0.0, half.cos());
+        cal.track_orientation(&tilt);
+
+        // No zone transitions → no pending rotations
+        assert!(!cal.has_pending_zone_rotation());
+    }
+
+    #[test]
+    fn test_zone_rotation_via_between() {
+        // Test the EXIT → between → ENTER path (slower rotation)
+        let mut cal = GyroCalibrator::new();
+        cal.start();
+        let identity = q(0.0, 0.0, 0.0, 1.0);
+        for _ in 0..20 { cal.feed(&identity); }
+        cal.finalize().unwrap();
+
+        // Step 1: tilt 45° around x — exits Y and Z zones (past 40° exit)
+        // but doesn't enter new zone (nearest is 45° away, need < 30° to enter)
+        let angle1 = 45.0f32.to_radians();
+        let half1 = angle1 / 2.0;
+        let tilt1 = q(half1.sin(), 0.0, 0.0, half1.cos());
+        cal.track_orientation(&tilt1);
+        // Y and Z should be between zones
+        assert_eq!(cal.current_zones[1], -1);
+        assert_eq!(cal.current_zones[2], -1);
+        // No rotation yet (just exited)
+        assert!(!cal.has_pending_zone_rotation());
+
+        // Step 2: complete to 90° — enters new zones
+        let half2 = std::f32::consts::FRAC_PI_4;
+        let rot90 = q(half2.sin(), 0.0, 0.0, half2.cos());
+        cal.track_orientation(&rot90);
+        // Now Y→+Z, Z→-Y — different from original → rotation detected
+        assert!(cal.has_pending_zone_rotation());
     }
 
     // ========== Notation Remapping Tests ==========

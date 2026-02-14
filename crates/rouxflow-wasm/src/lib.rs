@@ -757,7 +757,9 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
             }
         }
 
-        // ===== Flush phase: get interpreted moves from buffer =====
+        // ===== Flush phase: set zone rotation hint, then get interpreted moves =====
+        let has_zone_rotation = st.inner.calibrator.has_pending_zone_rotation();
+        st.inner.interpreter.set_zone_rotation_hint(has_zone_rotation);
         let solve_start_ms = st.inner.timer.start_time_ms();
         let interpreted = st.inner.interpreter.flush(wall_ms, solve_start_ms);
 
@@ -853,6 +855,11 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     flow_coordinate(st, timestamp, &mut actions, Some(&remapped));
                 }
             }
+        }
+
+        // Consume pending zone rotations if a standalone gyro rotation was emitted
+        if interpreted.iter().any(|m| m.kind == rouxflow_core::move_interpreter::MoveKind::Rotation) {
+            st.inner.calibrator.consume_zone_rotations();
         }
 
         if actions.is_empty() {
