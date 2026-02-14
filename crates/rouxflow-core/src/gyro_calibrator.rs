@@ -41,6 +41,13 @@ pub struct GyroCalibrator {
     /// cos(exit_half_angle): dot must drop below this to leave a zone
     exit_cos: f32,
 
+    // --- Core offset (slice compensation) ---
+    /// Accumulated rotation of the core relative to the shell, caused by M/E/S slices.
+    /// The gyro sensor is in the core, so slice moves rotate the sensor without rotating
+    /// the shell. We subtract this offset before zone tracking to stay aligned with
+    /// the user's actual (shell) orientation.
+    core_offset: Quaternion,
+
     // --- Zone rotation detection (for standalone gyro rotation gating) ---
     /// Last committed (non -1) zone per axis, for detecting axis-level rotations.
     prev_committed_zone: [i8; 3],
@@ -59,6 +66,7 @@ impl GyroCalibrator {
             current_zones: [-1; 3],
             enter_cos: (ZONE_ENTER_HALF_ANGLE_DEG.to_radians()).cos(),
             exit_cos: (ZONE_EXIT_HALF_ANGLE_DEG.to_radians()).cos(),
+            core_offset: Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
             prev_committed_zone: [-1; 3],
             pending_zone_rotations: 0,
         }
@@ -72,6 +80,7 @@ impl GyroCalibrator {
         self.home = None;
         self.home_axes = None;
         self.current_zones = [-1; 3];
+        self.core_offset = Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
         self.prev_committed_zone = [-1; 3];
         self.pending_zone_rotations = 0;
     }
@@ -239,14 +248,20 @@ impl GyroCalibrator {
 
         let mut logs = Vec::new();
 
-        // Compute relative rotation: Q_rel = conjugate(home) * q_current
-        let q_rel = quat_mul(&quat_conjugate(&home), q);
+        // Compute relative rotation of CORE: Q_rel_core = conjugate(home) * q_current
+        let q_rel_core = quat_mul(&quat_conjugate(&home), q);
 
-        // Rotate standard basis by Q_rel to get where each axis currently points
+        // Compute relative rotation of SHELL by removing core offset from slice moves:
+        // Q_rel_shell = Q_rel_core * conjugate(core_offset)
+        // The core_offset accumulates rotations from M/E/S slices that moved the sensor
+        // but not the shell. Subtracting it gives the shell's true orientation.
+        let q_rel_shell = quat_mul(&q_rel_core, &quat_conjugate(&self.core_offset));
+
+        // Rotate standard basis by shell orientation to get where each axis currently points
         let current_axes = [
-            rotate_vec_by_quat([1.0, 0.0, 0.0], &q_rel),
-            rotate_vec_by_quat([0.0, 1.0, 0.0], &q_rel),
-            rotate_vec_by_quat([0.0, 0.0, 1.0], &q_rel),
+            rotate_vec_by_quat([1.0, 0.0, 0.0], &q_rel_shell),
+            rotate_vec_by_quat([0.0, 1.0, 0.0], &q_rel_shell),
+            rotate_vec_by_quat([0.0, 0.0, 1.0], &q_rel_shell),
         ];
 
         for axis_idx in 0..3 {
@@ -329,6 +344,71 @@ impl GyroCalibrator {
     /// emits a standalone gyro rotation move.
     pub fn consume_zone_rotations(&mut self) {
         self.pending_zone_rotations = 0;
+    }
+
+    /// Compensate the core offset after a slice move. The gyro sensor is in the core,
+    /// so M/E/S slices rotate the sensor without rotating the shell. This adds the
+    /// slice's rotation to the core_offset so track_orientation() stays aligned with
+    /// the shell.
+    ///
+    /// Call this after the interpreter emits a Slice move, passing the raw (body-frame)
+    /// notation (e.g., "M", "M'", "E", "E'", "S", "S'").
+    pub fn compensate_slice(&mut self, notation: &str) {
+        let half = std::f32::consts::FRAC_PI_4; // 45° = half of 90°
+        let (s, c) = (half.sin(), half.cos());
+
+        // Slice direction: M follows L (-x), E follows D (-y), S follows F (+z)
+        // M  = core rotates in L direction  = -x rotation (x' direction)
+        // M' = core rotates in R direction  = +x rotation (x direction)
+        // E  = core rotates in D direction  = -y rotation (y' direction)
+        // E' = core rotates in U direction  = +y rotation (y direction)
+        // S  = core rotates in F direction  = +z rotation (z direction)
+        // S' = core rotates in B direction  = -z rotation (z' direction)
+        let delta = match notation {
+            "M"  => Quaternion { x: -s, y: 0.0, z: 0.0, w: c }, // x' (core follows L)
+            "M'" => Quaternion { x:  s, y: 0.0, z: 0.0, w: c }, // x  (core follows R)
+            "E"  => Quaternion { x: 0.0, y: -s, z: 0.0, w: c }, // y' (core follows D)
+            "E'" => Quaternion { x: 0.0, y:  s, z: 0.0, w: c }, // y  (core follows U)
+            "S"  => Quaternion { x: 0.0, y: 0.0, z:  s, w: c }, // z  (core follows F)
+            "S'" => Quaternion { x: 0.0, y: 0.0, z: -s, w: c }, // z' (core follows B)
+            "M2" => Quaternion { x: -1.0, y: 0.0, z: 0.0, w: 0.0 }, // 180° around x
+            "E2" => Quaternion { x: 0.0, y: -1.0, z: 0.0, w: 0.0 }, // 180° around y
+            "S2" => Quaternion { x: 0.0, y: 0.0, z: 1.0, w: 0.0 },  // 180° around z
+            _ => return,
+        };
+
+        self.core_offset = quat_mul(&self.core_offset, &delta);
+        // Normalize to prevent drift
+        let len = (self.core_offset.x * self.core_offset.x
+            + self.core_offset.y * self.core_offset.y
+            + self.core_offset.z * self.core_offset.z
+            + self.core_offset.w * self.core_offset.w).sqrt();
+        if len > 1e-6 {
+            self.core_offset.x /= len;
+            self.core_offset.y /= len;
+            self.core_offset.z /= len;
+            self.core_offset.w /= len;
+        }
+    }
+
+    /// Get the current core offset (for renderer compensation).
+    pub fn core_offset(&self) -> &Quaternion {
+        &self.core_offset
+    }
+
+    /// Compute the renderer gyro offset accounting for both home orientation and core offset.
+    /// Returns conjugate(home * core_offset_inverse) so the renderer shows shell orientation.
+    pub fn compute_render_offset_compensated(&self) -> Option<(f32, f32, f32, f32)> {
+        let home = self.home?;
+        // The renderer needs: offset such that offset * raw_gyro = shell_display_rotation
+        // shell_orientation = conjugate(home) * raw_gyro * conjugate(core_offset)
+        // For the renderer: offset = conjugate(home) works for the left multiply,
+        // but the core_offset is a right multiply. Since the renderer only does
+        // left-multiply offset, we fold core_offset into home:
+        // effective_home = home * core_offset
+        // offset = conjugate(effective_home)
+        let effective = quat_mul(&home, &self.core_offset);
+        Some((-effective.x, -effective.y, -effective.z, effective.w))
     }
 
     /// Remap a move notation from cube body frame to home frame based on current zones.
@@ -881,6 +961,121 @@ mod tests {
         cal.track_orientation(&rot90);
         // Now Y→+Z, Z→-Y — different from original → rotation detected
         assert!(cal.has_pending_zone_rotation());
+    }
+
+    // ========== Core Offset Compensation Tests ==========
+
+    #[test]
+    fn test_m_slice_compensated_zones_stable() {
+        // After M slice, the core rotates ~90° around x but the shell doesn't.
+        // With compensation, zones should stay at home position.
+        let mut cal = GyroCalibrator::new();
+        cal.start();
+        let identity = q(0.0, 0.0, 0.0, 1.0);
+        for _ in 0..20 { cal.feed(&identity); }
+        cal.finalize().unwrap();
+        assert_eq!(cal.current_zones, [0, 2, 4]); // home
+
+        // Simulate what happens after M slice: core rotates x' (M follows L)
+        // The raw gyro now shows x' rotation
+        let half = std::f32::consts::FRAC_PI_4;
+        let x_neg_rot = q(-half.sin(), 0.0, 0.0, half.cos()); // x' = -90° around x
+
+        // Compensate BEFORE tracking (in real code, compensate is called after slice emit)
+        cal.compensate_slice("M");
+
+        // Now track with the rotated gyro — should cancel out
+        let logs = cal.track_orientation(&x_neg_rot);
+        // Zones should remain at home position since compensation cancels the core rotation
+        assert_eq!(cal.current_zones, [0, 2, 4],
+            "After M + compensation, zones should stay at home. Got zones={:?}, logs={:?}",
+            cal.current_zones, logs);
+    }
+
+    #[test]
+    fn test_m_prime_slice_compensated() {
+        let mut cal = GyroCalibrator::new();
+        cal.start();
+        let identity = q(0.0, 0.0, 0.0, 1.0);
+        for _ in 0..20 { cal.feed(&identity); }
+        cal.finalize().unwrap();
+
+        // M' → core rotates in R direction = +x
+        let half = std::f32::consts::FRAC_PI_4;
+        let x_pos_rot = q(half.sin(), 0.0, 0.0, half.cos());
+
+        cal.compensate_slice("M'");
+        let logs = cal.track_orientation(&x_pos_rot);
+        assert_eq!(cal.current_zones, [0, 2, 4],
+            "After M' + compensation, zones should stay at home. Got zones={:?}, logs={:?}",
+            cal.current_zones, logs);
+    }
+
+    #[test]
+    fn test_multiple_m_slices_compensated() {
+        let mut cal = GyroCalibrator::new();
+        cal.start();
+        let identity = q(0.0, 0.0, 0.0, 1.0);
+        for _ in 0..20 { cal.feed(&identity); }
+        cal.finalize().unwrap();
+
+        let half = std::f32::consts::FRAC_PI_4;
+        let _x_neg = q(-half.sin(), 0.0, 0.0, half.cos()); // M core rotation
+
+        // Do 4 M slices → core rotates 360° = back to identity
+        for _ in 0..4 {
+            cal.compensate_slice("M");
+        }
+
+        // After 4 M slices, core offset should be ~identity (360°)
+        // Feed identity gyro → zones should still be home
+        cal.track_orientation(&identity);
+        assert_eq!(cal.current_zones, [0, 2, 4]);
+    }
+
+    #[test]
+    fn test_slice_then_real_rotation_detected() {
+        // M slice (compensated) followed by a real x rotation should be detected
+        let mut cal = GyroCalibrator::new();
+        cal.start();
+        let identity = q(0.0, 0.0, 0.0, 1.0);
+        for _ in 0..20 { cal.feed(&identity); }
+        cal.finalize().unwrap();
+
+        // M slice: core does x' rotation
+        let half = std::f32::consts::FRAC_PI_4;
+        let x_neg = q(-half.sin(), 0.0, 0.0, half.cos());
+        cal.compensate_slice("M");
+        cal.track_orientation(&x_neg);
+        // Zones stable after compensation
+        assert_eq!(cal.current_zones, [0, 2, 4]);
+        assert!(!cal.has_pending_zone_rotation());
+
+        // Now user does a real x rotation (shell + core both rotate 90° more)
+        // Core is now at -90° (from M) + additional -90° (real x') = -180° from home
+        // But core_offset accounts for M's -90°, so shell sees -90° = real rotation
+        let x_180 = q(-1.0, 0.0, 0.0, 0.0); // 180° around x
+        cal.track_orientation(&x_180);
+        // Y and Z should have changed from the real rotation
+        assert!(cal.has_pending_zone_rotation(),
+            "Real rotation after M should be detected. zones={:?}", cal.current_zones);
+    }
+
+    #[test]
+    fn test_render_offset_compensated_at_identity() {
+        let mut cal = GyroCalibrator::new();
+        cal.start();
+        let identity = q(0.0, 0.0, 0.0, 1.0);
+        for _ in 0..20 { cal.feed(&identity); }
+        cal.finalize().unwrap();
+
+        // No slices → compensated offset == regular offset
+        let regular = cal.compute_render_offset().unwrap();
+        let compensated = cal.compute_render_offset_compensated().unwrap();
+        assert!(approx_eq(regular.0, compensated.0));
+        assert!(approx_eq(regular.1, compensated.1));
+        assert!(approx_eq(regular.2, compensated.2));
+        assert!(approx_eq(regular.3, compensated.3));
     }
 
     // ========== Notation Remapping Tests ==========

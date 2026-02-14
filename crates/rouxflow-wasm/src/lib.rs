@@ -805,6 +805,20 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                 _ => {} // Rotation/Wide: gyro + facelet update handles the visual
             }
 
+            // Slice compensation: the gyro sensor is in the core, so M/E/S slices
+            // rotate the sensor without rotating the shell. Compensate the calibrator's
+            // core offset so zone tracking stays aligned with the user's shell orientation.
+            // Use the RAW (body-frame) notation since that's what the hardware produced.
+            if imove.kind == rouxflow_core::move_interpreter::MoveKind::Slice {
+                st.inner.calibrator.compensate_slice(&imove.notation);
+                // Update renderer offset to account for new core offset
+                if let Some((ox, oy, oz, ow)) = st.inner.calibrator.compute_render_offset_compensated() {
+                    rouxflow_render::set_gyro_offset(ox, oy, oz, ow);
+                }
+                debug!("[slice-compensate] {} -> core_offset updated, zones: {}",
+                    imove.notation, st.inner.calibrator.debug_zones());
+            }
+
             // Scramble validation: feed raw face moves (scrambles = body frame, always)
             let flow_before = st.inner.session.get_flow_state_enum();
             for &(face, dir) in &imove.raw_face_moves {
@@ -829,7 +843,9 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                             debug!("[calibration] home axes: {}", axes_str);
                         }
                         debug!("[calibration] initial zones: {}", st.inner.calibrator.debug_zones());
-                        if let Some((ox, oy, oz, ow)) = st.inner.calibrator.compute_render_offset() {
+                        // Use compensated offset (accounts for any accumulated core offset,
+                        // though it should be identity right after finalize)
+                        if let Some((ox, oy, oz, ow)) = st.inner.calibrator.compute_render_offset_compensated() {
                             debug!("[calibration] applying gyro offset=({:.4}, {:.4}, {:.4}, {:.4})",
                                 ox, oy, oz, ow);
                             rouxflow_render::set_gyro_offset(ox, oy, oz, ow);
