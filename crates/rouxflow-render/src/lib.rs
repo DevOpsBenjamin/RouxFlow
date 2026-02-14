@@ -538,3 +538,16 @@ pub fn reset_gyro() {
         }
     });
 }
+
+/// Set an explicit gyro offset quaternion (used by auto-calibration).
+/// Unlike reset_gyro() which uses the current raw rotation, this takes
+/// a pre-computed offset (typically conjugate of the averaged home orientation).
+#[cfg(target_arch = "wasm32")]
+pub fn set_gyro_offset(x: f32, y: f32, z: f32, w: f32) {
+    STATE.with(|s| {
+        if let Some(state) = s.borrow_mut().as_mut() {
+            state.rotation_offset = Quaternion::new(w, x, y, z);
+            state.display_rotation = state.rotation_offset * state.raw_rotation;
+        }
+    });
+}

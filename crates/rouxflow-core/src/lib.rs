@@ -1,6 +1,7 @@
 pub mod app_state;
 pub mod bluetooth_manager;
 pub mod cube;
+pub mod gyro_calibrator;
 pub mod move_interpreter;
 pub mod session;
 pub mod stats;

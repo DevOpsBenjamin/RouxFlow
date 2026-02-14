@@ -40,8 +40,8 @@ use super::BleProfile;
 /// BLE profile for GAN Gen4 cubes.
 pub const BLE_PROFILE: BleProfile = BleProfile {
     service_uuid:           "00000010-0000-fff7-fff6-fff5fff4fff0",
-    command_characteristic: "0000fff5-0000-1000-8000-00805f9b34fb",
-    state_characteristic:   "0000fff6-0000-1000-8000-00805f9b34fb",
+    command_characteristic: "0000fff6-0000-1000-8000-00805f9b34fb",
+    state_characteristic:   "0000fff5-0000-1000-8000-00805f9b34fb",
 };
 
 /// Encryption keys (same as Gen2).

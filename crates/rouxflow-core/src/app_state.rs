@@ -1,4 +1,5 @@
 use crate::bluetooth_manager::BluetoothManager;
+use crate::gyro_calibrator::GyroCalibrator;
 use crate::move_interpreter::{InterpreterConfig, InterpretedMove, MoveInterpreter};
 use crate::session::SessionManager;
 use crate::timer_manager::TimerManager;
@@ -11,6 +12,7 @@ pub struct AppState {
     pub session: SessionManager,
     pub timer: TimerManager,
     pub interpreter: MoveInterpreter,
+    pub calibrator: GyroCalibrator,
 }
 
 impl AppState {
@@ -20,6 +22,7 @@ impl AppState {
             session: SessionManager::new(),
             timer: TimerManager::new(),
             interpreter: MoveInterpreter::new(InterpreterConfig::default()),
+            calibrator: GyroCalibrator::new(),
         }
     }
 

@@ -46,6 +46,13 @@ onMounted(() => {
         Timer
       </button>
       <button
+        @click="router.push({ name: 'LearnTutorial' })"
+        class="hover:text-white transition-colors"
+        :class="{ 'text-indigo-400': $route.path.startsWith('/learn') }"
+      >
+        Learn
+      </button>
+      <button
         @click="router.push({ name: 'Leaderboard' })"
         class="hover:text-white transition-colors"
         :class="{ 'text-indigo-400': $route.name === 'Leaderboard' }"

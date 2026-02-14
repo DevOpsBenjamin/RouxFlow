@@ -73,6 +73,10 @@ impl FaceletCube {
             "x" => self.rotate_cube_x(count), "y" => self.rotate_cube_y(count), "z" => self.rotate_cube_z(count),
             "r" => { self.move_r(count); self.move_m(3 * count % 4); },
             "l" => { self.move_l(count); self.move_m(count); },
+            "u" => { self.move_u(count); self.move_e(3 * count % 4); },
+            "d" => { self.move_d(count); self.move_e(count); },
+            "f" => { self.move_f(count); self.move_s(count); },
+            "b" => { self.move_b(count); self.move_s(3 * count % 4); },
             _ => {
                 // Handle split cases like S'S
                 if clean_move.starts_with("S'S") {

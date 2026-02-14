@@ -69,6 +69,7 @@ impl TimerManager {
                 n: m.notation.clone(),
                 t: m.timestamp_ms,
                 k: m.kind,
+                g: m.gyro_delta,
             });
         }
     }

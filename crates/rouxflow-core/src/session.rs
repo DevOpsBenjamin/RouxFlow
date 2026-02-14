@@ -16,6 +16,8 @@ pub struct TimedMove {
     pub n: String,
     pub t: u32,
     pub k: MoveKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub g: Option<[f32; 3]>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -31,6 +33,8 @@ pub struct Solve {
     pub timed_moves: Option<Vec<TimedMove>>,
     #[serde(default)]
     pub penalty: Option<String>,  // "DNF" or "+2"
+    #[serde(default)]
+    pub deleted_at: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -474,6 +478,7 @@ impl SessionManager {
             scramble,
             timed_moves,
             penalty: None,
+            deleted_at: None,
         };
 
         self.flow_state = FlowState::Summary;
@@ -493,6 +498,7 @@ impl SessionManager {
             scramble,
             timed_moves: None,
             penalty: Some("DNF".to_string()),
+            deleted_at: None,
         };
 
         self.flow_state = FlowState::Summary;
@@ -618,6 +624,32 @@ impl SessionManager {
             }
             None => "null".to_string(),
         }
+    }
+
+    // ========== Soft-Delete ==========
+
+    pub fn delete_solve(&mut self, solve_id: &str) -> String {
+        let now = chrono::Utc::now().timestamp_millis();
+
+        // Update in active session
+        if let Some(session) = &mut self.active_session {
+            if let Some(solve) = session.solves.iter_mut().find(|s| s.id == solve_id) {
+                solve.deleted_at = Some(now);
+                let result = serde_json::to_string(&CoreAction::SaveSolve(solve.clone())).unwrap();
+
+                // Sync to sessions list
+                let session_id = session.id.clone();
+                if let Some(s) = self.sessions.iter_mut().find(|s| s.id == session_id) {
+                    if let Some(solve) = s.solves.iter_mut().find(|s| s.id == solve_id) {
+                        solve.deleted_at = Some(now);
+                    }
+                }
+
+                return result;
+            }
+        }
+
+        serde_json::to_string(&CoreAction::Error("Solve not found".into())).unwrap()
     }
 
     // ========== Flow State Enum Access ==========

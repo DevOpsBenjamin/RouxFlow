@@ -15,7 +15,9 @@ use super::{
 use crate::protocol::moyu_v3::ENCRYPTION_KEYS;
 use rouxflow_core::cube::{Face, Quaternion};
 
-/// Quaternion components are Q14 fixed-point: bit 14 represents 1.0.
+/// Quaternion components are Q14 fixed-point (upper 16 bits of the full Q30 int32).
+/// Full precision would be 2^30 = 1073741824, but reading only the high int16
+/// and dividing by 2^14 = 16384 gives identical results within < 0.00003.
 const QUAT_SCALE: f32 = (1u32 << 14) as f32;
 
 /// MoYu V3 face order: "FBUDLR" — used for move encoding and facelet colors.
@@ -99,6 +101,16 @@ impl MoYuV3Codec {
         result
     }
 
+    /// Format a 5-bit move code for debug logging.
+    fn format_move(m: u32) -> &'static str {
+        match m {
+            0 => "F",  1 => "F'",  2 => "B",  3 => "B'",
+            4 => "U",  5 => "U'",  6 => "D",  7 => "D'",
+            8 => "L",  9 => "L'", 10 => "R", 11 => "R'",
+            _ => "??",
+        }
+    }
+
     /// Decode a 5-bit move value into Face + direction.
     fn decode_move(m: u32) -> Option<(Face, i8)> {
         let face_idx = (m >> 1) as usize;
@@ -178,11 +190,6 @@ impl CubeProtocol for MoYuV3Codec {
                 // Move counter: bits 88..96
                 // 5x 5-bit moves: bits 96..121
                 let mc = view.get(88, 8) as i16;
-                self.move_count = mc;
-
-                if self.prev_move_count == -1 || mc == self.prev_move_count {
-                    return vec![];
-                }
 
                 let mut time_offsets = [0u16; 5];
                 let mut moves = [0u32; 5];
@@ -192,15 +199,42 @@ impl CubeProtocol for MoYuV3Codec {
                     moves[i] = view.get(96 + i * 5, 5);
                 }
 
+                // Debug: dump all raw fields from the move packet
+                log::debug!(
+                    "[MoYu V3 MOVE] raw_hex={} | timestamps=[{}, {}, {}, {}, {}] \
+                     | counter={} (prev={}) | move_codes=[{}, {}, {}, {}, {}] \
+                     | decoded=[{}, {}, {}, {}, {}] | remaining_bits=0b{:08b}",
+                    decrypted.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "),
+                    time_offsets[0], time_offsets[1], time_offsets[2], time_offsets[3], time_offsets[4],
+                    mc, self.prev_move_count,
+                    moves[0], moves[1], moves[2], moves[3], moves[4],
+                    Self::format_move(moves[0]),
+                    Self::format_move(moves[1]),
+                    Self::format_move(moves[2]),
+                    Self::format_move(moves[3]),
+                    Self::format_move(moves[4]),
+                    // Bits 121..128 — remaining 7 bits of byte 15, check for unexpected data
+                    view.get(121, 7),
+                );
+
+                self.move_count = mc;
+
+                if self.prev_move_count == -1 || mc == self.prev_move_count {
+                    log::debug!("[MoYu V3 MOVE] skipped: prev_move_count={}, mc={}", self.prev_move_count, mc);
+                    return vec![];
+                }
+
                 // Reject if any move value is invalid
                 for m in &moves {
                     if *m >= 12 {
+                        log::debug!("[MoYu V3 MOVE] rejected: invalid move code {}", m);
                         return vec![];
                     }
                 }
 
                 let mut move_diff = ((mc - self.prev_move_count) & 0xFF) as usize;
                 if move_diff > 5 {
+                    log::debug!("[MoYu V3 MOVE] lost moves! diff={}, clamping to 5", move_diff);
                     move_diff = 5;
                 }
                 self.prev_move_count = mc;
@@ -209,6 +243,12 @@ impl CubeProtocol for MoYuV3Codec {
                 let mut events = Vec::new();
                 for i in (0..move_diff).rev() {
                     if let Some((face, direction)) = Self::decode_move(moves[i]) {
+                        log::debug!(
+                            "[MoYu V3 MOVE] emit: slot={} code={} → {:?} {} (ts={}ms)",
+                            i, moves[i], face,
+                            if direction == 1 { "CW" } else { "CCW" },
+                            time_offsets[i],
+                        );
                         events.push(CubeEvent::Move {
                             serial: mc as u16,
                             face,
@@ -221,29 +261,40 @@ impl CubeProtocol for MoYuV3Codec {
                 events
             }
             171 => {
-                // 0xAB — Gyroscope
-                // Data is INTERLEAVED: velocity and quaternion alternate every 2 bytes.
-                //   Byte 0:     opcode (0xAB)
-                //   Byte 1-2:   angular rate A
-                //   Byte 3-4:   qw (LE int16 / 16384)
-                //   Byte 5-6:   angular rate B
-                //   Byte 7-8:   qx (LE int16 / 16384)
-                //   Byte 9-10:  angular rate C
-                //   Byte 11-12: qy (LE int16 / 16384)
-                //   Byte 13-14: angular rate D
-                //   Byte 15-16: qz (LE int16 / 16384)
-                //   Byte 17-19: padding (0x00)
+                // 0xAB — Gyroscope quaternion + angular velocity
+                //
+                // The full-precision format is 4x LE int32 at bytes 1/5/9/13,
+                // each divided by 2^30 (Q30 fixed-point). Z axis is negated.
+                // (source: Cubeast protocol analysis)
+                //
+                // We only read the upper 16 bits of each int32 (bytes 3-4, 7-8,
+                // 11-12, 15-16) and divide by 2^14 (Q14). This is equivalent:
+                //   int32 / 2^30 = (low16 + high16*65536) / 2^30
+                //                ≈ high16 / 2^14   (low16 contributes < 0.00003)
+                // 14 bits of precision is more than enough for 3D rendering, and
+                // skipping the low bytes avoids wider arithmetic in WASM.
+                //
+                // Layout (byte 0 = opcode 0xAB):
+                //   Bytes 1-4:   qw as LE int32  (we read bytes 3-4 as LE int16)
+                //   Bytes 5-8:   qx as LE int32  (we read bytes 7-8 as LE int16)
+                //   Bytes 9-12:  qy as LE int32  (we read bytes 11-12 as LE int16)
+                //   Bytes 13-16: qz as LE int32  (we read bytes 15-16 as LE int16)
+                //   Bytes 17-19: padding (0x00)
+                //
+                // Axis remap (cube IMU → renderer):
+                //   renderer.y = gyro.z  (up axis)
+                //   renderer.z = -gyro.y (front axis, negated)
                 if decrypted.len() < 17 {
                     return vec![];
                 }
 
-                // Quaternion: little-endian int16 at bytes 3-4, 7-8, 11-12, 15-16
+                // Upper 16 bits of each int32 (Q14 precision)
                 let qw = view.get_endian(24, 16, true) as u16 as i16;
                 let qx = view.get_endian(56, 16, true) as u16 as i16;
                 let qy = view.get_endian(88, 16, true) as u16 as i16;
                 let qz = view.get_endian(120, 16, true) as u16 as i16;
 
-                // Angular velocity: bytes 1-2, 5-6, 9-10 (LE int16, raw for now)
+                // Lower 16 bits are angular velocity (not used for rendering)
                 let vx_raw = view.get_endian(8, 16, true) as u16 as i16;
                 let vy_raw = view.get_endian(40, 16, true) as u16 as i16;
                 let vz_raw = view.get_endian(72, 16, true) as u16 as i16;

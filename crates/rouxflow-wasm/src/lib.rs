@@ -6,6 +6,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
+use log::debug;
 use rouxflow_bluetoothcube::codec::{self, CubeCommand, CubeEvent, CubeProtocol};
 use rouxflow_core::cube::{CubeMove, facelet::Color as FaceletColor};
 use rouxflow_core::session::CoreAction;
@@ -15,6 +16,7 @@ use rouxflow_core::session::CoreAction;
 #[wasm_bindgen(start)]
 pub fn wasm_init() {
     console_error_panic_hook::set_once();
+    console_log::init_with_level(log::Level::Debug).ok();
 }
 
 /// Process a CubeEvent through the session manager.
@@ -106,6 +108,12 @@ pub fn update_render_state(facelets: Vec<u8>, x: f32, y: f32, z: f32, w: f32) {
 #[wasm_bindgen]
 pub fn reset_gyro() {
     rouxflow_render::reset_gyro()
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn set_gyro_offset(x: f32, y: f32, z: f32, w: f32) {
+    rouxflow_render::set_gyro_offset(x, y, z, w)
 }
 
 // ========== BLUETOOTHCUBE: cube registry ==========
@@ -480,6 +488,7 @@ pub fn cm_connect(device_name: String, mac_address: String, protocol_name: Strin
 
         let protocol = codec::create_protocol(protocol_version, &mac_address);
         let has_gyro = protocol.has_gyro();
+        debug!("[connect] device={}, protocol={}, has_gyro={}", device_name, protocol_name, has_gyro);
         st.protocol = Some(protocol);
         st.inner.bluetooth.connect(device_name, mac_address, protocol_name, has_gyro);
         // Reset logical cube to solved; will be overwritten by RawFacelets from cube
@@ -497,6 +506,7 @@ pub fn cm_connect(device_name: String, mac_address: String, protocol_name: Strin
 #[wasm_bindgen]
 pub fn cm_disconnect() {
     enter_wasm("cm_disconnect");
+    debug!("[connect] disconnecting");
     APP_STATE.with(|s| {
         if let Some(st) = s.borrow_mut().as_mut() {
             st.inner.disconnect();
@@ -559,19 +569,26 @@ fn flow_coordinate(st: &mut WasmAppState, timestamp: f64, actions: &mut Vec<Stri
             // If cube is solved in Idle, auto-generate scramble
             if st.cube_logic.is_solved() {
                 let scramble = generate_scramble();
+                debug!("[flow] Idle -> Scrambling (auto, cube solved)");
                 let action = st.inner.session.start_scramble(&scramble);
-                if !action.is_empty() { actions.push(action); }
+                if !action.is_empty() {
+                    debug!("[calibration] started (new scramble)");
+                    st.inner.calibrator.start();
+                    actions.push(action);
+                }
             }
         }
         FlowState::Scrambling => {
             // If scramble was invalidated, reset to Idle so user can start over
             if st.inner.session.is_scramble_invalid() {
+                debug!("[flow] Scrambling -> Idle (scramble invalidated)");
                 let action = st.inner.session.reset_flow();
                 if !action.is_empty() { actions.push(action); }
             }
         }
         FlowState::Inspection => {
             // First move during inspection → start solving
+            debug!("[flow] Inspection -> Solving (first move)");
             let action = st.inner.start_solving(timestamp);
             if !action.is_empty() { actions.push(action); }
         }
@@ -579,20 +596,31 @@ fn flow_coordinate(st: &mut WasmAppState, timestamp: f64, actions: &mut Vec<Stri
             // Check if cube is solved → auto-complete + immediately chain to next scramble
             if st.cube_logic.is_solved() {
                 let time_ms = st.inner.timer.get_current_time_ms() as u32;
+                debug!("[flow] Solving -> complete! time={}ms", time_ms);
                 let moves_json = st.inner.timer.get_moves_json();
                 let action = st.inner.record_solve(timestamp, time_ms, &moves_json);
                 if !action.is_empty() { actions.push(action); }
                 // Skip Summary: immediately start next scramble
                 let next = generate_scramble();
+                debug!("[flow] chaining to next scramble");
                 let action2 = st.inner.session.start_scramble(&next);
-                if !action2.is_empty() { actions.push(action2); }
+                if !action2.is_empty() {
+                    debug!("[calibration] started (next scramble)");
+                    st.inner.calibrator.start();
+                    actions.push(action2);
+                }
             }
         }
         FlowState::Summary => {
             // Fallback: if somehow in Summary, auto-chain to next scramble
+            debug!("[flow] Summary -> Scrambling (fallback chain)");
             let next = generate_scramble();
             let action = st.inner.session.start_scramble(&next);
-            if !action.is_empty() { actions.push(action); }
+            if !action.is_empty() {
+                debug!("[calibration] started (summary chain)");
+                st.inner.calibrator.start();
+                actions.push(action);
+            }
         }
     }
 }
@@ -650,11 +678,21 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                         timestamp,
                     );
                     if !action.is_empty() {
+                        if action.contains("Pickup") {
+                            debug!("[gyro] pickup detected");
+                        } else if action.contains("Putdown") {
+                            debug!("[gyro] putdown detected");
+                        }
                         actions.push(action);
                     }
 
                     // Feed gyro to interpreter for rotation detection
                     st.inner.interpreter.feed_gyro(&q, wall_ms);
+
+                    // Feed gyro to calibrator if active
+                    if st.inner.calibrator.is_active() {
+                        st.inner.calibrator.feed(&q);
+                    }
                 }
                 CubeEvent::Battery { level } => {
                     st.inner.bluetooth.update_battery(*level);
@@ -703,6 +741,12 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
 
         // ===== Dispatch phase: process each interpreted move =====
         for imove in &interpreted {
+            // Log interpreted move
+            debug!("[move] {} kind={:?} raw={:?} gyro_delta={:?}",
+                imove.notation, imove.kind,
+                imove.raw_face_moves.iter().map(|(f,d)| CubeMove{face:*f, amount:*d}.notation()).collect::<Vec<_>>(),
+                imove.gyro_delta);
+
             // Apply raw face moves to cube_logic (correct facelet state)
             for &(face, dir) in &imove.raw_face_moves {
                 let notation = CubeMove { face, amount: dir }.notation();
@@ -723,6 +767,30 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                 if !a.is_empty() { actions.push(a); }
             }
 
+            // Check for Scrambling → Inspection transition: finalize gyro calibration
+            let flow_after = st.inner.session.get_flow_state_enum();
+            if flow_before != flow_after {
+                debug!("[flow] {:?} -> {:?}", flow_before, flow_after);
+            }
+            if flow_before == rouxflow_core::session::FlowState::Scrambling
+                && flow_after == rouxflow_core::session::FlowState::Inspection
+            {
+                match st.inner.calibrator.finalize() {
+                    Some(home) => {
+                        debug!("[calibration] finalized home=({:.4}, {:.4}, {:.4}, {:.4})",
+                            home.x, home.y, home.z, home.w);
+                        if let Some((ox, oy, oz, ow)) = st.inner.calibrator.compute_render_offset() {
+                            debug!("[calibration] applying gyro offset=({:.4}, {:.4}, {:.4}, {:.4})",
+                                ox, oy, oz, ow);
+                            rouxflow_render::set_gyro_offset(ox, oy, oz, ow);
+                        }
+                    }
+                    None => {
+                        debug!("[calibration] finalize failed (not enough samples)");
+                    }
+                }
+            }
+
             // Emit CoreAction::Move with interpreted notation
             let action_json = serde_json::to_string(&CoreAction::Move(imove.notation.clone()))
                 .unwrap_or_default();
@@ -733,7 +801,6 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
             // Flow coordination: only for face/slice moves, not rotations
             // (rotations during inspection should not start the solve timer)
             if imove.kind != rouxflow_core::move_interpreter::MoveKind::Rotation {
-                let flow_after = st.inner.session.get_flow_state_enum();
                 if flow_before == flow_after {
                     flow_coordinate(st, timestamp, &mut actions, Some(&imove.notation));
                 }
@@ -862,6 +929,7 @@ pub fn cm_update_timer(timestamp: f64) -> String {
         // Check inspection timeout → DNF
         if st.inner.session.get_flow_state_enum() == rouxflow_core::session::FlowState::Inspection {
             if st.inner.session.is_inspection_expired(timestamp) {
+                debug!("[flow] Inspection expired -> DNF");
                 let mut actions = Vec::new();
                 // Record DNF solve
                 let action = st.inner.record_dnf(timestamp);
@@ -869,7 +937,11 @@ pub fn cm_update_timer(timestamp: f64) -> String {
                 // Chain to next scramble
                 let next = generate_scramble();
                 let action2 = st.inner.session.start_scramble(&next);
-                if !action2.is_empty() { actions.push(action2); }
+                if !action2.is_empty() {
+                    debug!("[calibration] started (DNF chain)");
+                    st.inner.calibrator.start();
+                    actions.push(action2);
+                }
                 if !actions.is_empty() {
                     return if actions.len() == 1 {
                         actions.into_iter().next().unwrap()
@@ -935,7 +1007,12 @@ pub fn cm_create_session(session_json: &str) {
 #[wasm_bindgen]
 pub fn cm_start_scramble(scramble: &str) -> String {
     APP_STATE.with(|s| {
-        s.borrow_mut().as_mut().map_or_else(String::new, |st| st.inner.session.start_scramble(scramble))
+        s.borrow_mut().as_mut().map_or_else(String::new, |st| {
+            debug!("[flow] cm_start_scramble called");
+            debug!("[calibration] started (cm_start_scramble)");
+            st.inner.calibrator.start();
+            st.inner.session.start_scramble(scramble)
+        })
     })
 }
 
@@ -990,6 +1067,24 @@ pub fn cm_get_solve_by_id_json(solve_id: &str) -> String {
     })
 }
 
+// ========== Soft-Delete Solve ==========
+
+#[wasm_bindgen]
+pub fn cm_delete_solve(solve_id: &str) -> String {
+    APP_STATE.with(|s| {
+        let mut state = s.borrow_mut();
+        match state.as_mut() {
+            Some(st) => {
+                let result = st.inner.session.delete_solve(solve_id);
+                result
+            }
+            None => serde_json::to_string(&rouxflow_core::session::CoreAction::Error(
+                "AppState not initialized".into()
+            )).unwrap(),
+        }
+    })
+}
+
 // ========== Flow + Scramble Queries ==========
 
 #[wasm_bindgen]
@@ -1003,12 +1098,17 @@ pub fn cm_is_cube_solved() -> bool {
 pub fn cm_reset_flow() -> String {
     APP_STATE.with(|s| {
         s.borrow_mut().as_mut().map_or_else(String::new, |st| {
+            debug!("[flow] cm_reset_flow called");
             let action = st.inner.session.reset_flow();
             // If cube is solved, auto-generate a scramble
             if st.cube_logic.is_solved() {
                 let scramble = generate_scramble();
                 let action2 = st.inner.session.start_scramble(&scramble);
-                if !action2.is_empty() { return action2; }
+                if !action2.is_empty() {
+                    debug!("[calibration] started (reset_flow + solved)");
+                    st.inner.calibrator.start();
+                    return action2;
+                }
             }
             action
         })
@@ -1034,6 +1134,9 @@ pub fn cm_generate_new_scramble() -> String {
     APP_STATE.with(|s| {
         s.borrow_mut().as_mut().map_or_else(String::new, |st| {
             let scramble = generate_scramble();
+            debug!("[flow] cm_generate_new_scramble called");
+            debug!("[calibration] started (new scramble generated)");
+            st.inner.calibrator.start();
             st.inner.session.start_scramble(&scramble);
             scramble
         })

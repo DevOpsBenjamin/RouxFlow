@@ -54,6 +54,7 @@ import init, {
     cm_get_session_stats_json,
     cm_get_solve_list_json,
     cm_get_solve_by_id_json,
+    cm_delete_solve,
 } from '../../wasm/rouxflow/rouxflow_wasm'
 import { logger } from '../../utils/logger'
 import type { SavedCube } from '../../stores/bluetooth'
@@ -222,6 +223,7 @@ export {
     cm_get_session_stats_json,
     cm_get_solve_list_json,
     cm_get_solve_by_id_json,
+    cm_delete_solve,
 }
 
 // Wrapper functions that parse JSON from WASM (avoids wasm_bindgen alloc churn)
@@ -550,6 +552,21 @@ export async function disconnect(): Promise<void> {
     cm_disconnect()
 
     logger.info('Disconnected from cube')
+}
+
+// --- Solve operations ---
+
+export async function deleteSolve(solveId: string): Promise<void> {
+    const actionJson = cm_delete_solve(solveId)
+    if (actionJson) {
+        try {
+            const action = JSON.parse(actionJson)
+            await handleCoreAction(action)
+        } catch (e) {
+            logger.error('Failed to delete solve:', e)
+        }
+    }
+    _notifyWasmStateChanged()
 }
 
 // --- Storage operations (delegated to WASM StorageManager) ---

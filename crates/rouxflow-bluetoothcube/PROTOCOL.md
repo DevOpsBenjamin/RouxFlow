@@ -153,8 +153,8 @@ handling lost BLE packets.
 | UUID | Role |
 |------|------|
 | `8653000a-43e6-47b7-9cb0-5fc21d4ae340` | Primary service |
-| `8653000c-43e6-47b7-9cb0-5fc21d4ae340` | Command (write) |
-| `8653000b-43e6-47b7-9cb0-5fc21d4ae340` | State (notify) |
+| `8653000b-43e6-47b7-9cb0-5fc21d4ae340` | Command (write) |
+| `8653000c-43e6-47b7-9cb0-5fc21d4ae340` | State (notify) |
 
 ### Encryption
 Same as Gen2 (AES-128-CBC, same keys, same MAC salting).
@@ -200,8 +200,8 @@ gyroscope support.
 | UUID | Role |
 |------|------|
 | `00000010-0000-fff7-fff6-fff5fff4fff0` | Primary service |
-| `0000fff5-0000-1000-8000-00805f9b34fb` | Command (write) |
-| `0000fff6-0000-1000-8000-00805f9b34fb` | State (notify) |
+| `0000fff6-0000-1000-8000-00805f9b34fb` | Command (write) |
+| `0000fff5-0000-1000-8000-00805f9b34fb` | State (notify) |
 
 ### Encryption
 Same as Gen2.
@@ -297,11 +297,14 @@ All fields are accessed as bit offsets. Byte 0 (bits 0..8) = message type:
 | `0xA1` | Info     | Device info response                    |
 | `0xA3` | State    | Full cube state (facelets)              |
 | `0xA4` | Battery  | Battery level                           |
-| `0xA5` | Move     | Face (0-5) + direction (CW/CCW/Double)  |
-| `0xAB` | Gyro     | 4 × `f32` little-endian quaternion      |
+| `0xA5` | Move     | 5-bit move codes (face + direction)     |
+| `0xAB` | Gyro     | 4 × LE int32 quaternion (Q30), Z negated |
 
-Move face codes: `U=0, D=1, L=2, R=3, F=4, B=5`.
-Direction codes: `CW=1, CCW=2, Double=3`.
+**Gyro packet (0xAB):** 4 quaternion components as little-endian int32 at bytes 1/5/9/13, divided by 2^30 (Q30 fixed-point). Z axis is negated. We only read the upper 16 bits of each int32 (bytes 3-4, 7-8, 11-12, 15-16) and divide by 2^14 (Q14) — this is mathematically equivalent (`high16 / 2^14 ≈ int32 / 2^30`) and avoids 32-bit arithmetic in WASM for no visible difference in rendering. The lower 16 bits (bytes 1-2, 5-6, 9-10, 13-14) are angular velocity, unused. Axis remap: `renderer.y = gyro.z` (up), `renderer.z = -gyro.y` (front).
+
+**Move encoding (0xA5):** Each move is a 5-bit code. `face = code >> 1`, `direction = code & 1`.
+Face order (FBUDLR): `F=0, B=1, U=2, D=3, L=4, R=5`.
+Direction: `0=CW, 1=CCW`. Any code >= 12 is invalid.
 
 ---
 
@@ -320,10 +323,11 @@ Proprietary protocol by Xiaomi for the Giiker smart cube line.
 ### BLE
 | UUID | Role |
 |------|------|
-| `0000aadb-0000-1000-8000-00805f9b34fb` | State service |
+| `0000aadb-0000-1000-8000-00805f9b34fb` | Moves service |
 | `0000aadc-0000-1000-8000-00805f9b34fb` | Turn (notify) |
-| `0000aaaa-0000-1000-8000-00805f9b34fb` | Request service |
-| `0000aaab-0000-1000-8000-00805f9b34fb` | Request/response (write + notify) |
+| `0000aaaa-0000-1000-8000-00805f9b34fb` | Battery/request service |
+| `0000aaac-0000-1000-8000-00805f9b34fb` | Command (write) |
+| `0000aaab-0000-1000-8000-00805f9b34fb` | Battery (notify) |
 
 ### Encryption
 
@@ -366,8 +370,8 @@ with a unique base UUID.
 | UUID | Role |
 |------|------|
 | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` | Nordic UART service |
-| `6e400002-b5a3-f393-e0a9-e50e24dcca9e` | RX / state (notify) |
-| `6e400003-b5a3-f393-e0a9-e50e24dcca9e` | TX / command (write) |
+| `6e400002-b5a3-f393-e0a9-e50e24dcca9e` | RX / command (write) |
+| `6e400003-b5a3-f393-e0a9-e50e24dcca9e` | TX / state (notify) |
 
 ### Features
 - Plaintext turn detection

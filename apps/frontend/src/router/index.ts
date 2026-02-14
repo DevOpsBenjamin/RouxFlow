@@ -35,6 +35,37 @@ const routes = [
     meta: { requiresCube: true }
   },
   {
+    path: '/learn',
+    component: () => import('../components/layout/LearnView.vue'),
+    meta: { requiresCube: true },
+    children: [
+      {
+        path: '',
+        redirect: { name: 'LearnTutorial' }
+      },
+      {
+        path: 'tutorial',
+        name: 'LearnTutorial',
+        component: () => import('../components/learn/LearnTutorial.vue')
+      },
+      {
+        path: 'sample-solves',
+        name: 'LearnSampleSolves',
+        component: () => import('../components/learn/LearnSampleSolves.vue')
+      },
+      {
+        path: 'drills',
+        name: 'LearnDrills',
+        component: () => import('../components/learn/LearnDrills.vue')
+      },
+      {
+        path: 'guides',
+        name: 'LearnGuides',
+        component: () => import('../components/learn/LearnGuides.vue')
+      },
+    ]
+  },
+  {
     path: '/leaderboard',
     name: 'Leaderboard',
     component: () => import('../components/layout/LeaderboardView.vue')

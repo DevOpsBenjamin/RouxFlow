@@ -34,6 +34,8 @@ struct SolveRecord {
     timed_moves: Option<String>, // JSON-encoded Vec<TimedMove>
     #[serde(default)]
     penalty: Option<String>,
+    #[serde(default)]
+    deleted_at: Option<i64>,
 }
 
 // Intermediate struct for serializing sessions to IndexedDB
@@ -151,6 +153,7 @@ impl Storage for LocalStorage {
         let mut solve_map: std::collections::HashMap<String, Vec<Solve>> = std::collections::HashMap::new();
         for value in all_solves {
             if let Ok(record) = from_js::<SolveRecord>(value) {
+                if record.deleted_at.is_some() { continue; } // Skip soft-deleted
                 let moves: Vec<String> = serde_json::from_str(&record.moves).unwrap_or_default();
                 let timed_moves = record.timed_moves.as_deref()
                     .and_then(|s| serde_json::from_str(s).ok());
@@ -163,6 +166,7 @@ impl Storage for LocalStorage {
                     scramble: record.scramble,
                     timed_moves,
                     penalty: record.penalty,
+                    deleted_at: record.deleted_at,
                 };
                 solve_map.entry(record.session_id).or_default().push(solve);
             }
@@ -231,6 +235,7 @@ impl Storage for LocalStorage {
             timed_moves: solve.timed_moves.as_ref()
                 .map(|tm| serde_json::to_string(tm).unwrap_or_default()),
             penalty: solve.penalty.clone(),
+            deleted_at: solve.deleted_at,
         };
 
         store.put(&to_js(&record)?, None).await
@@ -253,7 +258,7 @@ impl Storage for LocalStorage {
         let mut solves = Vec::new();
         for value in all {
             if let Ok(record) = from_js::<SolveRecord>(value) {
-                if record.session_id == session_id {
+                if record.session_id == session_id && record.deleted_at.is_none() {
                     let moves: Vec<String> = serde_json::from_str(&record.moves).unwrap_or_default();
                     let timed_moves = record.timed_moves.as_deref()
                         .and_then(|s| serde_json::from_str(s).ok());
@@ -266,6 +271,7 @@ impl Storage for LocalStorage {
                         scramble: record.scramble,
                         timed_moves,
                         penalty: record.penalty,
+                        deleted_at: record.deleted_at,
                     });
                 }
             }

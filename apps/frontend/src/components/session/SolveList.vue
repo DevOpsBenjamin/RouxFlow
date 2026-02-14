@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useSessionStore } from '../../stores/session'
+import { deleteSolve } from '../../services/cube/bridge'
 
 const sessionStore = useSessionStore()
 
@@ -9,6 +10,14 @@ function formatTime(ms: number): string {
 
 function formatTps(tps: number): string {
     return tps.toFixed(1)
+}
+
+async function handleDelete(event: Event, solveId: string) {
+    event.stopPropagation()
+    await deleteSolve(solveId)
+    if (sessionStore.selectedSolveId === solveId) {
+        sessionStore.selectSolve(null)
+    }
 }
 </script>
 
@@ -27,6 +36,7 @@ function formatTps(tps: number): string {
         <span class="flex-1">Time</span>
         <span class="w-[6vmin] text-right">Moves</span>
         <span class="w-[6vmin] text-right">TPS</span>
+        <span class="w-[3vmin]"></span>
       </div>
 
       <!-- Solve rows -->
@@ -48,6 +58,15 @@ function formatTps(tps: number): string {
           </span>
           <span class="text-[1.8vmin] text-slate-400 font-mono w-[6vmin] text-right">{{ entry.penalty === 'DNF' ? '-' : entry.turns }}</span>
           <span class="text-[1.8vmin] text-slate-500 font-mono w-[6vmin] text-right">{{ entry.penalty === 'DNF' ? '-' : formatTps(entry.tps) }}</span>
+          <button
+            @click="handleDelete($event, entry.id)"
+            class="w-[3vmin] h-[3vmin] flex items-center justify-center text-slate-600 hover:text-rose-400 transition-colors rounded shrink-0"
+            title="Delete solve"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-[2vmin] h-[2vmin]">
+              <path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022 1.005 11.36A2.75 2.75 0 007.77 20h4.46a2.75 2.75 0 002.751-2.689l1.005-11.36.149.022a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clip-rule="evenodd" />
+            </svg>
+          </button>
         </button>
       </div>
     </template>

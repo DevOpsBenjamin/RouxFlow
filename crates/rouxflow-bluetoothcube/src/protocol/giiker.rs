@@ -39,10 +39,12 @@
 use super::BleProfile;
 
 /// BLE profile for Giiker cubes.
+/// Note: command_characteristic (`aaac`) belongs to the battery/request service (`aaaa`),
+/// not the moves service (`aadb`). Battery notifications come from `aaab`.
 pub const BLE_PROFILE: BleProfile = BleProfile {
     service_uuid:           "0000aadb-0000-1000-8000-00805f9b34fb",
     state_characteristic:   "0000aadc-0000-1000-8000-00805f9b34fb",
-    command_characteristic: "0000aaab-0000-1000-8000-00805f9b34fb",
+    command_characteristic: "0000aaac-0000-1000-8000-00805f9b34fb",
 };
 
 /// Additional request/response service UUID.

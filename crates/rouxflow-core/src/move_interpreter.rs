@@ -4,6 +4,7 @@ use crate::cube::{Face, Quaternion};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MoveKind {
     Face,
+    Wide,
     Slice,
     Rotation,
 }
@@ -14,11 +15,15 @@ pub struct InterpretedMove {
     pub timestamp_ms: u32,
     pub raw_face_moves: Vec<(Face, i8)>,
     pub kind: MoveKind,
+    /// Accumulated gyro rotation delta (x, y, z) in radians at time of emission.
+    /// Some for Wide/Rotation/Slice moves, None for plain Face moves.
+    pub gyro_delta: Option<[f32; 3]>,
 }
 
 pub struct InterpreterConfig {
     pub merge_window_ms: f64,
     pub rotation_threshold_rad: f32,
+    pub wide_threshold_rad: f32,
     pub has_gyro: bool,
 }
 
@@ -27,6 +32,7 @@ impl Default for InterpreterConfig {
         Self {
             merge_window_ms: 50.0,
             rotation_threshold_rad: 1.2,
+            wide_threshold_rad: 0.5,
             has_gyro: false,
         }
     }
@@ -69,6 +75,10 @@ impl MoveInterpreter {
         self.config.has_gyro = has_gyro;
     }
 
+    pub fn current_accum_rotation(&self) -> [f32; 3] {
+        self.accum_rotation
+    }
+
     pub fn feed_face_move(&mut self, face: Face, direction: i8, wall_ms: f64) {
         self.pending.push(PendingFaceMove { face, direction, wall_ms });
     }
@@ -102,11 +112,13 @@ impl MoveInterpreter {
                 if d1 == -d2 {
                     if let Some((notation, kind)) = self.classify_pair(f1, d1, f2, d2) {
                         let ts = self.compute_timestamp(self.pending[0].wall_ms, solve_start_ms);
+                        let gyro_delta = self.capture_gyro_delta(&kind);
                         result.push(InterpretedMove {
                             notation,
                             timestamp_ms: ts,
                             raw_face_moves: vec![(f1, d1), (f2, d2)],
                             kind,
+                            gyro_delta,
                         });
                         // Update anchor after emitting a face move pair
                         self.update_anchor();
@@ -119,7 +131,7 @@ impl MoveInterpreter {
                 if wall_ms - self.pending[0].wall_ms > self.config.merge_window_ms {
                     let p = self.pending.remove(0);
                     let ts = self.compute_timestamp(p.wall_ms, solve_start_ms);
-                    result.push(self.single_face_move(p.face, p.direction, ts));
+                    result.push(self.emit_single_or_wide(p.face, p.direction, ts));
                     self.update_anchor();
                     continue;
                 }
@@ -130,7 +142,7 @@ impl MoveInterpreter {
                 if wall_ms - self.pending[0].wall_ms > self.config.merge_window_ms {
                     let p = self.pending.remove(0);
                     let ts = self.compute_timestamp(p.wall_ms, solve_start_ms);
-                    result.push(self.single_face_move(p.face, p.direction, ts));
+                    result.push(self.emit_single_or_wide(p.face, p.direction, ts));
                     self.update_anchor();
                     continue;
                 }
@@ -144,11 +156,13 @@ impl MoveInterpreter {
         if self.pending.is_empty() && self.config.has_gyro {
             if let Some(rotation) = self.check_gyro_rotation() {
                 let ts = self.compute_timestamp(wall_ms, solve_start_ms);
+                let gyro_delta = Some(self.accum_rotation);
                 result.push(InterpretedMove {
                     notation: rotation,
                     timestamp_ms: ts,
                     raw_face_moves: vec![],
                     kind: MoveKind::Rotation,
+                    gyro_delta,
                 });
                 self.update_anchor();
             }
@@ -194,6 +208,70 @@ impl MoveInterpreter {
         Some((notation, MoveKind::Slice))
     }
 
+    /// Try to classify a single face move + gyro as a wide move.
+    /// Returns the wide move notation if conditions are met.
+    fn classify_wide(&self, face: Face, direction: i8) -> Option<String> {
+        if !self.config.has_gyro {
+            return None;
+        }
+
+        let axis = match face {
+            Face::R | Face::L => 0,
+            Face::U | Face::D => 1,
+            Face::F | Face::B => 2,
+        };
+
+        let gyro = self.accum_rotation[axis];
+        if gyro.abs() < self.config.wide_threshold_rad {
+            return None;
+        }
+
+        let gyro_sign = if gyro > 0.0 { 1 } else { -1 };
+
+        // Direction consistency: detected face STAYED in place,
+        // so it moved opposite to body rotation in core frame.
+        // Condition: dir * gyro_sign < 0
+        if direction * gyro_sign >= 0 {
+            return None;
+        }
+
+        // Explicit wide move mapping table
+        let notation = match (face, direction, gyro_sign) {
+            // x axis: R/L
+            (Face::L, -1,  1) => "r",
+            (Face::L,  1, -1) => "r'",
+            (Face::R,  1, -1) => "l",
+            (Face::R, -1,  1) => "l'",
+            // y axis: U/D
+            (Face::D, -1,  1) => "u",
+            (Face::D,  1, -1) => "u'",
+            (Face::U,  1, -1) => "d",
+            (Face::U, -1,  1) => "d'",
+            // z axis: F/B
+            (Face::B, -1,  1) => "f",
+            (Face::B,  1, -1) => "f'",
+            (Face::F,  1, -1) => "b",
+            (Face::F, -1,  1) => "b'",
+            _ => return None,
+        };
+
+        Some(notation.to_string())
+    }
+
+    /// Emit a single face move, checking for wide move upgrade first.
+    fn emit_single_or_wide(&self, face: Face, direction: i8, timestamp_ms: u32) -> InterpretedMove {
+        if let Some(notation) = self.classify_wide(face, direction) {
+            return InterpretedMove {
+                notation,
+                timestamp_ms,
+                raw_face_moves: vec![(face, direction)],
+                kind: MoveKind::Wide,
+                gyro_delta: Some(self.accum_rotation),
+            };
+        }
+        self.single_face_move(face, direction, timestamp_ms)
+    }
+
     fn single_face_move(&self, face: Face, direction: i8, timestamp_ms: u32) -> InterpretedMove {
         let face_names = ["U", "R", "F", "D", "L", "B"];
         let suffix = if direction == 1 { "" } else if direction == -1 { "'" } else { "2" };
@@ -203,6 +281,7 @@ impl MoveInterpreter {
             timestamp_ms,
             raw_face_moves: vec![(face, direction)],
             kind: MoveKind::Face,
+            gyro_delta: None,
         }
     }
 
@@ -211,6 +290,14 @@ impl MoveInterpreter {
             ((wall_ms - solve_start_ms).max(0.0)) as u32
         } else {
             0
+        }
+    }
+
+    /// Capture gyro_delta: Some for Slice/Rotation/Wide, None for Face.
+    fn capture_gyro_delta(&self, kind: &MoveKind) -> Option<[f32; 3]> {
+        match kind {
+            MoveKind::Face => None,
+            _ => Some(self.accum_rotation),
         }
     }
 
@@ -276,6 +363,7 @@ mod tests {
         InterpreterConfig {
             merge_window_ms: 50.0,
             rotation_threshold_rad: 1.2,
+            wide_threshold_rad: 0.5,
             has_gyro: false,
         }
     }
@@ -520,5 +608,191 @@ mod tests {
         assert_eq!(moves.len(), 1);
         assert_eq!(moves[0].notation, "M'");
         assert_eq!(moves[0].kind, MoveKind::Slice);
+    }
+
+    // ========== Wide Move Tests ==========
+
+    /// Helper: create a gyro-enabled interpreter with identity anchor and a rotation applied.
+    fn gyro_interp_with_rotation(axis: usize, angle_rad: f32) -> MoveInterpreter {
+        let mut config = default_config();
+        config.has_gyro = true;
+        let mut interp = MoveInterpreter::new(config);
+
+        let identity = Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
+        interp.feed_gyro(&identity, 90.0);
+
+        let half = angle_rad / 2.0;
+        let rotated = match axis {
+            0 => Quaternion { x: half.sin(), y: 0.0, z: 0.0, w: half.cos() },
+            1 => Quaternion { x: 0.0, y: half.sin(), z: 0.0, w: half.cos() },
+            2 => Quaternion { x: 0.0, y: 0.0, z: half.sin(), w: half.cos() },
+            _ => unreachable!(),
+        };
+        interp.feed_gyro(&rotated, 95.0);
+        interp
+    }
+
+    #[test]
+    fn wide_r() {
+        // Wide r: cube reports L' + gyro x+
+        let mut interp = gyro_interp_with_rotation(0, 1.5); // ~86° x+
+        interp.feed_face_move(Face::L, -1, 100.0);
+        let moves = interp.flush(200.0, 0.0);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].notation, "r");
+        assert_eq!(moves[0].kind, MoveKind::Wide);
+        assert_eq!(moves[0].raw_face_moves.len(), 1);
+        assert_eq!(moves[0].raw_face_moves[0], (Face::L, -1));
+    }
+
+    #[test]
+    fn wide_r_prime() {
+        // Wide r': cube reports L + gyro x-
+        let mut interp = gyro_interp_with_rotation(0, -1.5); // x-
+        interp.feed_face_move(Face::L, 1, 100.0);
+        let moves = interp.flush(200.0, 0.0);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].notation, "r'");
+        assert_eq!(moves[0].kind, MoveKind::Wide);
+    }
+
+    #[test]
+    fn wide_l() {
+        // Wide l: cube reports R + gyro x-
+        let mut interp = gyro_interp_with_rotation(0, -1.5);
+        interp.feed_face_move(Face::R, 1, 100.0);
+        let moves = interp.flush(200.0, 0.0);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].notation, "l");
+        assert_eq!(moves[0].kind, MoveKind::Wide);
+    }
+
+    #[test]
+    fn wide_l_prime() {
+        // Wide l': cube reports R' + gyro x+
+        let mut interp = gyro_interp_with_rotation(0, 1.5);
+        interp.feed_face_move(Face::R, -1, 100.0);
+        let moves = interp.flush(200.0, 0.0);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].notation, "l'");
+        assert_eq!(moves[0].kind, MoveKind::Wide);
+    }
+
+    #[test]
+    fn wide_u() {
+        // Wide u: cube reports D' + gyro y+
+        let mut interp = gyro_interp_with_rotation(1, 1.5);
+        interp.feed_face_move(Face::D, -1, 100.0);
+        let moves = interp.flush(200.0, 0.0);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].notation, "u");
+        assert_eq!(moves[0].kind, MoveKind::Wide);
+    }
+
+    #[test]
+    fn wide_u_prime() {
+        // Wide u': cube reports D + gyro y-
+        let mut interp = gyro_interp_with_rotation(1, -1.5);
+        interp.feed_face_move(Face::D, 1, 100.0);
+        let moves = interp.flush(200.0, 0.0);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].notation, "u'");
+        assert_eq!(moves[0].kind, MoveKind::Wide);
+    }
+
+    #[test]
+    fn wide_f() {
+        // Wide f: cube reports B' + gyro z+
+        let mut interp = gyro_interp_with_rotation(2, 1.5);
+        interp.feed_face_move(Face::B, -1, 100.0);
+        let moves = interp.flush(200.0, 0.0);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].notation, "f");
+        assert_eq!(moves[0].kind, MoveKind::Wide);
+    }
+
+    #[test]
+    fn wide_b() {
+        // Wide b: cube reports F + gyro z-
+        let mut interp = gyro_interp_with_rotation(2, -1.5);
+        interp.feed_face_move(Face::F, 1, 100.0);
+        let moves = interp.flush(200.0, 0.0);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].notation, "b");
+        assert_eq!(moves[0].kind, MoveKind::Wide);
+    }
+
+    #[test]
+    fn no_wide_without_gyro_flag() {
+        // Without has_gyro, even with accumulated rotation, should be a plain face move
+        let mut interp = MoveInterpreter::new(default_config()); // has_gyro = false
+        let identity = Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
+        interp.feed_gyro(&identity, 90.0);
+        let half = 0.75_f32;
+        let rotated = Quaternion { x: half.sin(), y: 0.0, z: 0.0, w: half.cos() };
+        interp.feed_gyro(&rotated, 95.0);
+
+        interp.feed_face_move(Face::L, -1, 100.0);
+        let moves = interp.flush(200.0, 0.0);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].notation, "L'");
+        assert_eq!(moves[0].kind, MoveKind::Face);
+    }
+
+    #[test]
+    fn no_wide_with_inconsistent_direction() {
+        // L + gyro x+ → direction consistency fails (dir=1, gyro_sign=1, 1*1 >= 0)
+        let mut interp = gyro_interp_with_rotation(0, 1.5); // x+
+        interp.feed_face_move(Face::L, 1, 100.0); // L (not L')
+        let moves = interp.flush(200.0, 0.0);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].notation, "L");
+        assert_eq!(moves[0].kind, MoveKind::Face);
+    }
+
+    #[test]
+    fn no_wide_below_threshold() {
+        // Small gyro rotation (0.3 rad) — below wide_threshold (0.5)
+        let mut interp = gyro_interp_with_rotation(0, 0.3);
+        interp.feed_face_move(Face::L, -1, 100.0);
+        let moves = interp.flush(200.0, 0.0);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].notation, "L'");
+        assert_eq!(moves[0].kind, MoveKind::Face);
+    }
+
+    #[test]
+    fn pair_wins_over_wide() {
+        // L' + R within window → slice/rotation pair, NOT wide
+        // Even with gyro rotation, the pair classification should take priority
+        let mut interp = gyro_interp_with_rotation(0, 1.5);
+        interp.feed_face_move(Face::L, -1, 100.0);
+        interp.feed_face_move(Face::R, 1, 100.0);
+        let moves = interp.flush(100.0, 0.0);
+        assert_eq!(moves.len(), 1);
+        // With 1.5 rad rotation (> rotation_threshold 1.2), pair upgrades to rotation
+        assert_eq!(moves[0].notation, "x");
+        assert_eq!(moves[0].kind, MoveKind::Rotation);
+        assert_eq!(moves[0].raw_face_moves.len(), 2);
+    }
+
+    #[test]
+    fn wide_move_has_one_raw_face_move() {
+        let mut interp = gyro_interp_with_rotation(0, 1.5);
+        interp.feed_face_move(Face::L, -1, 100.0);
+        let moves = interp.flush(200.0, 0.0);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].raw_face_moves.len(), 1);
+    }
+
+    #[test]
+    fn wide_d() {
+        // Wide d: cube reports U + gyro y-
+        let mut interp = gyro_interp_with_rotation(1, -1.5);
+        interp.feed_face_move(Face::U, 1, 100.0);
+        let moves = interp.flush(200.0, 0.0);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].notation, "d");
+        assert_eq!(moves[0].kind, MoveKind::Wide);
     }
 }

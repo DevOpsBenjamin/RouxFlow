@@ -22,8 +22,9 @@
 use super::BleProfile;
 
 /// BLE profile for GoCube / Rubik's Connected (Nordic UART).
+/// NUS convention: `..0002` = RX (host writes), `..0003` = TX (host subscribes).
 pub const BLE_PROFILE: BleProfile = BleProfile {
     service_uuid:           "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
-    state_characteristic:   "6e400002-b5a3-f393-e0a9-e50e24dcca9e",
-    command_characteristic: "6e400003-b5a3-f393-e0a9-e50e24dcca9e",
+    command_characteristic: "6e400002-b5a3-f393-e0a9-e50e24dcca9e",
+    state_characteristic:   "6e400003-b5a3-f393-e0a9-e50e24dcca9e",
 };
