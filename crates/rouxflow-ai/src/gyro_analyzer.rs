@@ -990,6 +990,11 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
         // Check Roux steps on detection cube
         let mut step_marker = String::new();
 
+        // Flag any move where a 1x2x3 block is detected in the verified body state
+        if cube_body.is_fb_block() {
+            println!(" {}>> MY METHOD DETECTED A BLOCK (Move {})!{}", GREEN, idx + 1, RESET);
+        }
+
         if fb_done.is_none() {
             for &(fb_block, fb_name, sb_block, sb_name, cmll_corners) in &ALL_BLOCKS {
                 if is_block_solved(&cube_detect, fb_block.as_slice()) {
