@@ -341,6 +341,64 @@ impl BitCube {
         0
     }
 
+    /// Helper: Checks if bitmask has uniform color (all bits in mask belong to same color board)
+    pub fn is_uniform(&self, mask: u64) -> bool {
+        self.boards.iter().any(|&b| (b & mask) == mask)
+    }
+
+    /// Check if a 1x2x3 block exists at the standard Left-Bottom position.
+    /// Returns true if L-face stickers, F-bar, B-bar, and D-bar are each uniform in color.
+    pub fn is_l_block_formed(&self) -> bool {
+        // L-face bottom 2 rows
+        if !self.is_uniform(Self::L_BLOCK) { return false; }
+        // F-face left column bottom 2
+        if !self.is_uniform(Self::F_BAR_L) { return false; }
+        // B-face left column (relative to face) / right (relative to L)
+        if !self.is_uniform(Self::B_BAR_L) { return false; }
+        // D-face left column
+        if !self.is_uniform(Self::D_BAR_L) { return false; }
+        true
+    }
+
+    /// Scans the entire cube for ANY 1x2x3 block (2 corners + 3 edges + center).
+    /// Checks all 24 possible orientations.
+    /// This is useful for "Pseudo-block" detection or finding blocks on any side.
+    pub fn find_any_block(&self) -> bool {
+        let mut temp = self.clone();
+        
+        let mut rot_x = |c: &mut BitCube| {
+            // x rotation: F->U, U->B, B->D, D->F
+            c.rotate_r(); c.rotate_m_prime(); c.rotate_l_prime();
+        };
+        
+        // Scan ring L-F-R-B (y axis)
+        for _ in 0..4 {
+            for _ in 0..4 { // 4 orientations around the x axis (L face spins)
+               if temp.is_l_block_formed() { return true; }
+               rot_x(&mut temp);
+            }
+            temp.rotate_y();
+        }
+
+        // Now bring U to L (z' = F' S' B)
+        temp = self.clone();
+        temp.rotate_f_prime(); temp.rotate_s_prime(); temp.rotate_b();
+        for _ in 0..4 {
+           if temp.is_l_block_formed() { return true; }
+           rot_x(&mut temp);
+        }
+
+        // Now bring D to L (z = F S B')
+        temp = self.clone();
+        temp.rotate_f(); temp.rotate_s(); temp.rotate_b_prime();
+        for _ in 0..4 {
+           if temp.is_l_block_formed() { return true; }
+           rot_x(&mut temp);
+        }
+
+        false
+    }
+
     // --- Phase detection: pure bitmask where possible ---
 
     pub fn is_fb_solved(&self) -> bool {

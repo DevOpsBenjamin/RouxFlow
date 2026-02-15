@@ -19,3 +19,20 @@ fn test_analyze_solve_1_debug() {
 
     rouxflow_ai::analyze_solve(&telemetry, idx_print);
 }
+
+#[test]
+fn test_analyze_solve_2_debug() {
+    let telemetry = test_data::solve_2();
+
+    assert!(!telemetry.scramble_gyro.is_empty(), "scramble gyro should not be empty");
+    assert!(!telemetry.solve_gyro.is_empty(), "solve gyro should not be empty");
+    assert!(!telemetry.solve_moves.is_empty(), "solve moves should not be empty");
+    assert!(!telemetry.scramble.is_empty(), "scramble should not be empty");
+
+    let idx_print: usize = std::env::var("IDX_PRINT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+
+    rouxflow_ai::analyze_solve(&telemetry, idx_print);
+}

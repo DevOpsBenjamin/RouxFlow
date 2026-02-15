@@ -402,16 +402,16 @@ fn are_opposite_faces(f1: &str, f2: &str) -> bool {
 /// BLE reports the APPARENT motion of outer faces (inverse of actual core motion).
 /// So we NEGATE the direction: BLE F'(-1) + B(+1) → core went F direction → S (positive).
 /// M follows L, E follows D, S follows F.
-fn slice_name(f1: &str, d1: i8, f2: &str, _d2: i8) -> String {
+fn slice_name(f1: &str, d1: i8, f2: &str, d2: i8) -> String {
     let (letter, ref_face) = match (f1, f2) {
         ("R", "L") | ("L", "R") => ("M", "L"),
         ("U", "D") | ("D", "U") => ("E", "D"),
         ("F", "B") | ("B", "F") => ("S", "F"),
         _ => return format!("?({}{}/{}{})", f1, if d1 < 0 { "'" } else { "" },
-                            f2, if _d2 < 0 { "'" } else { "" }),
+                            f2, if d2 < 0 { "'" } else { "" }),
     };
     // Negate: BLE reports inverse of core motion
-    let ble_dir = if f1 == ref_face { d1 } else { _d2 };
+    let ble_dir = if f1 == ref_face { d1 } else { d2 };
     let dir = -ble_dir;
     let suffix = if dir > 0 { "" } else { "'" };
     format!("{}{}", letter, suffix)
@@ -481,10 +481,9 @@ fn to_double(notation: &str) -> String {
 }
 
 /// Mathematical core rotation caused by a home-frame slice move.
-/// BitCube convention: M = U→F→D→B (x direction, opposite of standard).
-/// So BitCube "M" = standard M' (follows R), BitCube "M'" = standard M (follows L).
-/// Core rotation is what the BitCube move actually does:
-///   BitCube M (=std M') → core x,  BitCube M' (=std M) → core x'
+/// Used for orientation bookkeeping (merged_orient tracking), NOT for remap.
+/// BitCube M: centers cycle U→F→D→B (same direction as x').
+/// BitCube M': centers cycle U→B→D→F (same direction as x).
 fn slice_core_rotation(notation: &str) -> Option<&'static str> {
     match notation {
         "M"  => Some("x'"),  // M centers: U→F (same as x')
@@ -571,16 +570,21 @@ fn print_cubes_side_by_side(cubes: &[(&BitCube, &str)]) {
 
 /// Analyze a solve from raw telemetry data, printing debug output.
 ///
-/// This is the debug-first version -- it prints everything to stdout via `println!`
-/// and returns nothing structured yet.
+/// Multi-pass approach:
+/// - Pass 1: Slice detection (body frame, no orientation)
+/// - Pass 2: Gyro orientation table (all samples, majority vote)
 pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
     let t_start = std::time::Instant::now();
     let duration = telemetry.solve_end_t - telemetry.solve_start_t;
 
-    println!("=== SOLVE ANALYSIS (debug) ===");
+    println!("=== SOLVE ANALYSIS (multi-pass) ===");
     println!(
         "Scramble: {}",
-        if telemetry.scramble.is_empty() { "(not recorded)" } else { &telemetry.scramble }
+        if telemetry.scramble.is_empty() {
+            "(not recorded)"
+        } else {
+            &telemetry.scramble
+        }
     );
     println!(
         "Duration: {:.2}s (solve_start={:.3}, solve_end={:.3})",
@@ -618,374 +622,629 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
     all_gyro.sort_by(|a, b| a.t.partial_cmp(&b.t).unwrap_or(std::cmp::Ordering::Equal));
     let combined_gyro: Vec<GyroSample> = all_gyro.iter().map(|s| (*s).clone()).collect();
 
-    // -- Pass 1: slice detection + orientation remap --
-    // Uses MATHEMATICAL orientation tracking for remap (not raw gyro).
-    // Gyro is still read for diagnostics and rotation detection between moves.
-    let raw_moves: Vec<_> = telemetry.solve_moves.iter().collect();
-    let mut analyzed: Vec<AnalyzedMove> = Vec::new();
-
-    // Detect initial orientation from first move's gyro (reliable — during stable hold)
-    let initial_orient = if let Some(first) = raw_moves.first() {
-        if let Some(b) = find_gyro_before(&combined_gyro, first.t) {
-            let bq = [b.x, b.y, b.z, b.w];
-            let rel_b = relative_quaternion(&home, &bq);
-            estimate_orientation(&rel_b)
-        } else {
-            (home_top, home_front)
-        }
-    } else {
-        (home_top, home_front)
-    };
-    let mut math_orient = initial_orient;
-    let mut expected_orient_p1: (Color, Color) = initial_orient;
-
-    let mut i = 0;
-    while i < raw_moves.len() {
-        let t = raw_moves[i].t;
-        let rel_t = t - telemetry.solve_start_t;
-        let before = find_gyro_before(&combined_gyro, t);
-        let after = find_gyro_after(&combined_gyro, t);
-
-        // Gyro orientation (for diagnostics + rotation detection)
-        let (gyro_orient_label, before_dt, gyro_top, gyro_front) = if let Some(b) = before {
-            let bq = [b.x, b.y, b.z, b.w];
-            let rel_b = relative_quaternion(&home, &bq);
-            let (tb, fb) = estimate_orientation(&rel_b);
-            (orientation_label(tb, fb), t - b.t, tb, fb)
-        } else {
-            ("?/?".to_string(), 0.0, home_top, home_front)
-        };
-
-        let (after_orient, after_dt) = if let Some(a) = after {
-            let aq = [a.x, a.y, a.z, a.w];
-            let rel_a = relative_quaternion(&home, &aq);
-            let (ta, fa) = estimate_orientation(&rel_a);
-            (Some(orientation_label(ta, fa)), Some(a.t - t))
-        } else {
-            (None, None)
-        };
-
-        // Rotation detection: if gyro says different from expected AND not transient,
-        // it's a real user rotation → update math_orient
-        let gyro_orient = (gyro_top, gyro_front);
-        if gyro_orient != expected_orient_p1 {
-            let is_transient = after.is_some() && {
-                let aq = [after.unwrap().x, after.unwrap().y, after.unwrap().z, after.unwrap().w];
-                let rel_a = relative_quaternion(&home, &aq);
-                let (ta, fa) = estimate_orientation(&rel_a);
-                (ta, fa) == expected_orient_p1
-            };
-            if !is_transient {
-                // Real rotation detected — update math_orient to match gyro
-                math_orient = gyro_orient;
-            }
-        }
-
-        // Remap using math_orient (not gyro)
-        let orient = orientation_label(math_orient.0, math_orient.1);
-
-        // Check for slice pair
-        if i + 1 < raw_moves.len() && is_slice_pair(&raw_moves[i], &raw_moves[i + 1]) {
-            let m1 = &raw_moves[i];
-            let m2 = &raw_moves[i + 1];
-            let (f1, d1) = parse_face_dir(&m1.n).unwrap();
-            let (f2, d2) = parse_face_dir(&m2.n).unwrap();
-            let body_slice = slice_name(f1, d1, f2, d2);
-            let remapped = remap_slice(&m1.n, &m2.n, math_orient.0, math_orient.1);
-
-            // Update math_orient for slice core rotation
-            if let Some(core_rot) = slice_core_rotation(&remapped) {
-                math_orient = apply_rotation(math_orient.0, math_orient.1, core_rot);
-            }
-
-            analyzed.push(AnalyzedMove {
-                body_label: format!("{} ({}+{})", body_slice, m1.n, m2.n),
-                remapped: remapped.clone(),
-                body_raw: vec![m1.n.clone(), m2.n.clone()],
-                t, rel_t, orient, before_dt, after_orient, after_dt,
-            });
-            i += 2;
-        } else {
-            let raw = &raw_moves[i];
-            let remapped = remap_move(&raw.n, math_orient.0, math_orient.1);
-
-            analyzed.push(AnalyzedMove {
-                body_label: raw.n.clone(),
-                remapped: remapped.clone(),
-                body_raw: vec![raw.n.clone()],
-                t, rel_t, orient, before_dt, after_orient, after_dt,
-            });
-            i += 1;
-        }
-
-        // Update expected orientation for next move
-        // Face moves: orient stays. Slices: already updated math_orient above.
-        expected_orient_p1 = math_orient;
-    }
-
-    // -- Pass 2: merge consecutive same-remapped moves into doubles --
-    let mut merged: Vec<AnalyzedMove> = Vec::new();
-    let mut j = 0;
-    while j < analyzed.len() {
-        if j + 1 < analyzed.len() && can_merge_double(&analyzed[j].remapped, &analyzed[j + 1].remapped) {
-            let a = &analyzed[j];
-            let b = &analyzed[j + 1];
-            let double_remapped = to_double(&a.remapped);
-            let mut combined_body_raw = a.body_raw.clone();
-            combined_body_raw.extend(b.body_raw.iter().cloned());
-            merged.push(AnalyzedMove {
-                body_label: format!("{} + {}", a.body_label, b.body_label),
-                remapped: double_remapped,
-                body_raw: combined_body_raw,
-                t: a.t,
-                rel_t: a.rel_t,
-                orient: a.orient.clone(),
-                before_dt: a.before_dt,
-                after_orient: b.after_orient.clone(),
-                after_dt: b.after_dt,
-            });
-            j += 2;
-        } else {
-            let a = &analyzed[j];
-            merged.push(AnalyzedMove {
-                body_label: a.body_label.clone(),
-                remapped: a.remapped.clone(),
-                body_raw: a.body_raw.clone(),
-                t: a.t,
-                rel_t: a.rel_t,
-                orient: a.orient.clone(),
-                before_dt: a.before_dt,
-                after_orient: a.after_orient.clone(),
-                after_dt: a.after_dt,
-            });
-            j += 1;
-        }
-    }
-
-    // -- BitCube validation --
-    // MERGED: scramble + rotation + remapped (home-frame) moves
-    // BLE:    scramble + raw body-frame moves
-    // COPY:   clone MERGED, apply rotation_to_wg() → should match BLE
-    const ORANGE: &str = "\x1b[38;5;208m";
-    const CYAN: &str = "\x1b[36m";
-    const RED_ANSI: &str = "\x1b[31m";
-    const GREEN_ANSI: &str = "\x1b[32m";
-    const RESET: &str = "\x1b[0m";
-
-    let mut cube_merged = BitCube::new_solved();
-    let mut cube_ble = BitCube::new_solved();
-    for token in telemetry.scramble.split_whitespace() {
-        cube_merged.apply_move(token);
-        cube_ble.apply_move(token);
-    }
-
-    /// Given the current orientation (top, front), return the rotation
-    /// to apply to get back to W/G. Just detect_rotation(current, W/G).
-    fn rotation_to_wg(top: Color, front: Color) -> String {
-        detect_rotation((top, front), (Color::White, Color::Green))
-    }
-
-    /// Clone cube, apply rotation to W/G, return the copy.
-    fn copy_to_wg(cube: &BitCube, top: Color, front: Color) -> BitCube {
-        let mut copy = cube.clone();
-        let rot = rotation_to_wg(top, front);
-        for part in rot.split_whitespace() {
-            copy.apply_move(part);
-        }
-        copy
-    }
-
-    // Detect initial rotation (e.g., W/G -> Y/R = x2 y)
-    let home_label = orientation_label(home_top, home_front);
-    let mut merged_orient: (Color, Color) = (home_top, home_front);
-
-    if !merged.is_empty() {
-        let first_orient = &merged[0].orient;
-        if *first_orient != home_label {
-            if let (Some(from), Some(to)) = (parse_orient_label(&home_label), parse_orient_label(first_orient)) {
-                let rot = detect_rotation(from, to);
-                if rot != "?" {
-                    println!("Initial rotation: '{}' applied to MERGED ({} -> {})", rot, home_label, first_orient);
-                    for rot_part in rot.split_whitespace() {
-                        cube_merged.apply_move(rot_part);
-                    }
-                    merged_orient = to;
-
-                    let copy = copy_to_wg(&cube_merged, merged_orient.0, merged_orient.1);
-                    let matches = copy == cube_ble;
-                    println!("--- After scramble + {} ---", rot);
-                    print_cubes_side_by_side(&[
-                        (&cube_merged, &format!("MERGED ({})", first_orient)),
-                        (&copy, "COPY (→W/G)"),
-                        (&cube_ble, "BLE"),
-                    ]);
-                    println!("COPY == BLE: {}{}{}", if matches { GREEN_ANSI } else { RED_ANSI }, matches, RESET);
-                    println!();
-                }
-            }
-        }
-    }
-
-    // Full BLE sanity check
+    // BLE sanity check
     {
-        let mut cube_ble_full = BitCube::new_solved();
+        let mut cube_ble = BitCube::new_solved();
         for token in telemetry.scramble.split_whitespace() {
-            cube_ble_full.apply_move(token);
+            cube_ble.apply_move(token);
         }
         for m in &telemetry.solve_moves {
-            cube_ble_full.apply_move(&m.n);
+            cube_ble.apply_move(&m.n);
         }
-        println!("RAW BLE full check (scramble + ALL raw moves): solved = {}", cube_ble_full.is_solved());
+        println!(
+            "BLE sanity check (scramble + all raw moves): solved = {}",
+            cube_ble.is_solved()
+        );
         println!();
     }
 
-    // Track expected orientation — starts at merged_orient (after initial rotation), not home
-    let mut expected_orient: Option<String> = Some(orientation_label(merged_orient.0, merged_orient.1));
-    let mut any_mismatch = false;
-    let mut post_slice = false; // Skip rotation detection on the move right after a slice
+    // ========== PASS 1: Slice detection ==========
+    // Merge simultaneous opposite-face move pairs into slice notation.
+    // Body frame only — no orientation or remap.
 
-    for (idx, m) in merged.iter().enumerate() {
-        let is_slice = matches!(strip_suffix(&m.remapped), "M" | "S" | "E");
+    struct P1Move {
+        body_label: String,
+        body_raw: Vec<String>,
+        t: f64,
+    }
 
-        // After a slice, gyro is noisy — skip rotation detection and resync
-        let skip_rotation = post_slice;
-        if post_slice {
-            expected_orient = Some(m.orient.clone());
-            post_slice = false;
+    let raw = &telemetry.solve_moves;
+    let mut p1: Vec<P1Move> = Vec::new();
+    let mut i = 0;
+    while i < raw.len() {
+        if i + 1 < raw.len() && is_slice_pair(&raw[i], &raw[i + 1]) {
+            let (f1, d1) = parse_face_dir(&raw[i].n).unwrap();
+            let (f2, d2) = parse_face_dir(&raw[i + 1].n).unwrap();
+            let body_slice = slice_name(f1, d1, f2, d2);
+            p1.push(P1Move {
+                body_label: format!("{} ({}+{})", body_slice, raw[i].n, raw[i + 1].n),
+                body_raw: vec![raw[i].n.clone(), raw[i + 1].n.clone()],
+                t: raw[i].t,
+            });
+            i += 2;
+        } else {
+            p1.push(P1Move {
+                body_label: raw[i].n.clone(),
+                body_raw: vec![raw[i].n.clone()],
+                t: raw[i].t,
+            });
+            i += 1;
+        }
+    }
+
+    println!(
+        "=== PASS 1: Slice detection ({} raw -> {} moves) ===",
+        raw.len(),
+        p1.len()
+    );
+    println!();
+
+    // ========== PASS 2: Gyro orientation table ==========
+    // For each move, collect ALL gyro samples in the window before and after.
+    // Majority vote determines the most reliable orientation.
+
+    // A consecutive run of the same orientation in gyro data.
+    struct GyroRun {
+        label: String,
+        count: usize,
+        t_start: f64, // timestamp of first sample in this run
+    }
+
+    // Collect consecutive runs of same-orientation samples in a time window.
+    fn collect_orient_runs(
+        gyro: &[GyroSample],
+        home: &[f32; 4],
+        t_start: f64,
+        t_end: f64,
+    ) -> Vec<GyroRun> {
+        let mut runs: Vec<GyroRun> = Vec::new();
+        let start_idx = gyro.partition_point(|s| s.t <= t_start);
+        for s in &gyro[start_idx..] {
+            if s.t >= t_end {
+                break;
+            }
+            let q = [s.x, s.y, s.z, s.w];
+            let rel = relative_quaternion(home, &q);
+            let (top, front) = estimate_orientation(&rel);
+            let label = orientation_label(top, front);
+            if let Some(last) = runs.last_mut() {
+                if last.label == label {
+                    last.count += 1;
+                    continue;
+                }
+            }
+            runs.push(GyroRun {
+                label,
+                count: 1,
+                t_start: s.t,
+            });
+        }
+        runs
+    }
+
+    // Flag noise: a run with count <= noise_max surrounded by different orientations.
+    // prev_ctx / next_ctx provide the adjacent window's boundary label so that
+    // a single sample at a window edge isn't falsely flagged when it matches the neighbor window.
+    fn is_noise(
+        runs: &[GyroRun],
+        idx: usize,
+        noise_max: usize,
+        prev_ctx: Option<&str>,
+        next_ctx: Option<&str>,
+    ) -> bool {
+        if runs[idx].count > noise_max {
+            return false;
+        }
+        let prev = if idx > 0 {
+            Some(runs[idx - 1].label.as_str())
+        } else {
+            prev_ctx // use adjacent window's last label
+        };
+        let next = if idx + 1 < runs.len() {
+            Some(runs[idx + 1].label.as_str())
+        } else {
+            next_ctx // use adjacent window's first label
+        };
+        // Noise if it differs from both neighbors
+        match (prev, next) {
+            (Some(p), Some(n)) => runs[idx].label != p && runs[idx].label != n,
+            (Some(p), None) => runs[idx].label != p,
+            (None, Some(n)) => runs[idx].label != n,
+            (None, None) => false,
+        }
+    }
+
+    // Get boundary labels for a window (first non-empty label, last non-empty label).
+    fn window_boundary_labels(runs: &[GyroRun]) -> (Option<String>, Option<String>) {
+        let first = runs.first().map(|r| r.label.clone());
+        let last = runs.last().map(|r| r.label.clone());
+        (first, last)
+    }
+
+    // Get the effective orientation of a window (ignoring noise runs, using last stable run).
+    fn window_effective_orient(
+        runs: &[GyroRun],
+        prev_ctx: Option<&str>,
+        next_ctx: Option<&str>,
+    ) -> String {
+        // Walk backwards to find last non-noise run
+        for i in (0..runs.len()).rev() {
+            if !is_noise(runs, i, 1, prev_ctx, next_ctx) {
+                return runs[i].label.clone();
+            }
+        }
+        // Fallback: first run
+        runs.first()
+            .map(|r| r.label.clone())
+            .unwrap_or_else(|| "?/?".to_string())
+    }
+
+    // Compute N+1 windows between consecutive moves.
+    let mut boundaries: Vec<f64> = Vec::with_capacity(p1.len() + 2);
+    boundaries.push(telemetry.solve_start_t);
+    for m in &p1 {
+        boundaries.push(m.t);
+    }
+    boundaries.push(telemetry.solve_end_t);
+
+    let window_runs: Vec<Vec<GyroRun>> = (0..boundaries.len() - 1)
+        .map(|w| collect_orient_runs(&combined_gyro, &home, boundaries[w], boundaries[w + 1]))
+        .collect();
+
+    // Print interleaved MOVE / GYRO timeline
+    const YELLOW: &str = "\x1b[33m";
+    const CYAN: &str = "\x1b[36m";
+    const DIM: &str = "\x1b[2m";
+    const RESET: &str = "\x1b[0m";
+
+    println!("=== PASS 2: Gyro / Move Timeline ===");
+    println!();
+
+    let solve_start = telemetry.solve_start_t;
+
+    let print_gyro_runs =
+        |runs: &[GyroRun], solve_start: f64, prev_ctx: Option<&str>, next_ctx: Option<&str>| {
+            if runs.is_empty() {
+                return;
+            }
+            let mut last_stable: Option<&str> = None;
+            for (i, run) in runs.iter().enumerate() {
+                let noise = is_noise(runs, i, 1, prev_ctx, next_ctx);
+                if noise {
+                    println!(
+                        "       GYRO | {}({} x{}) << noise{}",
+                        DIM, run.label, run.count, RESET
+                    );
+                } else {
+                    // Detect rotation: non-noise run differs from previous non-noise run
+                    if let Some(prev) = last_stable {
+                        if prev != run.label {
+                            if let (Some(from), Some(to)) = (
+                                parse_orient_label(prev),
+                                parse_orient_label(&run.label),
+                            ) {
+                                let rot = detect_rotation(from, to);
+                                let rel_t = run.t_start - solve_start;
+                                println!(
+                                    "       {}~~~~ {} ({} -> {}) at {:+.2}s ~~~~{}",
+                                    CYAN, rot, prev, run.label, rel_t, RESET
+                                );
+                            }
+                        }
+                    }
+                    println!("       GYRO | {} (x{})", run.label, run.count);
+                    last_stable = Some(&run.label);
+                }
+            }
+        };
+
+    // Compute context for noise detection at window w, respecting slice boundaries.
+    // window_runs[w] is between move w (p1[w-1]) and move w+1 (p1[w]).
+    // Don't cross a slice boundary — the gyro shifts at slices.
+    let window_ctx = |w: usize| -> (Option<String>, Option<String>) {
+        // prev context: window_runs[w-1]. Boundary move = p1[w-1] (the move that starts window w).
+        let prev = if w > 0 {
+            let boundary_is_slice = w >= 1
+                && w - 1 < p1.len()
+                && p1[w - 1].body_raw.len() == 2;
+            if boundary_is_slice {
+                None
+            } else {
+                window_runs[w - 1].last().map(|r| r.label.clone())
+            }
+        } else {
+            None
+        };
+        // next context: window_runs[w+1]. Boundary move = p1[w] (the move that ends window w).
+        let next = if w + 1 < window_runs.len() {
+            let boundary_is_slice = w < p1.len() && p1[w].body_raw.len() == 2;
+            if boundary_is_slice {
+                None
+            } else {
+                window_runs[w + 1].first().map(|r| r.label.clone())
+            }
+        } else {
+            None
+        };
+        (prev, next)
+    };
+
+    // ========== Roux step detection ==========
+    // Check if a set of sticker positions are all solved (match their face center).
+    fn is_block_solved(cube: &BitCube, stickers: &[usize]) -> bool {
+        stickers.iter().all(|&idx| {
+            let face_center = (idx / 9) * 9 + 4;
+            cube.get_color_at(idx) == cube.get_color_at(face_center)
+        })
+    }
+
+    // 1x2x3 blocks = 5 pieces (2 corners + 3 edges) = 12 sticker positions each.
+    // Face offsets: U=0, R=9, F=18, D=27, L=36, B=45
+
+    // D-layer blocks (D on bottom)
+    const DL_BLOCK: [usize; 12] = [
+        27, 30, 33, 42, 43, 44, 24, 21, 53, 50, 41, 39,
+    ];
+    const DR_BLOCK: [usize; 12] = [
+        29, 32, 35, 15, 16, 17, 26, 23, 51, 48, 12, 14,
+    ];
+    const DF_BLOCK: [usize; 12] = [
+        27, 28, 29, 24, 25, 26, 44, 41, 15, 12, 21, 23,
+    ];
+    const DB_BLOCK: [usize; 12] = [
+        33, 34, 35, 51, 52, 53, 42, 39, 17, 14, 50, 48,
+    ];
+
+    // U-layer blocks (U on bottom — user has cube flipped)
+    // UL: UFL+UBL corners, UL+FL+BL edges
+    const UL_BLOCK: [usize; 12] = [
+        6, 18, 38, 0, 47, 36, 3, 37, 21, 41, 50, 39,
+    ];
+    // UR: UFR+UBR corners, UR+FR+BR edges
+    const UR_BLOCK: [usize; 12] = [
+        8, 20, 9, 2, 45, 11, 5, 10, 23, 12, 48, 14,
+    ];
+    // UF: UFL+UFR corners, UF+FL+FR edges
+    const UF_BLOCK: [usize; 12] = [
+        6, 18, 38, 8, 20, 9, 7, 19, 21, 41, 23, 12,
+    ];
+    // UB: UBL+UBR corners, UB+BL+BR edges
+    const UB_BLOCK: [usize; 12] = [
+        0, 47, 36, 2, 45, 11, 1, 46, 50, 39, 48, 14,
+    ];
+
+    // D-layer corners (for CMLL when D on bottom)
+    const D_CORNERS: [usize; 12] = [
+        27, 24, 44,   // DFL: D, F, L
+        29, 26, 15,   // DFR: D, F, R
+        33, 53, 42,   // DBL: D, B, L
+        35, 51, 17,   // DBR: D, B, R
+    ];
+    // U-layer corners (for CMLL when U on bottom)
+    const U_CORNERS: [usize; 12] = [
+        6, 18, 38,    // UFL: U, F, L
+        8, 20, 9,     // UFR: U, F, R
+        0, 47, 36,    // UBL: U, B, L
+        2, 45, 11,    // UBR: U, B, R
+    ];
+
+    const ALL_BLOCKS: [(&[usize; 12], &str, &[usize; 12], &str, &[usize; 12]); 8] = [
+        // (fb_block, fb_name, sb_block, sb_name, cmll_corners)
+        (&DL_BLOCK, "DL", &DR_BLOCK, "DR", &U_CORNERS),
+        (&DR_BLOCK, "DR", &DL_BLOCK, "DL", &U_CORNERS),
+        (&DF_BLOCK, "DF", &DB_BLOCK, "DB", &U_CORNERS),
+        (&DB_BLOCK, "DB", &DF_BLOCK, "DF", &U_CORNERS),
+        (&UL_BLOCK, "UL", &UR_BLOCK, "UR", &D_CORNERS),
+        (&UR_BLOCK, "UR", &UL_BLOCK, "UL", &D_CORNERS),
+        (&UF_BLOCK, "UF", &UB_BLOCK, "UB", &D_CORNERS),
+        (&UB_BLOCK, "UB", &UF_BLOCK, "UF", &D_CORNERS),
+    ];
+
+    const GREEN: &str = "\x1b[32;1m";
+
+    // BitCube for visual verification (body frame, raw moves as BLE reports)
+    let mut cube_body = BitCube::new_solved();
+    for token in telemetry.scramble.split_whitespace() {
+        cube_body.apply_move(token);
+    }
+
+    // BitCube for block detection — uses slice notation (S/M/E) for slice pairs
+    let mut cube_detect = BitCube::new_solved();
+    for token in telemetry.scramble.split_whitespace() {
+        cube_detect.apply_move(token);
+    }
+
+    // Track Roux step completion
+    // Store: (move_idx, fb_name, sb_block, sb_name, cmll_corners)
+    let mut fb_done: Option<(usize, &str, &[usize; 12], &str, &[usize; 12])> = None;
+    let mut sb_done: Option<usize> = None;
+    let mut cmll_done: Option<usize> = None;
+
+    // Window before first move
+    let (pc0, nc0) = window_ctx(0);
+    print_gyro_runs(&window_runs[0], solve_start, pc0.as_deref(), nc0.as_deref());
+
+    for (idx, m) in p1.iter().enumerate() {
+        // Apply raw moves to display cube
+        for raw in &m.body_raw {
+            cube_body.apply_move(raw);
         }
 
-        let orient_differs = !skip_rotation && expected_orient.as_ref().is_some_and(|exp| *exp != m.orient);
-        let is_transient = orient_differs
-            && m.after_orient.as_ref().is_some_and(|ao| {
-                expected_orient.as_ref().is_some_and(|exp| ao == exp)
-            });
+        // Apply to detection cube: use slice notation for slice pairs
+        if m.body_raw.len() == 2 {
+            // Extract slice name from body_label (e.g. "S (F'+B)" → "S")
+            let slice_move = m.body_label.split_whitespace().next().unwrap_or(&m.body_label);
+            cube_detect.apply_move(slice_move);
+        } else {
+            cube_detect.apply_move(&m.body_raw[0]);
+        }
 
-        // Real rotation: orient changed AND didn't revert back
-        if orient_differs && !is_transient {
-            if let (Some(from), Some(to)) = (
-                parse_orient_label(expected_orient.as_deref().unwrap_or("")),
-                parse_orient_label(&m.orient),
-            ) {
-                let rot = detect_rotation(from, to);
-                println!(
-                    "{}       >>>  {}  ({} -> {}){}",
-                    CYAN, rot, orientation_label(from.0, from.1), m.orient, RESET
-                );
-                // Apply delta rotation to MERGED to keep frames in sync
-                for part in rot.split_whitespace() {
-                    cube_merged.apply_move(part);
+        let rel_t = m.t - solve_start;
+        let is_slice = m.body_raw.len() == 2;
+        let move_marker = if is_slice {
+            format!("{}S{}", YELLOW, RESET)
+        } else {
+            " ".to_string()
+        };
+
+        // Check Roux steps on detection cube
+        let mut step_marker = String::new();
+
+        if fb_done.is_none() {
+            for &(fb_block, fb_name, sb_block, sb_name, cmll_corners) in &ALL_BLOCKS {
+                if is_block_solved(&cube_detect, fb_block.as_slice()) {
+                    fb_done = Some((idx + 1, fb_name, sb_block, sb_name, cmll_corners));
+                    step_marker = format!(
+                        " {}>> FB DONE [{}]{}", GREEN, fb_name, RESET
+                    );
+                    break;
                 }
-                merged_orient = to;
+            }
+        } else if sb_done.is_none() {
+            let (_, _, sb_block, sb_name, _) = fb_done.unwrap();
+            if is_block_solved(&cube_detect, sb_block.as_slice()) {
+                sb_done = Some(idx + 1);
+                step_marker = format!(
+                    " {}>> SB DONE [{}]{}", GREEN, sb_name, RESET
+                );
             }
         }
 
-        // Wide move detection
-        let within_move_shift = !is_slice && m.after_orient.as_ref().is_some_and(|ao| *ao != m.orient);
-        let is_wide = !is_slice && (is_transient || within_move_shift);
-
-        // Apply remapped (home-frame) move to MERGED
-        cube_merged.apply_move(&m.remapped);
-
-        // Apply body-frame raw moves to BLE
-        for raw in &m.body_raw {
-            cube_ble.apply_move(raw);
+        if sb_done.is_some() && cmll_done.is_none() {
+            let (_, _, _, _, cmll_corners) = fb_done.unwrap();
+            if is_block_solved(&cube_detect, cmll_corners.as_slice()) {
+                cmll_done = Some(idx + 1);
+                step_marker = format!(
+                    " {}>> CMLL DONE{}", GREEN, RESET
+                );
+            }
         }
 
-        // After slice: update frame tracking mathematically (NOT applied to cube —
-        // M2 already moved the correct stickers, this is just orientation bookkeeping)
-        if let Some(core_rot) = slice_core_rotation(&m.remapped) {
-            let old_label = orientation_label(merged_orient.0, merged_orient.1);
-            merged_orient = apply_rotation(merged_orient.0, merged_orient.1, core_rot);
-            let new_label = orientation_label(merged_orient.0, merged_orient.1);
+        let solved_marker = if cube_detect.is_solved() {
+            format!(" {}>> SOLVED{}", GREEN, RESET)
+        } else {
+            String::new()
+        };
+
+        println!(
+            "{:>4}  MOVE | {:<20} {:+7.2}s {}{}{}",
+            idx + 1,
+            m.body_label,
+            rel_t,
+            move_marker,
+            step_marker,
+            solved_marker,
+        );
+
+        // Print cube state if idx_print is set and we're past it
+        if idx_print > 0 && idx + 1 >= idx_print {
+            let label = format!("#{} {}", idx + 1, m.body_label);
+            print_cubes_side_by_side(&[(&cube_body, &label)]);
+        }
+
+        let w = idx + 1;
+        let (pc, nc) = window_ctx(w);
+        print_gyro_runs(&window_runs[w], solve_start, pc.as_deref(), nc.as_deref());
+    }
+
+    if idx_print > 0 {
+        println!(
+            "Body cube solved: {}",
+            cube_body.is_solved()
+        );
+        println!();
+    }
+
+    println!();
+
+    // ========== PASS 3: Rotation detection ==========
+    // Walk through effective orientations (last stable run per window).
+    // A rotation requires 2 consecutive windows to agree on the new orientation.
+    // Also detects round-trip rotations (inspection: rotate → peek → rotate back).
+
+    const MIN_ROTATION_SAMPLES: usize = 3;
+
+    struct DetectedRotation {
+        before_move: usize, // 1-indexed
+        rotation: String,
+        from: String,
+        to: String,
+    }
+
+    let mut current_orient = "?/?".to_string();
+    let mut detected_rotations: Vec<DetectedRotation> = Vec::new();
+    let mut move_orients: Vec<String> = Vec::with_capacity(p1.len());
+
+    const SLICE_LOOKBACK: usize = 2; // skip rotation detection if a slice is within this many moves
+
+    // Reuse window_ctx for Pass 3 context (same slice-boundary awareness)
+
+    for (idx, _m) in p1.iter().enumerate() {
+        let runs = &window_runs[idx];
+        let total: usize = runs.iter().map(|r| r.count).sum();
+        let (pc, nc) = window_ctx(idx);
+        let effective =
+            window_effective_orient(runs, pc.as_deref(), nc.as_deref());
+
+        // Check if any of the PREVIOUS SLICE_LOOKBACK moves is a slice.
+        // Note: d starts at 1 — the current move's BEFORE window is pre-slice, still clean.
+        let near_slice = (1..=SLICE_LOOKBACK).any(|d| {
+            if d > idx {
+                return false;
+            }
+            p1[idx - d].body_raw.len() == 2
+        });
+
+        if total < MIN_ROTATION_SAMPLES || near_slice {
+            // Not enough samples or near a slice — carry forward
+            if near_slice && total > 0 && current_orient != "?/?" {
+                // Silently update baseline after slice (gyro shifted, not a user rotation).
+                current_orient = effective.clone();
+            }
+            move_orients.push(current_orient.clone());
+            continue;
+        }
+
+        if current_orient == "?/?" {
+            current_orient = effective.clone();
+        } else if effective != current_orient {
+            // Potential rotation — require NEXT reliable window to confirm.
+            let confirmed = {
+                let mut found = false;
+                for fwd in (idx + 1)..p1.len() {
+                    let fwd_runs = &window_runs[fwd];
+                    let fwd_total: usize = fwd_runs.iter().map(|r| r.count).sum();
+                    let fwd_near_slice = (1..=SLICE_LOOKBACK).any(|d| {
+                        if d > fwd {
+                            return false;
+                        }
+                        p1[fwd - d].body_raw.len() == 2
+                    });
+                    if fwd_total < MIN_ROTATION_SAMPLES || fwd_near_slice {
+                        continue;
+                    }
+                    let (fpc, fnc) = window_ctx(fwd);
+                    found = window_effective_orient(
+                        fwd_runs,
+                        fpc.as_deref(),
+                        fnc.as_deref(),
+                    ) == effective;
+                    break;
+                }
+                found
+            };
+
+            if confirmed {
+                if let (Some(from), Some(to)) = (
+                    parse_orient_label(&current_orient),
+                    parse_orient_label(&effective),
+                ) {
+                    let rot = detect_rotation(from, to);
+                    detected_rotations.push(DetectedRotation {
+                        before_move: idx + 1,
+                        rotation: rot,
+                        from: current_orient.clone(),
+                        to: effective.clone(),
+                    });
+                }
+                current_orient = effective.clone();
+            }
+        }
+
+        move_orients.push(current_orient.clone());
+    }
+
+    println!("=== PASS 3: Rotation Detection ===");
+    if detected_rotations.is_empty() {
+        println!("  No rotations detected.");
+    } else {
+        for r in &detected_rotations {
             println!(
-                "{}       [frame]  {}  ({} -> {}){}",
-                CYAN, core_rot, old_label, new_label, RESET
+                "  Before move {:>3}: {:>4}  ({} -> {})",
+                r.before_move, r.rotation, r.from, r.to
             );
         }
+    }
+    println!();
 
-        // Make COPY = clone MERGED, apply rotation to W/G
-        let copy = copy_to_wg(&cube_merged, merged_orient.0, merged_orient.1);
-        let cubes_match = copy == cube_ble;
-        if !cubes_match {
-            any_mismatch = true;
+    // Orientation history from persistent rotations
+    let mut orient_history: Vec<&str> = Vec::new();
+    if let Some(first) = detected_rotations.first() {
+        orient_history.push(&first.from);
+    }
+    for r in &detected_rotations {
+        orient_history.push(&r.to);
+    }
+
+    println!(
+        "Orientation history: {}",
+        if orient_history.is_empty() {
+            current_orient.clone()
+        } else {
+            orient_history.join(" -> ")
+        }
+    );
+    println!("Final: {}", current_orient);
+    println!();
+
+    // Detect inspections: within-window round-trips where non-noise runs
+    // start and end at the same orientation with different ones in between.
+    println!("Inspections (in-window round-trips):");
+    let mut inspections_found = false;
+    for (w, runs) in window_runs.iter().enumerate() {
+        let (pc, nc) = window_ctx(w);
+        // Collect non-noise run labels
+        let stable: Vec<&str> = runs
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !is_noise(runs, *i, 1, pc.as_deref(), nc.as_deref()))
+            .map(|(_, r)| r.label.as_str())
+            .collect();
+        if stable.len() < 3 {
+            continue; // need at least: start, different, back
+        }
+        let first = stable[0];
+        let last = stable[stable.len() - 1];
+        if first != last {
+            continue; // not a round-trip
+        }
+        // Check there's at least one different orientation in between
+        let has_different = stable[1..stable.len() - 1].iter().any(|s| *s != first);
+        if !has_different {
+            continue;
+        }
+        // Collect the visited orientations (deduplicated sequence)
+        let mut visited: Vec<&str> = vec![first];
+        for s in &stable[1..] {
+            if *s != *visited.last().unwrap() {
+                visited.push(s);
+            }
         }
 
-        let orient_label = orientation_label(merged_orient.0, merged_orient.1);
-        if is_wide {
-            print!("{}", ORANGE);
-        }
+        // Which move is this between?
+        // window w is between move w (boundary start) and move w+1 (boundary end)
+        let after_move = if w > 0 { w } else { 0 }; // 1-indexed
+        let before_move = if w < p1.len() { w + 1 } else { w }; // 1-indexed
+        let duration_ms = (boundaries[w + 1] - boundaries[w]) * 1000.0;
 
-        print!(
-            "[move #{:>3}] {:>4} at {:+.2}s  |  {} t-{:.3}s",
-            idx + 1, m.remapped, m.rel_t, m.orient, m.before_dt,
+        inspections_found = true;
+        println!(
+            "  Between moves {:>3}-{:>3} ({:.0}ms): {}",
+            after_move,
+            before_move,
+            duration_ms,
+            visited.join(" -> "),
         );
-        if let (Some(ao), Some(ad)) = (&m.after_orient, m.after_dt) {
-            print!("  |  {} t+{:.3}s", ao, ad);
-        }
-        if m.remapped != m.body_label {
-            print!("  |  body: {}", m.body_label);
-        }
-        print!("  [frame:{}]", orient_label);
-        if is_wide {
-            print!("  << WIDE?");
-        }
-        if !cubes_match {
-            print!("{}  << MISMATCH{}", RED_ANSI, RESET);
-        }
-
-        if is_wide {
-            println!("{}", RESET);
-        } else {
-            println!();
-        }
-
-        // Print cubes (idx_print .. idx_print+5)
-        if idx + 1 >= idx_print && idx + 1 < idx_print + 5 {
-            print_cubes_side_by_side(&[
-                (&cube_merged, &format!("MERGED ({})", orient_label)),
-                (&copy, "COPY (→W/G)"),
-                (&cube_ble, "BLE"),
-            ]);
-        }
-
-        // Update expected orientation
-        if is_slice {
-            // Gyro is noisy after slices — don't trust after_orient.
-            // Flag to resync from the next move's before gyro instead.
-            post_slice = true;
-        } else if is_transient {
-            // Wide move / gyro noise — keep expected unchanged
-        } else {
-            expected_orient = Some(m.orient.clone());
-        }
+    }
+    if !inspections_found {
+        println!("  None detected.");
     }
 
-    // Summary
     println!();
-    print!("Remapped sequence: ");
-    for m in &merged {
-        print!("{} ", m.remapped);
-    }
-    println!();
-
-    let copy_final = copy_to_wg(&cube_merged, merged_orient.0, merged_orient.1);
-    println!();
-    println!("MERGED solved:      {}", cube_merged.is_solved());
-    println!("BLE solved:         {}", cube_ble.is_solved());
-    println!("COPY == BLE:        {}{}{}", if copy_final == cube_ble { GREEN_ANSI } else { RED_ANSI }, copy_final == cube_ble, RESET);
-    println!("Any mismatch:       {}{}{}", if any_mismatch { RED_ANSI } else { GREEN_ANSI }, any_mismatch, RESET);
-    if !cube_ble.is_solved() {
-        println!("\nBLE final state:");
-        println!("{}", cube_ble);
-    }
-    if copy_final != cube_ble {
-        println!("\nCOPY (→W/G) final:");
-        println!("{}", copy_final);
-        println!("BLE final:");
-        println!("{}", cube_ble);
-    }
-    println!();
-    println!("=== END ANALYSIS ({:.2}ms) ===", t_start.elapsed().as_secs_f64() * 1000.0);
+    println!(
+        "=== END ANALYSIS ({:.2}ms) ===",
+        t_start.elapsed().as_secs_f64() * 1000.0
+    );
 }
 
 // ========== Tests ==========

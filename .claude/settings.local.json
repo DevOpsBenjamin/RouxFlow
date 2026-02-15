@@ -47,7 +47,10 @@
       "Bash(timeout 8 pnpm admin:*)",
       "Bash(python3:*)",
       "Bash(node -e:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(IDX_PRINT=10 cargo test:*)",
+      "Bash(IDX_PRINT=21 cargo test:*)",
+      "Bash(IDX_PRINT=29 cargo test:*)"
     ]
   }
 }
