@@ -68,45 +68,35 @@ impl BitCube {
     pub fn is_fb_block(&self) -> bool {
         let mut temp = self.clone();
 
-        let rot_x = |c: &mut BitCube| {
-            c.face_r();
-            c.slice_m_prime();
-            c.face_l_prime();
-        };
-
         // Scan ring L-F-R-B (y axis)
         for _ in 0..4 {
             for _ in 0..4 {
                 if temp.is_l_block_formed() {
                     return true;
                 }
-                rot_x(&mut temp);
+                temp.rot_x();
             }
             temp.rot_y();
         }
 
         // Now bring U to L (z' = F' S' B)
         temp = self.clone();
-        temp.face_f_prime();
-        temp.slice_s_prime();
-        temp.face_b();
+        temp.rot_z_prime();
         for _ in 0..4 {
             if temp.is_l_block_formed() {
                 return true;
             }
-            rot_x(&mut temp);
+            temp.rot_x();
         }
 
         // Now bring D to L (z = F S B')
         temp = self.clone();
-        temp.face_f();
-        temp.slice_s();
-        temp.face_b_prime();
+        temp.rot_z();
         for _ in 0..4 {
             if temp.is_l_block_formed() {
                 return true;
             }
-            rot_x(&mut temp);
+            temp.rot_x();
         }
 
         false

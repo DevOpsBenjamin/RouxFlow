@@ -32,34 +32,48 @@ pub struct SolveAnalysis {
 #[derive(Debug, Clone, Copy)]
 enum Orientation {
     Identity,
-    Y, Yp, Y2,
-    X2, X2Y, X2Yp, X2Y2,
+    Y,
+    Yp,
+    Y2,
+    X2,
+    X2Y,
+    X2Yp,
+    X2Y2,
 }
 
 impl Orientation {
     fn apply(&self, cube: &mut BitCube) {
         match self {
-            Orientation::Identity => {},
-            Orientation::Y => cube.rotate_y(),
-            Orientation::Yp => cube.rotate_y_prime(),
-            Orientation::Y2 => cube.rotate_y2(),
-            Orientation::X2 => cube.rotate_x2(),
-            Orientation::X2Y => { cube.rotate_x2(); cube.rotate_y(); },
-            Orientation::X2Yp => { cube.rotate_x2(); cube.rotate_y_prime(); },
-            Orientation::X2Y2 => { cube.rotate_x2(); cube.rotate_y2(); },
+            Orientation::Identity => {}
+            Orientation::Y => cube.rot_y(),
+            Orientation::Yp => cube.rot_y_prime(),
+            Orientation::Y2 => cube.rot_y2(),
+            Orientation::X2 => cube.rot_x2(),
+            Orientation::X2Y => {
+                cube.rot_x2();
+                cube.rot_y();
+            }
+            Orientation::X2Yp => {
+                cube.rot_x2();
+                cube.rot_y_prime();
+            }
+            Orientation::X2Y2 => {
+                cube.rot_x2();
+                cube.rot_y2();
+            }
         }
     }
 }
 
 const ORIENTATIONS: [(Orientation, &str); 8] = [
     (Orientation::Identity, "Orange/Yellow"),
-    (Orientation::Y,        "Blue/Yellow"),
-    (Orientation::Yp,       "Green/Yellow"),
-    (Orientation::Y2,       "Red/Yellow"),
-    (Orientation::X2,       "Orange/White"),
-    (Orientation::X2Y,      "Blue/White"),
-    (Orientation::X2Yp,     "Green/White"),
-    (Orientation::X2Y2,     "Red/White"),
+    (Orientation::Y, "Blue/Yellow"),
+    (Orientation::Yp, "Green/Yellow"),
+    (Orientation::Y2, "Red/Yellow"),
+    (Orientation::X2, "Orange/White"),
+    (Orientation::X2Y, "Blue/White"),
+    (Orientation::X2Yp, "Green/White"),
+    (Orientation::X2Y2, "Red/White"),
 ];
 
 /// Analyze a Roux solve by detecting FB, SB, CMLL, and LSE step boundaries.
@@ -88,7 +102,9 @@ pub fn analyze_solve_legacy(
 
     // Check if phases are already solved after scramble (before any solve move)
     loop {
-        if phase_idx >= phases.len() { break; }
+        if phase_idx >= phases.len() {
+            break;
+        }
         let solved = check_phase(&cube, phases[phase_idx], &detected_orientation);
         if let Some(orient) = solved {
             if detected_orientation.is_none() {
@@ -113,7 +129,9 @@ pub fn analyze_solve_legacy(
 
         // Check current + subsequent phases (a single move can complete multiple phases)
         loop {
-            if phase_idx >= phases.len() { break; }
+            if phase_idx >= phases.len() {
+                break;
+            }
             let solved = check_phase(&cube, phases[phase_idx], &detected_orientation);
             if let Some(orient) = solved {
                 if detected_orientation.is_none() {
@@ -121,8 +139,16 @@ pub fn analyze_solve_legacy(
                 }
                 let end = i + 1;
                 let time = timed_moves.map(|tm| {
-                    let end_time = if end > 0 && end <= tm.len() { tm[end - 1].1 } else { 0 };
-                    let start_time = if phase_start > 0 && phase_start <= tm.len() { tm[phase_start - 1].1 } else { 0 };
+                    let end_time = if end > 0 && end <= tm.len() {
+                        tm[end - 1].1
+                    } else {
+                        0
+                    };
+                    let start_time = if phase_start > 0 && phase_start <= tm.len() {
+                        tm[phase_start - 1].1
+                    } else {
+                        0
+                    };
                     end_time.saturating_sub(start_time)
                 });
                 steps.push(StepSegment {
@@ -170,19 +196,31 @@ fn check_phase(
             let (orient, name) = detected_orientation.as_ref()?;
             let mut test = cube.clone();
             orient.apply(&mut test);
-            if test.is_sb_solved() { Some((*orient, name.clone())) } else { None }
+            if test.is_sb_solved() {
+                Some((*orient, name.clone()))
+            } else {
+                None
+            }
         }
         RouxStep::CMLL => {
             let (orient, name) = detected_orientation.as_ref()?;
             let mut test = cube.clone();
             orient.apply(&mut test);
-            if test.is_cmll_solved() { Some((*orient, name.clone())) } else { None }
+            if test.is_cmll_solved() {
+                Some((*orient, name.clone()))
+            } else {
+                None
+            }
         }
         RouxStep::LSE => {
             let (orient, name) = detected_orientation.as_ref()?;
             let mut test = cube.clone();
             orient.apply(&mut test);
-            if test.is_solved() { Some((*orient, name.clone())) } else { None }
+            if test.is_solved() {
+                Some((*orient, name.clone()))
+            } else {
+                None
+            }
         }
     }
 }

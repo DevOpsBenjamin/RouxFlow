@@ -1,4 +1,4 @@
-use rouxflow_ai::{analyze_solve_legacy, RouxStep, BitCube};
+use rouxflow_ai::{analyze_solve_legacy, BitCube, RouxStep};
 
 /// Helper: apply moves to a solved cube and return it.
 fn cube_after(moves: &str) -> BitCube {
@@ -129,7 +129,9 @@ fn test_analyze_detects_all_four_phases() {
 
     let scramble = "M U R' L'";
     let moves: Vec<String> = vec!["L", "R", "U'", "M'"]
-        .into_iter().map(String::from).collect();
+        .into_iter()
+        .map(String::from)
+        .collect();
 
     let result = analyze_solve_legacy(scramble, &moves, None);
 
@@ -141,7 +143,11 @@ fn test_analyze_detects_all_four_phases() {
 
     // After all 4 moves, cube should be solved, so LSE should be the last detected step
     if let Some(last) = result.steps.last() {
-        assert_eq!(last.step, RouxStep::LSE, "Last step should be LSE (cube fully solved)");
+        assert_eq!(
+            last.step,
+            RouxStep::LSE,
+            "Last step should be LSE (cube fully solved)"
+        );
     }
 }
 
@@ -177,8 +183,11 @@ fn test_analyze_with_timed_moves() {
 fn test_analyze_phases_in_order() {
     // Phases must appear in FB → SB → CMLL → LSE order
     let scramble = "R U R' U' F' L2 D R2 B U2 L2 B2 D L2 D2 F2 D R2 D2";
-    let moves: Vec<String> = "U' L' U L F' L F L U L' U L' U' L U' L U2 L' U' R U R' U R U2 R' U' M U M' U2 M U M'"
-        .split_whitespace().map(String::from).collect();
+    let moves: Vec<String> =
+        "U' L' U L F' L F L U L' U L' U' L U' L U2 L' U' R U R' U R U2 R' U' M U M' U2 M U M'"
+            .split_whitespace()
+            .map(String::from)
+            .collect();
 
     let result = analyze_solve_legacy(scramble, &moves, None);
 
@@ -190,7 +199,12 @@ fn test_analyze_phases_in_order() {
             RouxStep::CMLL => 3,
             RouxStep::LSE => 4,
         };
-        assert!(order > prev_step_order, "Phases must be in order: {:?} after {:?}", step.step, prev_step_order);
+        assert!(
+            order > prev_step_order,
+            "Phases must be in order: {:?} after {:?}",
+            step.step,
+            prev_step_order
+        );
         prev_step_order = order;
     }
 }
@@ -199,18 +213,28 @@ fn test_analyze_phases_in_order() {
 fn test_analyze_move_indices_consistent() {
     let scramble = "R U R' F2";
     let moves: Vec<String> = "L D' L' r U R' U2 M' U M"
-        .split_whitespace().map(String::from).collect();
+        .split_whitespace()
+        .map(String::from)
+        .collect();
     let result = analyze_solve_legacy(scramble, &moves, None);
 
     // Verify segment boundaries are consistent
     for (i, step) in result.steps.iter().enumerate() {
-        assert!(step.end_move >= step.start_move, "end >= start for step {:?}", step.step);
+        assert!(
+            step.end_move >= step.start_move,
+            "end >= start for step {:?}",
+            step.step
+        );
         assert_eq!(step.move_count, step.end_move - step.start_move);
 
         // Each segment's start should equal the previous segment's end
         if i > 0 {
-            assert_eq!(step.start_move, result.steps[i - 1].end_move,
-                "Step {:?} start should equal previous step end", step.step);
+            assert_eq!(
+                step.start_move,
+                result.steps[i - 1].end_move,
+                "Step {:?} start should equal previous step end",
+                step.step
+            );
         }
     }
 }
@@ -219,12 +243,18 @@ fn test_analyze_move_indices_consistent() {
 fn test_bitcube_is_solved_after_rotations() {
     // is_solved() should work regardless of cube orientation
     let mut cube = BitCube::new_solved();
-    cube.rotate_y();
-    assert!(cube.is_solved(), "Solved cube after y rotation should still be detected as solved");
+    cube.rot_y();
+    assert!(
+        cube.is_solved(),
+        "Solved cube after y rotation should still be detected as solved"
+    );
 
     let mut cube2 = BitCube::new_solved();
-    cube2.rotate_x2();
-    assert!(cube2.is_solved(), "Solved cube after x2 rotation should still be detected as solved");
+    cube2.rot_x2();
+    assert!(
+        cube2.is_solved(),
+        "Solved cube after x2 rotation should still be detected as solved"
+    );
 }
 
 #[test]
@@ -253,13 +283,28 @@ fn test_ul_ur_placed_with_m_slice_offset() {
     // Corner at position 0 is unchanged (still White).
     // So is_ul_ur_placed should still be true.
     cube.apply_move("M");
-    assert!(cube.is_ul_ur_placed(), "UL/UR should survive M move (edges+corners unaffected)");
+    assert!(
+        cube.is_ul_ur_placed(),
+        "UL/UR should survive M move (edges+corners unaffected)"
+    );
 
     // Now verify the fix matters: U center (pos 4) is now Green (from F center),
     // but corner (pos 0) is still White. Edge at pos 3 is still White.
     // Old code using center would fail here because 3=White != 4=Green.
     // New code using corner correctly passes because 3=White == 0=White.
-    assert_eq!(cube.get_color_at(4), 3, "U center should be Blue(3) after M (B→U cycle)");
-    assert_eq!(cube.get_color_at(0), 0, "U corner should still be White(0) after M");
-    assert_eq!(cube.get_color_at(3), 0, "UL edge U-sticker should still be White(0) after M");
+    assert_eq!(
+        cube.get_color_at(4),
+        3,
+        "U center should be Blue(3) after M (B→U cycle)"
+    );
+    assert_eq!(
+        cube.get_color_at(0),
+        0,
+        "U corner should still be White(0) after M"
+    );
+    assert_eq!(
+        cube.get_color_at(3),
+        0,
+        "UL edge U-sticker should still be White(0) after M"
+    );
 }
