@@ -10,6 +10,12 @@ fn test_analyze_solve_1_debug() {
     assert!(!telemetry.solve_moves.is_empty(), "solve moves should not be empty");
     assert_eq!(telemetry.scramble, test_data::SOLVE_1_SCRAMBLE);
 
-    // Run analysis — prints debug output, verify it doesn't panic
-    rouxflow_ai::analyze_solve(&telemetry);
+    // Parse IDX_PRINT from env: start printing cubes from this move index
+    // Usage: IDX_PRINT=20 cargo test --test gyro_analyzer_test -- --nocapture
+    let idx_print: usize = std::env::var("IDX_PRINT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+
+    rouxflow_ai::analyze_solve(&telemetry, idx_print);
 }

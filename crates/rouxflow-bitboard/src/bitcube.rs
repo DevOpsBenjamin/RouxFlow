@@ -1,4 +1,5 @@
 use crate::move_indices::Move;
+use std::fmt;
 
 /// A Rubik's Cube represented by bitboards for high-performance search.
 /// Each color (White, Yellow, Green, Blue, Red, Orange) has a 64-bit integer.
@@ -558,5 +559,79 @@ impl BitCube {
             
             *b = next;
         }
+    }
+}
+
+impl fmt::Display for BitCube {
+    /// Print cube as a colored facelet net:
+    /// ```text
+    ///       U U U
+    ///       U U U
+    ///       U U U
+    /// L L L F F F R R R B B B
+    /// L L L F F F R R R B B B
+    /// L L L F F F R R R B B B
+    ///       D D D
+    ///       D D D
+    ///       D D D
+    /// ```
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Color index → (ANSI code, letter)
+        // 0=White, 1=Yellow, 2=Green, 3=Blue, 4=Red, 5=Orange
+        const RESET: &str = "\x1b[0m";
+        const COLORS: [(&str, char); 6] = [
+            ("\x1b[97m", 'W'),  // White (bright white)
+            ("\x1b[93m", 'Y'),  // Yellow (bright yellow)
+            ("\x1b[32m", 'G'),  // Green
+            ("\x1b[34m", 'B'),  // Blue
+            ("\x1b[31m", 'R'),  // Red
+            ("\x1b[38;5;208m", 'O'),  // Orange (256-color)
+        ];
+
+        // Face offsets: U=0, R=9, F=18, D=27, L=36, B=45
+        // Sticker layout within face (bits 0-8):
+        //   0 1 2
+        //   3 4 5
+        //   6 7 8
+
+        let sticker = |bit_idx: usize| -> (char, &'static str) {
+            let c = self.get_color_at(bit_idx);
+            (COLORS[c].1, COLORS[c].0)
+        };
+
+        let print_row = |f: &mut fmt::Formatter<'_>, face_offset: usize, row: usize| -> fmt::Result {
+            for col in 0..3 {
+                let (ch, color) = sticker(face_offset + row * 3 + col);
+                write!(f, "{}{}{} ", color, ch, RESET)?;
+            }
+            Ok(())
+        };
+
+        let pad = "      ";  // L face width = 3 stickers × 2 chars = 6
+
+        // U face (rows 0-2)
+        for row in 0..3 {
+            write!(f, "{}", pad)?;
+            print_row(f, 0, row)?;
+            writeln!(f)?;
+        }
+
+        // Middle band: L F R B (rows 0-2)
+        for row in 0..3 {
+            print_row(f, 36, row)?;  // L
+            print_row(f, 18, row)?;  // F
+            print_row(f, 9, row)?;   // R
+            print_row(f, 45, row)?;  // B
+            writeln!(f)?;
+        }
+
+        // D face (rows 0-2)
+        for row in 0..3 {
+            write!(f, "{}", pad)?;
+            print_row(f, 27, row)?;
+            writeln!(f)?;
+        }
+
+        Ok(())
     }
 }
