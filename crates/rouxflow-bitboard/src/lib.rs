@@ -1,10 +1,11 @@
-pub mod move_indices;
 pub mod bitcube;
-pub mod moves;
 pub mod detect;
+pub mod move_face;
+pub mod move_indices;
+pub mod move_rotation;
+pub mod move_slice;
+pub mod move_wide;
+pub mod moves;
 
-#[cfg(test)]
-mod tests;
-
-pub use move_indices::{Move, FaceMove, SliceMove, WideMove, Rotation};
 pub use bitcube::BitCube;
+pub use move_indices::{FaceMove, Move, Rotation, SliceMove, WideMove};

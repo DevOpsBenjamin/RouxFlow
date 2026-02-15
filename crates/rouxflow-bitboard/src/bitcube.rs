@@ -21,16 +21,18 @@ impl BitCube {
         // B (Blue=3): 45-53
         boards[3] = 0x1FF << 45;
         // R (Red=4): 9-17
-        boards[4] = 0x1FF << 9; 
+        boards[4] = 0x1FF << 9;
         // L (Orange=5): 36-44
         boards[5] = 0x1FF << 36;
-        
+
         BitCube { boards }
     }
 
     pub fn get_color_at(&self, idx: usize) -> usize {
         for i in 0..6 {
-            if (self.boards[i] & (1 << idx)) != 0 { return i; }
+            if (self.boards[i] & (1 << idx)) != 0 {
+                return i;
+            }
         }
         0
     }
@@ -40,11 +42,11 @@ impl fmt::Display for BitCube {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         const RESET: &str = "\x1b[0m";
         const COLORS: [(&str, char); 6] = [
-            ("\x1b[97m", 'W'),  // White
-            ("\x1b[93m", 'Y'),  // Yellow
-            ("\x1b[32m", 'G'),  // Green
-            ("\x1b[34m", 'B'),  // Blue
-            ("\x1b[31m", 'R'),  // Red
+            ("\x1b[97m", 'W'),       // White
+            ("\x1b[93m", 'Y'),       // Yellow
+            ("\x1b[32m", 'G'),       // Green
+            ("\x1b[34m", 'B'),       // Blue
+            ("\x1b[31m", 'R'),       // Red
             ("\x1b[38;5;208m", 'O'), // Orange
         ];
 
@@ -53,13 +55,14 @@ impl fmt::Display for BitCube {
             (COLORS[c].1, COLORS[c].0)
         };
 
-        let print_row = |f: &mut fmt::Formatter<'_>, face_offset: usize, row: usize| -> fmt::Result {
-            for col in 0..3 {
-                let (ch, color) = sticker(face_offset + row * 3 + col);
-                write!(f, "{}{}{} ", color, ch, RESET)?;
-            }
-            Ok(())
-        };
+        let print_row =
+            |f: &mut fmt::Formatter<'_>, face_offset: usize, row: usize| -> fmt::Result {
+                for col in 0..3 {
+                    let (ch, color) = sticker(face_offset + row * 3 + col);
+                    write!(f, "{}{}{} ", color, ch, RESET)?;
+                }
+                Ok(())
+            };
 
         let pad = "      ";
         for row in 0..3 {
@@ -70,7 +73,7 @@ impl fmt::Display for BitCube {
         for row in 0..3 {
             print_row(f, 36, row)?; // L
             print_row(f, 18, row)?; // F
-            print_row(f, 9, row)?;  // R
+            print_row(f, 9, row)?; // R
             print_row(f, 45, row)?; // B
             writeln!(f)?;
         }
