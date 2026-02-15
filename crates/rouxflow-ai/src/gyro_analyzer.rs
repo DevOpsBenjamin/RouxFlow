@@ -29,12 +29,12 @@ impl Color {
 /// The 6 axis directions and their corresponding colors.
 /// MoYu V10: +Y=White, -Y=Yellow, +Z=Green, -Z=Blue, +X=Red, -X=Orange.
 const AXIS_COLORS: [([f32; 3], Color); 6] = [
-    ([0.0,  1.0,  0.0], Color::White),   // +Y
-    ([0.0, -1.0,  0.0], Color::Yellow),  // -Y
-    ([0.0,  0.0,  1.0], Color::Green),   // +Z
-    ([0.0,  0.0, -1.0], Color::Blue),    // -Z
-    ([1.0,  0.0,  0.0], Color::Red),     // +X
-    ([-1.0, 0.0,  0.0], Color::Orange),  // -X
+    ([0.0, 1.0, 0.0], Color::White),   // +Y
+    ([0.0, -1.0, 0.0], Color::Yellow), // -Y
+    ([0.0, 0.0, 1.0], Color::Green),   // +Z
+    ([0.0, 0.0, -1.0], Color::Blue),   // -Z
+    ([1.0, 0.0, 0.0], Color::Red),     // +X
+    ([-1.0, 0.0, 0.0], Color::Orange), // -X
 ];
 
 // ========== Quaternion math ==========
@@ -260,7 +260,9 @@ fn char_to_color(c: char) -> Option<Color> {
 fn parse_orient_label(s: &str) -> Option<(Color, Color)> {
     let mut chars = s.chars();
     let top = char_to_color(chars.next()?)?;
-    if chars.next() != Some('/') { return None; }
+    if chars.next() != Some('/') {
+        return None;
+    }
     let front = char_to_color(chars.next()?)?;
     Some((top, front))
 }
@@ -278,13 +280,13 @@ fn apply_rotation(top: Color, front: Color, rot: &str) -> (Color, Color) {
     let left = opposite_color(right);
 
     match rot {
-        "x"  => (front, bottom),
+        "x" => (front, bottom),
         "x'" => (back, top),
         "x2" => (bottom, back),
-        "y"  => (top, right),
+        "y" => (top, right),
         "y'" => (top, left),
         "y2" => (top, back),
-        "z"  => (left, front),
+        "z" => (left, front),
         "z'" => (right, front),
         "z2" => (bottom, front),
         _ => (top, front),
@@ -355,7 +357,10 @@ fn parse_notation(notation: &str) -> (&str, &str) {
 
 /// For a given (top_color, front_color) orientation, map each body-frame face
 /// to a home face name. Direction is always preserved (no flip).
-fn build_face_map(top: Color, front: Color) -> std::collections::HashMap<&'static str, &'static str> {
+fn build_face_map(
+    top: Color,
+    front: Color,
+) -> std::collections::HashMap<&'static str, &'static str> {
     let mut map = std::collections::HashMap::new();
 
     let right_color = compute_right_color(top, front);
@@ -407,8 +412,15 @@ fn slice_name(f1: &str, d1: i8, f2: &str, d2: i8) -> String {
         ("R", "L") | ("L", "R") => ("M", "L"),
         ("U", "D") | ("D", "U") => ("E", "D"),
         ("F", "B") | ("B", "F") => ("S", "F"),
-        _ => return format!("?({}{}/{}{})", f1, if d1 < 0 { "'" } else { "" },
-                            f2, if d2 < 0 { "'" } else { "" }),
+        _ => {
+            return format!(
+                "?({}{}/{}{})",
+                f1,
+                if d1 < 0 { "'" } else { "" },
+                f2,
+                if d2 < 0 { "'" } else { "" }
+            )
+        }
     };
     // Negate: BLE reports inverse of core motion
     let ble_dir = if f1 == ref_face { d1 } else { d2 };
@@ -418,13 +430,20 @@ fn slice_name(f1: &str, d1: i8, f2: &str, d2: i8) -> String {
 }
 
 /// Check if two consecutive raw moves form a slice pair.
-fn is_slice_pair(m1: &rouxflow_core::telemetry::RawMove, m2: &rouxflow_core::telemetry::RawMove) -> bool {
+fn is_slice_pair(
+    m1: &rouxflow_core::telemetry::RawMove,
+    m2: &rouxflow_core::telemetry::RawMove,
+) -> bool {
     // Same timestamp (BLE reports them together, up to ~2-3ms jitter)
     if (m1.t - m2.t).abs() > 0.005 {
         return false;
     }
-    let Some((f1, d1)) = parse_face_dir(&m1.n) else { return false };
-    let Some((f2, d2)) = parse_face_dir(&m2.n) else { return false };
+    let Some((f1, d1)) = parse_face_dir(&m1.n) else {
+        return false;
+    };
+    let Some((f2, d2)) = parse_face_dir(&m2.n) else {
+        return false;
+    };
     are_opposite_faces(f1, f2) && d1 == -d2
 }
 
@@ -432,8 +451,12 @@ fn is_slice_pair(m1: &rouxflow_core::telemetry::RawMove, m2: &rouxflow_core::tel
 fn remap_slice(n1: &str, n2: &str, top: Color, front: Color) -> String {
     let remapped1 = remap_move(n1, top, front);
     let remapped2 = remap_move(n2, top, front);
-    let Some((rf1, rd1)) = parse_face_dir(&remapped1) else { return format!("{}+{}", remapped1, remapped2) };
-    let Some((rf2, rd2)) = parse_face_dir(&remapped2) else { return format!("{}+{}", remapped1, remapped2) };
+    let Some((rf1, rd1)) = parse_face_dir(&remapped1) else {
+        return format!("{}+{}", remapped1, remapped2);
+    };
+    let Some((rf2, rd2)) = parse_face_dir(&remapped2) else {
+        return format!("{}+{}", remapped1, remapped2);
+    };
     if are_opposite_faces(rf1, rf2) && rd1 == -rd2 {
         slice_name(rf1, rd1, rf2, rd2)
     } else {
@@ -486,13 +509,13 @@ fn to_double(notation: &str) -> String {
 /// BitCube M': centers cycle U→B→D→F (same direction as x).
 fn slice_core_rotation(notation: &str) -> Option<&'static str> {
     match notation {
-        "M"  => Some("x'"),  // M centers: U→F (same as x')
-        "M'" => Some("x"),   // M' centers: U→B (same as x)
+        "M" => Some("x'"), // M centers: U→F (same as x')
+        "M'" => Some("x"), // M' centers: U→B (same as x)
         "M2" => Some("x2"),
-        "S"  => Some("z"),
+        "S" => Some("z"),
         "S'" => Some("z'"),
         "S2" => Some("z2"),
-        "E"  => Some("y'"),
+        "E" => Some("y'"),
         "E'" => Some("y"),
         "E2" => Some("y2"),
         _ => None,
@@ -504,12 +527,12 @@ fn slice_core_rotation(notation: &str) -> Option<&'static str> {
 fn colored_sticker(cube: &BitCube, bit_idx: usize) -> String {
     const RESET: &str = "\x1b[0m";
     const COLORS: [(&str, char); 6] = [
-        ("\x1b[97;1m", 'W'),       // White (bright bold)
-        ("\x1b[93;1m", 'Y'),       // Yellow (bright bold)
-        ("\x1b[32;1m", 'G'),       // Green (bold)
-        ("\x1b[34;1m", 'B'),       // Blue (bold)
-        ("\x1b[31;1m", 'R'),       // Red (bold)
-        ("\x1b[38;5;208m", 'O'),   // Orange (256-color)
+        ("\x1b[97;1m", 'W'),     // White (bright bold)
+        ("\x1b[93;1m", 'Y'),     // Yellow (bright bold)
+        ("\x1b[32;1m", 'G'),     // Green (bold)
+        ("\x1b[34;1m", 'B'),     // Blue (bold)
+        ("\x1b[31;1m", 'R'),     // Red (bold)
+        ("\x1b[38;5;208m", 'O'), // Orange (256-color)
     ];
     let c = cube.get_color_at(bit_idx);
     format!("{}{}{}", COLORS[c].0, COLORS[c].1, RESET)
@@ -555,7 +578,10 @@ fn print_cubes_side_by_side(cubes: &[(&BitCube, &str)]) {
     let all_lines: Vec<Vec<String>> = cubes.iter().map(|(c, _)| cube_to_lines(c)).collect();
 
     // Header
-    let header: Vec<String> = cubes.iter().map(|(_, label)| format!("{:^24}", label)).collect();
+    let header: Vec<String> = cubes
+        .iter()
+        .map(|(_, label)| format!("{:^24}", label))
+        .collect();
     println!("{}", header.join("  |  "));
 
     // Rows
@@ -604,15 +630,17 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
     let (home_top, home_front) = estimate_orientation(&home_rel);
     println!(
         "[home] q=({:.4}, {:.4}, {:.4}, {:.4}) -> {}",
-        home[0], home[1], home[2], home[3],
+        home[0],
+        home[1],
+        home[2],
+        home[3],
         orientation_label(home_top, home_front)
     );
     println!();
 
     // Combine scramble + solve gyro for lookups
-    let mut all_gyro: Vec<&GyroSample> = Vec::with_capacity(
-        telemetry.scramble_gyro.len() + telemetry.solve_gyro.len(),
-    );
+    let mut all_gyro: Vec<&GyroSample> =
+        Vec::with_capacity(telemetry.scramble_gyro.len() + telemetry.solve_gyro.len());
     for s in &telemetry.scramble_gyro {
         all_gyro.push(s);
     }
@@ -819,10 +847,9 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
                     // Detect rotation: non-noise run differs from previous non-noise run
                     if let Some(prev) = last_stable {
                         if prev != run.label {
-                            if let (Some(from), Some(to)) = (
-                                parse_orient_label(prev),
-                                parse_orient_label(&run.label),
-                            ) {
+                            if let (Some(from), Some(to)) =
+                                (parse_orient_label(prev), parse_orient_label(&run.label))
+                            {
                                 let rot = detect_rotation(from, to);
                                 let rel_t = run.t_start - solve_start;
                                 println!(
@@ -844,9 +871,7 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
     let window_ctx = |w: usize| -> (Option<String>, Option<String>) {
         // prev context: window_runs[w-1]. Boundary move = p1[w-1] (the move that starts window w).
         let prev = if w > 0 {
-            let boundary_is_slice = w >= 1
-                && w - 1 < p1.len()
-                && p1[w - 1].body_raw.len() == 2;
+            let boundary_is_slice = w >= 1 && w - 1 < p1.len() && p1[w - 1].body_raw.len() == 2;
             if boundary_is_slice {
                 None
             } else {
@@ -882,50 +907,34 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
     // Face offsets: U=0, R=9, F=18, D=27, L=36, B=45
 
     // D-layer blocks (D on bottom)
-    const DL_BLOCK: [usize; 12] = [
-        27, 30, 33, 42, 43, 44, 24, 21, 53, 50, 41, 39,
-    ];
-    const DR_BLOCK: [usize; 12] = [
-        29, 32, 35, 15, 16, 17, 26, 23, 51, 48, 12, 14,
-    ];
-    const DF_BLOCK: [usize; 12] = [
-        27, 28, 29, 24, 25, 26, 44, 41, 15, 12, 21, 23,
-    ];
-    const DB_BLOCK: [usize; 12] = [
-        33, 34, 35, 51, 52, 53, 42, 39, 17, 14, 50, 48,
-    ];
+    const DL_BLOCK: [usize; 12] = [27, 30, 33, 42, 43, 44, 24, 21, 53, 50, 41, 39];
+    const DR_BLOCK: [usize; 12] = [29, 32, 35, 15, 16, 17, 26, 23, 51, 48, 12, 14];
+    const DF_BLOCK: [usize; 12] = [27, 28, 29, 24, 25, 26, 44, 41, 15, 12, 21, 23];
+    const DB_BLOCK: [usize; 12] = [33, 34, 35, 51, 52, 53, 42, 39, 17, 14, 50, 48];
 
     // U-layer blocks (U on bottom — user has cube flipped)
     // UL: UFL+UBL corners, UL+FL+BL edges
-    const UL_BLOCK: [usize; 12] = [
-        6, 18, 38, 0, 47, 36, 3, 37, 21, 41, 50, 39,
-    ];
+    const UL_BLOCK: [usize; 12] = [6, 18, 38, 0, 47, 36, 3, 37, 21, 41, 50, 39];
     // UR: UFR+UBR corners, UR+FR+BR edges
-    const UR_BLOCK: [usize; 12] = [
-        8, 20, 9, 2, 45, 11, 5, 10, 23, 12, 48, 14,
-    ];
+    const UR_BLOCK: [usize; 12] = [8, 20, 9, 2, 45, 11, 5, 10, 23, 12, 48, 14];
     // UF: UFL+UFR corners, UF+FL+FR edges
-    const UF_BLOCK: [usize; 12] = [
-        6, 18, 38, 8, 20, 9, 7, 19, 21, 41, 23, 12,
-    ];
+    const UF_BLOCK: [usize; 12] = [6, 18, 38, 8, 20, 9, 7, 19, 21, 41, 23, 12];
     // UB: UBL+UBR corners, UB+BL+BR edges
-    const UB_BLOCK: [usize; 12] = [
-        0, 47, 36, 2, 45, 11, 1, 46, 50, 39, 48, 14,
-    ];
+    const UB_BLOCK: [usize; 12] = [0, 47, 36, 2, 45, 11, 1, 46, 50, 39, 48, 14];
 
     // D-layer corners (for CMLL when D on bottom)
     const D_CORNERS: [usize; 12] = [
-        27, 24, 44,   // DFL: D, F, L
-        29, 26, 15,   // DFR: D, F, R
-        33, 53, 42,   // DBL: D, B, L
-        35, 51, 17,   // DBR: D, B, R
+        27, 24, 44, // DFL: D, F, L
+        29, 26, 15, // DFR: D, F, R
+        33, 53, 42, // DBL: D, B, L
+        35, 51, 17, // DBR: D, B, R
     ];
     // U-layer corners (for CMLL when U on bottom)
     const U_CORNERS: [usize; 12] = [
-        6, 18, 38,    // UFL: U, F, L
-        8, 20, 9,     // UFR: U, F, R
-        0, 47, 36,    // UBL: U, B, L
-        2, 45, 11,    // UBR: U, B, R
+        6, 18, 38, // UFL: U, F, L
+        8, 20, 9, // UFR: U, F, R
+        0, 47, 36, // UBL: U, B, L
+        2, 45, 11, // UBR: U, B, R
     ];
 
     const ALL_BLOCKS: [(&[usize; 12], &str, &[usize; 12], &str, &[usize; 12]); 8] = [
@@ -973,7 +982,11 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
         // Apply to detection cube: use slice notation for slice pairs
         if m.body_raw.len() == 2 {
             // Extract slice name from body_label (e.g. "S (F'+B)" → "S")
-            let slice_move = m.body_label.split_whitespace().next().unwrap_or(&m.body_label);
+            let slice_move = m
+                .body_label
+                .split_whitespace()
+                .next()
+                .unwrap_or(&m.body_label);
             cube_detect.apply_move(slice_move);
         } else {
             cube_detect.apply_move(&m.body_raw[0]);
@@ -988,57 +1001,114 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
         };
 
         // Check Roux steps on detection cube
-        let mut step_marker = String::new();
+        let green_v = format!("{}V{}", GREEN, RESET);
+        let red_x = format!("{}X{}", "\x1b[31m", RESET);
 
-        // Flag any move where a 1x2x3 block is detected in the verified body state
-        if cube_body.is_fb_block() {
-            println!(" {}>> MY METHOD DETECTED A BLOCK (Move {})!{}", GREEN, idx + 1, RESET);
-        }
+        let mut f_stat = red_x.clone();
+        let mut s_stat = red_x.clone();
+        let mut c_stat = red_x.clone();
+        let mut u_stat = red_x.clone();
+        let mut e_stat = "?".to_string();
 
-        if fb_done.is_none() {
-            for &(fb_block, fb_name, sb_block, sb_name, cmll_corners) in &ALL_BLOCKS {
-                if is_block_solved(&cube_detect, fb_block.as_slice()) {
-                    fb_done = Some((idx + 1, fb_name, sb_block, sb_name, cmll_corners));
-                    step_marker = format!(
-                        " {}>> FB DONE [{}]{}", GREEN, fb_name, RESET
-                    );
-                    break;
-                }
+        let opp = |c: usize| -> usize {
+            match c {
+                0 => 3,
+                3 => 0,
+                1 => 4,
+                4 => 1,
+                2 => 5,
+                5 => 2,
+                _ => c,
             }
-        } else if sb_done.is_none() {
-            let (_, _, sb_block, sb_name, _) = fb_done.unwrap();
-            if is_block_solved(&cube_detect, sb_block.as_slice()) {
-                sb_done = Some(idx + 1);
-                step_marker = format!(
-                    " {}>> SB DONE [{}]{}", GREEN, sb_name, RESET
-                );
-            }
-        }
-
-        if sb_done.is_some() && cmll_done.is_none() {
-            let (_, _, _, _, cmll_corners) = fb_done.unwrap();
-            if is_block_solved(&cube_detect, cmll_corners.as_slice()) {
-                cmll_done = Some(idx + 1);
-                step_marker = format!(
-                    " {}>> CMLL DONE{}", GREEN, RESET
-                );
-            }
-        }
-
-        let solved_marker = if cube_detect.is_solved() {
-            format!(" {}>> SOLVED{}", GREEN, RESET)
-        } else {
-            String::new()
         };
 
+        // Search for an orientation where FB (L-block) is formed
+        let mut aligned_cube = None;
+        let mut temp = cube_body.clone();
+
+        // 1. Ring y scan
+        'search: for _ in 0..4 {
+            for _ in 0..4 {
+                if temp.is_l_block_formed() {
+                    aligned_cube = Some(temp.clone());
+                    break 'search;
+                }
+                temp.rot_x();
+            }
+            temp.rot_y();
+        }
+
+        if aligned_cube.is_none() {
+            // 2. U to L
+            temp = cube_body.clone();
+            temp.rot_z_prime();
+            'search2: for _ in 0..4 {
+                if temp.is_l_block_formed() {
+                    aligned_cube = Some(temp.clone());
+                    break 'search2;
+                }
+                temp.rot_x();
+            }
+        }
+
+        if aligned_cube.is_none() {
+            // 3. D to L
+            temp = cube_body.clone();
+            temp.rot_z();
+            'search3: for _ in 0..4 {
+                if temp.is_l_block_formed() {
+                    aligned_cube = Some(temp.clone());
+                    break 'search3;
+                }
+                temp.rot_x();
+            }
+        }
+
+        if let Some(aligned) = aligned_cube {
+            f_stat = green_v.clone();
+
+            // Extract colors from the aligned block
+            let find_color = |mask: u64| -> Option<usize> {
+                aligned.boards.iter().position(|&b| (b & mask) == mask)
+            };
+
+            if let (Some(l), Some(d), Some(f), Some(b)) = (
+                find_color(BitCube::L_BLOCK),
+                find_color(BitCube::D_BAR_L),
+                find_color(BitCube::F_BAR_L),
+                find_color(BitCube::B_BAR_L),
+            ) {
+                // Check SB (opposite to FB)
+                let r = opp(l);
+                // SB requires R block, D bar R, etc.
+                if aligned.is_sb_solved_ext(r, d, f, b) {
+                    s_stat = green_v.clone();
+                }
+
+                // CMLL (Corners on U, permutation)
+                if aligned.is_cmll_solved() {
+                    c_stat = green_v.clone();
+                }
+
+                // UL/UR
+                if aligned.is_ul_ur_placed() {
+                    u_stat = green_v.clone();
+                }
+
+                e_stat = format!("{}", aligned.count_bad_edges());
+            }
+        }
+
         println!(
-            "{:>4}  MOVE | {:<20} {:+7.2}s {}{}{}",
+            "{:>4}  MOVE | {:<20} {:+7.2}s  FB: {} SB: {} CMLL: {} UL/UR: {} EdgeCount: {}",
             idx + 1,
             m.body_label,
             rel_t,
-            move_marker,
-            step_marker,
-            solved_marker,
+            f_stat,
+            s_stat,
+            c_stat,
+            u_stat,
+            e_stat
         );
 
         // Print cube state if idx_print is set and we're past it
@@ -1053,10 +1123,7 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
     }
 
     if idx_print > 0 {
-        println!(
-            "Body cube solved: {}",
-            cube_body.is_solved()
-        );
+        println!("Body cube solved: {}", cube_body.is_solved());
         println!();
     }
 
@@ -1088,8 +1155,7 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
         let runs = &window_runs[idx];
         let total: usize = runs.iter().map(|r| r.count).sum();
         let (pc, nc) = window_ctx(idx);
-        let effective =
-            window_effective_orient(runs, pc.as_deref(), nc.as_deref());
+        let effective = window_effective_orient(runs, pc.as_deref(), nc.as_deref());
 
         // Check if any of the PREVIOUS SLICE_LOOKBACK moves is a slice.
         // Note: d starts at 1 — the current move's BEFORE window is pre-slice, still clean.
@@ -1129,11 +1195,8 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
                         continue;
                     }
                     let (fpc, fnc) = window_ctx(fwd);
-                    found = window_effective_orient(
-                        fwd_runs,
-                        fpc.as_deref(),
-                        fnc.as_deref(),
-                    ) == effective;
+                    found = window_effective_orient(fwd_runs, fpc.as_deref(), fnc.as_deref())
+                        == effective;
                     break;
                 }
                 found
@@ -1280,7 +1343,11 @@ mod tests {
         let home = quat_normalize(&[0.01, -0.03, -0.02, 0.99]);
         let rel = relative_quaternion(&home, &home);
         // Should be approximately identity
-        assert!((rel[3] - 1.0).abs() < 0.01, "w should be ~1.0, got {}", rel[3]);
+        assert!(
+            (rel[3] - 1.0).abs() < 0.01,
+            "w should be ~1.0, got {}",
+            rel[3]
+        );
         assert!(rel[0].abs() < 0.01);
         assert!(rel[1].abs() < 0.01);
         assert!(rel[2].abs() < 0.01);
@@ -1306,9 +1373,27 @@ mod tests {
     #[test]
     fn test_find_gyro_before() {
         let samples = vec![
-            GyroSample { t: 1.0, x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
-            GyroSample { t: 2.0, x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
-            GyroSample { t: 3.0, x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
+            GyroSample {
+                t: 1.0,
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            GyroSample {
+                t: 2.0,
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            GyroSample {
+                t: 3.0,
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
         ];
         assert_eq!(find_gyro_before(&samples, 2.5).unwrap().t, 2.0);
         assert_eq!(find_gyro_before(&samples, 2.0).unwrap().t, 2.0);
@@ -1318,9 +1403,27 @@ mod tests {
     #[test]
     fn test_find_gyro_after() {
         let samples = vec![
-            GyroSample { t: 1.0, x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
-            GyroSample { t: 2.0, x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
-            GyroSample { t: 3.0, x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
+            GyroSample {
+                t: 1.0,
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            GyroSample {
+                t: 2.0,
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            GyroSample {
+                t: 3.0,
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
         ];
         assert_eq!(find_gyro_after(&samples, 1.5).unwrap().t, 2.0);
         assert_eq!(find_gyro_after(&samples, 2.0).unwrap().t, 2.0);
@@ -1423,7 +1526,10 @@ mod tests {
         // In Y/R: BLE F'(-1)+B(+1) = core S in body frame → home M'
         // (body S follows body F = home R → slice follows R = home M')
         let home_slice = remap_slice("F'", "B", Color::Yellow, Color::Red);
-        assert_eq!(home_slice, "M'", "Body core-S in Y/R should remap to home M'");
+        assert_eq!(
+            home_slice, "M'",
+            "Body core-S in Y/R should remap to home M'"
+        );
 
         // In Y/R: BLE B(+1)+F'(-1) same pair, still = home M'
         let home_slice = remap_slice("B", "F'", Color::Yellow, Color::Red);
@@ -1439,26 +1545,58 @@ mod tests {
 
     #[test]
     fn test_is_slice_pair_detection() {
-        use rouxflow_core::telemetry::RawMove;
         use rouxflow_core::move_interpreter::MoveKind;
+        use rouxflow_core::telemetry::RawMove;
 
-        let m1 = RawMove { n: "F'".to_string(), t: 86.101, k: MoveKind::Face };
-        let m2 = RawMove { n: "B".to_string(), t: 86.101, k: MoveKind::Face };
+        let m1 = RawMove {
+            n: "F'".to_string(),
+            t: 86.101,
+            k: MoveKind::Face,
+        };
+        let m2 = RawMove {
+            n: "B".to_string(),
+            t: 86.101,
+            k: MoveKind::Face,
+        };
         assert!(is_slice_pair(&m1, &m2));
 
         // Same direction = not a slice
-        let m3 = RawMove { n: "F".to_string(), t: 86.101, k: MoveKind::Face };
-        let m4 = RawMove { n: "B".to_string(), t: 86.101, k: MoveKind::Face };
+        let m3 = RawMove {
+            n: "F".to_string(),
+            t: 86.101,
+            k: MoveKind::Face,
+        };
+        let m4 = RawMove {
+            n: "B".to_string(),
+            t: 86.101,
+            k: MoveKind::Face,
+        };
         assert!(!is_slice_pair(&m3, &m4));
 
         // 2ms jitter = still a slice
-        let m5 = RawMove { n: "F'".to_string(), t: 86.101, k: MoveKind::Face };
-        let m6 = RawMove { n: "B".to_string(), t: 86.103, k: MoveKind::Face };
+        let m5 = RawMove {
+            n: "F'".to_string(),
+            t: 86.101,
+            k: MoveKind::Face,
+        };
+        let m6 = RawMove {
+            n: "B".to_string(),
+            t: 86.103,
+            k: MoveKind::Face,
+        };
         assert!(is_slice_pair(&m5, &m6));
 
         // Different timestamps (>5ms) = not a slice
-        let m7 = RawMove { n: "F'".to_string(), t: 86.101, k: MoveKind::Face };
-        let m8 = RawMove { n: "B".to_string(), t: 86.500, k: MoveKind::Face };
+        let m7 = RawMove {
+            n: "F'".to_string(),
+            t: 86.101,
+            k: MoveKind::Face,
+        };
+        let m8 = RawMove {
+            n: "B".to_string(),
+            t: 86.500,
+            k: MoveKind::Face,
+        };
         assert!(!is_slice_pair(&m7, &m8));
     }
 }

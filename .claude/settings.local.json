@@ -50,7 +50,9 @@
       "Bash(wc:*)",
       "Bash(IDX_PRINT=10 cargo test:*)",
       "Bash(IDX_PRINT=21 cargo test:*)",
-      "Bash(IDX_PRINT=29 cargo test:*)"
+      "Bash(IDX_PRINT=29 cargo test:*)",
+      "WebFetch(domain:f2l-trainer.top)",
+      "WebFetch(domain:www.speedsolving.com)"
     ]
   }
 }
