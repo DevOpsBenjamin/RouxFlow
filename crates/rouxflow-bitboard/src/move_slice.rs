@@ -130,39 +130,198 @@ impl BitCube {
     }
 
     // --- Slice Primes ---
-    #[inline(always)]
+
     pub fn slice_m_prime(&mut self) {
-        for _ in 0..3 {
-            self.slice_m();
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next =
+                old & !(0x92 | (0x92 << 18) | (0x92 << 27) | (1 << 52 | 1 << 49 | 1 << 46));
+
+            // Cycle middle columns: U -> B (rev) -> D -> F -> U
+            next |= (old & (0x92 << 18)) >> 18; // F -> U
+            next |= (old & (0x92 << 27)) >> 9; // D -> F
+
+            // U mid col -> B mid col (reversed)
+            if (old & (1 << 1)) != 0 {
+                next |= 1 << 52;
+            }
+            if (old & (1 << 4)) != 0 {
+                next |= 1 << 49;
+            }
+            if (old & (1 << 7)) != 0 {
+                next |= 1 << 46;
+            }
+
+            // B mid col -> D mid col (reversed)
+            if (old & (1 << 52)) != 0 {
+                next |= 1 << 28;
+            }
+            if (old & (1 << 49)) != 0 {
+                next |= 1 << 31;
+            }
+            if (old & (1 << 46)) != 0 {
+                next |= 1 << 34;
+            }
+            *b = next;
         }
     }
-    #[inline(always)]
+
     pub fn slice_s_prime(&mut self) {
-        for _ in 0..3 {
-            self.slice_s();
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next = old & !((0x7 << 3) | (0x49 << 10) | (0x7 << 30) | (0x49 << 37));
+
+            // R mid col -> U mid row
+            if (old & (1 << 10)) != 0 {
+                next |= 1 << 3;
+            }
+            if (old & (1 << 13)) != 0 {
+                next |= 1 << 4;
+            }
+            if (old & (1 << 16)) != 0 {
+                next |= 1 << 5;
+            }
+
+            // D mid row -> R mid col (reversed)
+            if (old & (1 << 32)) != 0 {
+                next |= 1 << 10;
+            }
+            if (old & (1 << 31)) != 0 {
+                next |= 1 << 13;
+            }
+            if (old & (1 << 30)) != 0 {
+                next |= 1 << 16;
+            }
+
+            // L mid col -> D mid row (reversed)
+            if (old & (1 << 43)) != 0 {
+                next |= 1 << 32;
+            }
+            if (old & (1 << 40)) != 0 {
+                next |= 1 << 31;
+            }
+            if (old & (1 << 37)) != 0 {
+                next |= 1 << 30;
+            }
+
+            // U mid row -> L mid col
+            if (old & (1 << 3)) != 0 {
+                next |= 1 << 43;
+            }
+            if (old & (1 << 4)) != 0 {
+                next |= 1 << 40;
+            }
+            if (old & (1 << 5)) != 0 {
+                next |= 1 << 37;
+            }
+            *b = next;
         }
     }
-    #[inline(always)]
+
     pub fn slice_e_prime(&mut self) {
-        for _ in 0..3 {
-            self.slice_e();
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next = old & !((0x7 << 21) | (0x7 << 12) | (0x7 << 48) | (0x7 << 39));
+            next |= ((old >> 12) & 0x7) << 21; // R -> F
+            next |= ((old >> 48) & 0x7) << 12; // B -> R
+            next |= ((old >> 39) & 0x7) << 48; // L -> B
+            next |= ((old >> 21) & 0x7) << 39; // F -> L
+            *b = next;
         }
     }
 
     // --- Slice Doubles ---
-    #[inline(always)]
+
     pub fn slice_m2(&mut self) {
-        self.slice_m();
-        self.slice_m();
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next =
+                old & !(0x92 | (0x92 << 18) | (0x92 << 27) | (1 << 52 | 1 << 49 | 1 << 46));
+
+            // U <-> D
+            next |= (old & 0x92) << 27;
+            next |= (old & (0x92 << 27)) >> 27;
+
+            // F <-> B (reversed)
+            if (old & (1 << 19)) != 0 {
+                next |= 1 << 52;
+            }
+            if (old & (1 << 22)) != 0 {
+                next |= 1 << 49;
+            }
+            if (old & (1 << 25)) != 0 {
+                next |= 1 << 46;
+            }
+            if (old & (1 << 52)) != 0 {
+                next |= 1 << 19;
+            }
+            if (old & (1 << 49)) != 0 {
+                next |= 1 << 22;
+            }
+            if (old & (1 << 46)) != 0 {
+                next |= 1 << 25;
+            }
+            *b = next;
+        }
     }
-    #[inline(always)]
+
     pub fn slice_s2(&mut self) {
-        self.slice_s();
-        self.slice_s();
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next = old & !((0x7 << 3) | (0x49 << 10) | (0x7 << 30) | (0x49 << 37));
+
+            // U <-> D (reversed row)
+            if (old & (1 << 3)) != 0 {
+                next |= 1 << 32;
+            }
+            if (old & (1 << 4)) != 0 {
+                next |= 1 << 31;
+            }
+            if (old & (1 << 5)) != 0 {
+                next |= 1 << 30;
+            }
+            if (old & (1 << 32)) != 0 {
+                next |= 1 << 3;
+            }
+            if (old & (1 << 31)) != 0 {
+                next |= 1 << 4;
+            }
+            if (old & (1 << 30)) != 0 {
+                next |= 1 << 5;
+            }
+
+            // R <-> L (reversed col)
+            if (old & (1 << 10)) != 0 {
+                next |= 1 << 43;
+            }
+            if (old & (1 << 13)) != 0 {
+                next |= 1 << 40;
+            }
+            if (old & (1 << 16)) != 0 {
+                next |= 1 << 37;
+            }
+            if (old & (1 << 43)) != 0 {
+                next |= 1 << 10;
+            }
+            if (old & (1 << 40)) != 0 {
+                next |= 1 << 13;
+            }
+            if (old & (1 << 37)) != 0 {
+                next |= 1 << 16;
+            }
+            *b = next;
+        }
     }
-    #[inline(always)]
+
     pub fn slice_e2(&mut self) {
-        self.slice_e();
-        self.slice_e();
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next = old & !((0x7 << 21) | (0x7 << 12) | (0x7 << 48) | (0x7 << 39));
+            next |= ((old >> 21) & 0x7) << 48; // F -> B
+            next |= ((old >> 48) & 0x7) << 21; // B -> F
+            next |= ((old >> 12) & 0x7) << 39; // R -> L
+            next |= ((old >> 39) & 0x7) << 12; // L -> R
+            *b = next;
+        }
     }
 }
