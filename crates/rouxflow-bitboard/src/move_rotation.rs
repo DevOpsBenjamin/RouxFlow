@@ -21,32 +21,87 @@ impl BitCube {
 
     /// Rotates the whole cube on the X axis (following R).
     pub fn rot_x(&mut self) {
-        self.face_r();
-        self.slice_m_prime();
-        self.face_l_prime();
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next = 0;
+            // R, L faces
+            next |= Self::rot90_cw((old >> 9) & 0x1FF) << 9;
+            next |= Self::rot90_ccw((old >> 36) & 0x1FF) << 36;
+            // Side faces cycle: U <- F, F <- D, D <- B(rev), B <- U(rev)
+            next |= (old >> 18) & 0x1FF; // F -> U
+            next |= ((old >> 27) & 0x1FF) << 18; // D -> F
+            next |= Self::rot180((old >> 45) & 0x1FF) << 27; // B -> D (rev)
+            next |= Self::rot180(old & 0x1FF) << 45; // U -> B (rev)
+            *b = next;
+        }
     }
+
     /// Rotates the whole cube on the X axis counter-clockwise (following R').
     pub fn rot_x_prime(&mut self) {
-        self.face_r_prime();
-        self.slice_m();
-        self.face_l();
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next = 0;
+            // R, L faces
+            next |= Self::rot90_ccw((old >> 9) & 0x1FF) << 9;
+            next |= Self::rot90_cw((old >> 36) & 0x1FF) << 36;
+            // Side faces cycle: F <- U, D <- F, B <- D(rev), U <- B(rev)
+            next |= (old & 0x1FF) << 18; // U -> F
+            next |= ((old >> 18) & 0x1FF) << 27; // F -> D
+            next |= Self::rot180((old >> 27) & 0x1FF) << 45; // D -> B (rev)
+            next |= Self::rot180((old >> 45) & 0x1FF); // B -> U (rev)
+            *b = next;
+        }
     }
+
     /// Rotates the whole cube on the Z axis (following F).
     pub fn rot_z(&mut self) {
-        self.face_f();
-        self.slice_s();
-        self.face_b_prime();
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next = 0;
+            // F, B faces
+            next |= Self::rot90_cw((old >> 18) & 0x1FF) << 18;
+            next |= Self::rot90_ccw((old >> 45) & 0x1FF) << 45;
+            // Side faces cycle (all 90 CW): U <- L, L <- D, D <- R, R <- U
+            next |= Self::rot90_cw((old >> 36) & 0x1FF); // L -> U
+            next |= Self::rot90_cw((old >> 27) & 0x1FF) << 36; // D -> L
+            next |= Self::rot90_cw((old >> 9) & 0x1FF) << 27; // R -> D
+            next |= Self::rot90_cw(old & 0x1FF) << 9; // U -> R
+            *b = next;
+        }
     }
+
     /// Rotates the whole cube on the Z axis counter-clockwise (following F').
     pub fn rot_z_prime(&mut self) {
-        self.face_f_prime();
-        self.slice_s_prime();
-        self.face_b();
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next = 0;
+            // F, B faces
+            next |= Self::rot90_ccw((old >> 18) & 0x1FF) << 18;
+            next |= Self::rot90_cw((old >> 45) & 0x1FF) << 45;
+            // Side faces cycle (all 90 CCW): U <- R, R <- D, D <- L, L <- U
+            next |= Self::rot90_ccw((old >> 9) & 0x1FF); // R -> U
+            next |= Self::rot90_ccw((old >> 27) & 0x1FF) << 9; // D -> R
+            next |= Self::rot90_ccw((old >> 36) & 0x1FF) << 27; // L -> D
+            next |= Self::rot90_ccw(old & 0x1FF) << 36; // U -> L
+            *b = next;
+        }
     }
+
     /// 180-degree rotation on Z axis.
     pub fn rot_z2(&mut self) {
-        self.rot_z();
-        self.rot_z();
+        for b in &mut self.boards {
+            let old = *b;
+            let mut next = 0;
+            // F, B faces
+            next |= Self::rot180((old >> 18) & 0x1FF) << 18;
+            next |= Self::rot180((old >> 45) & 0x1FF) << 45;
+            // Side faces cycle (all 180): U <-> D, L <-> R
+            next |= Self::rot180((old >> 27) & 0x1FF); // D -> U
+            next |= Self::rot180(old & 0x1FF) << 27; // U -> D
+            next |= Self::rot180((old >> 9) & 0x1FF) << 36; // R -> L
+            next |= Self::rot180((old >> 36) & 0x1FF) << 9; // L -> R
+            *b = next;
+        }
     }
 
     /// Helper: 90-degree clockwise rotation of a single face's bits.
@@ -202,11 +257,13 @@ impl BitCube {
         for b in &mut self.boards {
             let old = *b;
             let mut next = 0;
-            next |= Self::rot180(old & 0x1FF) << 27; // U <-> D
-            next |= Self::rot180((old >> 27) & 0x1FF);
-            next |= Self::rot180((old >> 18) & 0x1FF) << 45; // F <-> B
-            next |= Self::rot180((old >> 45) & 0x1FF) << 18;
-            next |= Self::rot180((old >> 9) & 0x1FF) << 9; // R, L stay put but rotate
+            // Side faces cycle: U <-> D, F <-> B (rev)
+            next |= (old >> 27) & 0x1FF; // D -> U
+            next |= (old & 0x1FF) << 27; // U -> D
+            next |= Self::rot180((old >> 45) & 0x1FF) << 18; // B -> F (rev)
+            next |= Self::rot180((old >> 18) & 0x1FF) << 45; // F -> B (rev)
+                                                             // R, L faces rotate 180
+            next |= Self::rot180((old >> 9) & 0x1FF) << 9;
             next |= Self::rot180((old >> 36) & 0x1FF) << 36;
             *b = next;
         }
