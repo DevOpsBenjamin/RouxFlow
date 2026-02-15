@@ -278,8 +278,8 @@ fn apply_rotation(top: Color, front: Color, rot: &str) -> (Color, Color) {
     let left = opposite_color(right);
 
     match rot {
-        "x"  => (back, top),
-        "x'" => (front, bottom),
+        "x"  => (front, bottom),
+        "x'" => (back, top),
         "x2" => (bottom, back),
         "y"  => (top, right),
         "y'" => (top, left),
@@ -487,8 +487,8 @@ fn to_double(notation: &str) -> String {
 ///   BitCube M (=std M') → core x,  BitCube M' (=std M) → core x'
 fn slice_core_rotation(notation: &str) -> Option<&'static str> {
     match notation {
-        "M"  => Some("x"),
-        "M'" => Some("x'"),
+        "M"  => Some("x'"),  // M centers: U→F (same as x')
+        "M'" => Some("x"),   // M' centers: U→B (same as x)
         "M2" => Some("x2"),
         "S"  => Some("z"),
         "S'" => Some("z'"),
@@ -842,11 +842,19 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
     // Track expected orientation — starts at merged_orient (after initial rotation), not home
     let mut expected_orient: Option<String> = Some(orientation_label(merged_orient.0, merged_orient.1));
     let mut any_mismatch = false;
+    let mut post_slice = false; // Skip rotation detection on the move right after a slice
 
     for (idx, m) in merged.iter().enumerate() {
         let is_slice = matches!(strip_suffix(&m.remapped), "M" | "S" | "E");
 
-        let orient_differs = expected_orient.as_ref().is_some_and(|exp| *exp != m.orient);
+        // After a slice, gyro is noisy — skip rotation detection and resync
+        let skip_rotation = post_slice;
+        if post_slice {
+            expected_orient = Some(m.orient.clone());
+            post_slice = false;
+        }
+
+        let orient_differs = !skip_rotation && expected_orient.as_ref().is_some_and(|exp| *exp != m.orient);
         let is_transient = orient_differs
             && m.after_orient.as_ref().is_some_and(|ao| {
                 expected_orient.as_ref().is_some_and(|exp| ao == exp)
@@ -942,9 +950,9 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
 
         // Update expected orientation
         if is_slice {
-            if let Some(ao) = &m.after_orient {
-                expected_orient = Some(ao.clone());
-            }
+            // Gyro is noisy after slices — don't trust after_orient.
+            // Flag to resync from the next move's before gyro instead.
+            post_slice = true;
         } else if is_transient {
             // Wide move / gyro noise — keep expected unchanged
         } else {
@@ -1130,34 +1138,39 @@ mod tests {
 
     #[test]
     fn test_slice_name_body_frame() {
-        // M follows L: L + R' = M, L' + R = M'
-        assert_eq!(slice_name("L", 1, "R", -1), "M");
-        assert_eq!(slice_name("R", 1, "L", -1), "M'");
-        // S follows F: F + B' = S, F' + B = S'
-        assert_eq!(slice_name("F", 1, "B", -1), "S");
-        assert_eq!(slice_name("F", -1, "B", 1), "S'");
-        assert_eq!(slice_name("B", 1, "F", -1), "S'");
-        // E follows D: D + U' = E, D' + U = E'
-        assert_eq!(slice_name("D", 1, "U", -1), "E");
-        assert_eq!(slice_name("U", 1, "D", -1), "E'");
+        // BLE directions are negated to get core motion.
+        // BLE L(+1) R(-1) = core M' (follows R, opposite of L)
+        assert_eq!(slice_name("L", 1, "R", -1), "M'");
+        // BLE R(+1) L(-1) = core M (follows L)
+        assert_eq!(slice_name("R", 1, "L", -1), "M");
+        // BLE F(+1) B(-1) = core S' (opposite of F)
+        assert_eq!(slice_name("F", 1, "B", -1), "S'");
+        // BLE F(-1) B(+1) = core S (follows F)
+        assert_eq!(slice_name("F", -1, "B", 1), "S");
+        assert_eq!(slice_name("B", 1, "F", -1), "S");
+        // BLE D(+1) U(-1) = core E' (opposite of D)
+        assert_eq!(slice_name("D", 1, "U", -1), "E'");
+        // BLE U(+1) D(-1) = core E (follows D)
+        assert_eq!(slice_name("U", 1, "D", -1), "E");
     }
 
     #[test]
     fn test_remap_slice_yr() {
-        // In Y/R: body F' + B (body S') remaps to home R' + L = home M
+        // In Y/R: BLE F'(-1)+B(+1) = core S in body frame → home M'
+        // (body S follows body F = home R → slice follows R = home M')
         let home_slice = remap_slice("F'", "B", Color::Yellow, Color::Red);
-        assert_eq!(home_slice, "M", "Body S' in Y/R should remap to home M");
+        assert_eq!(home_slice, "M'", "Body core-S in Y/R should remap to home M'");
 
-        // In Y/R: body B + F' (body S') still = home M
+        // In Y/R: BLE B(+1)+F'(-1) same pair, still = home M'
         let home_slice = remap_slice("B", "F'", Color::Yellow, Color::Red);
-        assert_eq!(home_slice, "M", "Body B+F' in Y/R should remap to home M");
+        assert_eq!(home_slice, "M'", "Body B+F' in Y/R should remap to home M'");
     }
 
     #[test]
     fn test_remap_slice_identity() {
-        // In W/G (home): body M stays M
+        // In W/G (home): BLE L(+1)+R'(-1) = core M' stays M'
         let home_slice = remap_slice("L", "R'", Color::White, Color::Green);
-        assert_eq!(home_slice, "M");
+        assert_eq!(home_slice, "M'");
     }
 
     #[test]
