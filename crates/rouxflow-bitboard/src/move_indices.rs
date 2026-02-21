@@ -1,5 +1,7 @@
+use serde::{Deserialize, Serialize};
+
 /// Standard face moves: U, D, L, R, F, B
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum FaceMove {
     U,
     Up,
@@ -22,7 +24,7 @@ pub enum FaceMove {
 }
 
 /// Slice moves: M, E, S
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum SliceMove {
     M,
     Mp,
@@ -36,7 +38,7 @@ pub enum SliceMove {
 }
 
 /// Wide moves: u, d, l, r, f, b
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum WideMove {
     Uw,
     Uwp,
@@ -59,7 +61,7 @@ pub enum WideMove {
 }
 
 /// Global cube rotations: x, y, z
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Rotation {
     X,
     Xp,
@@ -73,7 +75,7 @@ pub enum Rotation {
 }
 
 /// Unified Move enum that wraps all categories
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Move {
     Face(FaceMove),
     Slice(SliceMove),

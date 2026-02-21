@@ -1,4 +1,5 @@
-use super::math::{color_to_home_face, compute_right_color, opposite_color, Color};
+use super::math::{color_to_home_face, compute_right_color, opposite_color};
+use rouxflow_core::cube::Orientation;
 use rouxflow_core::telemetry::RawMove;
 
 // ========== Move remapping ==========
@@ -12,9 +13,9 @@ use rouxflow_core::telemetry::RawMove;
 /// Direction is always preserved (no flip needed) because the standard face
 /// convention (CW viewed from outside) maps directly: body face CW from body
 /// axis direction = home face CW from home axis direction.
-pub fn remap_move(notation: &str, top: Color, front: Color) -> String {
+pub fn remap_move(notation: &str, orient: Orientation) -> String {
     let (face_str, suffix) = parse_notation(notation);
-    let face_map = build_face_map(top, front);
+    let face_map = build_face_map(orient);
 
     if let Some(&home_face) = face_map.get(face_str) {
         format!("{}{}", home_face, suffix)
@@ -34,22 +35,21 @@ pub fn parse_notation(notation: &str) -> (&str, &str) {
     }
 }
 
-/// For a given (top_color, front_color) orientation, map each body-frame face
+/// For a given orientation, map each body-frame face
 /// to a home face name. Direction is always preserved (no flip).
 pub fn build_face_map(
-    top: Color,
-    front: Color,
+    orient: Orientation,
 ) -> std::collections::HashMap<&'static str, &'static str> {
     let mut map = std::collections::HashMap::new();
 
-    let right_color = compute_right_color(top, front);
-    let bottom = opposite_color(top);
-    let back = opposite_color(front);
+    let right_color = compute_right_color(orient.top, orient.front);
+    let bottom = opposite_color(orient.top);
+    let back = opposite_color(orient.front);
     let left = opposite_color(right_color);
 
-    map.insert("U", color_to_home_face(top));
+    map.insert("U", color_to_home_face(orient.top));
     map.insert("D", color_to_home_face(bottom));
-    map.insert("F", color_to_home_face(front));
+    map.insert("F", color_to_home_face(orient.front));
     map.insert("B", color_to_home_face(back));
     map.insert("R", color_to_home_face(right_color));
     map.insert("L", color_to_home_face(left));
@@ -124,9 +124,9 @@ pub fn is_slice_pair(m1: &RawMove, m2: &RawMove) -> bool {
 }
 
 /// Remap a slice: remap both constituent faces, then name the home-frame slice.
-pub fn remap_slice(n1: &str, n2: &str, top: Color, front: Color) -> String {
-    let remapped1 = remap_move(n1, top, front);
-    let remapped2 = remap_move(n2, top, front);
+pub fn remap_slice(n1: &str, n2: &str, orient: Orientation) -> String {
+    let remapped1 = remap_move(n1, orient);
+    let remapped2 = remap_move(n2, orient);
     let Some((rf1, rd1)) = parse_face_dir(&remapped1) else {
         return format!("{}+{}", remapped1, remapped2);
     };

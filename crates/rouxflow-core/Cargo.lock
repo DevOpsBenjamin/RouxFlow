@@ -364,6 +364,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
 
 [[package]]
+name = "rouxflow-bitboard"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "rouxflow-core"
 version = "0.0.24"
 dependencies = [
@@ -373,6 +380,7 @@ dependencies = [
  "getrandom 0.2.17",
  "hex",
  "hmac",
+ "rouxflow-bitboard",
  "serde",
  "serde_json",
  "sha2",

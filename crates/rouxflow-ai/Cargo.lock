@@ -468,6 +468,9 @@ dependencies = [
 [[package]]
 name = "rouxflow-bitboard"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "rouxflow-core"
@@ -479,6 +482,7 @@ dependencies = [
  "getrandom 0.2.17",
  "hex",
  "hmac",
+ "rouxflow-bitboard",
  "serde",
  "serde_json",
  "sha2",

@@ -1,8 +1,13 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Face {
-    U = 0, R = 1, F = 2, D = 3, L = 4, B = 5
+    U = 0,
+    R = 1,
+    F = 2,
+    D = 3,
+    L = 4,
+    B = 5,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -14,13 +19,25 @@ pub struct CubeMove {
 impl CubeMove {
     pub fn notation(&self) -> String {
         let face_names = ["U", "R", "F", "D", "L", "B"];
-        let amount_str = if self.amount == 1 { "" } else if self.amount == -1 { "'" } else { "2" };
+        let amount_str = if self.amount == 1 {
+            ""
+        } else if self.amount == -1 {
+            "'"
+        } else {
+            "2"
+        };
         format!("{}{}", face_names[self.face as usize], amount_str)
     }
 
     pub fn inverse_notation(&self) -> String {
         let face_names = ["U", "R", "F", "D", "L", "B"];
-        let amount_str = if self.amount == 1 { "'" } else if self.amount == -1 { "" } else { "2" };
+        let amount_str = if self.amount == 1 {
+            "'"
+        } else if self.amount == -1 {
+            ""
+        } else {
+            "2"
+        };
         format!("{}{}", face_names[self.face as usize], amount_str)
     }
 }
@@ -37,6 +54,12 @@ pub struct Quaternion {
 pub enum MotionState {
     Stable = 0,
     Moving = 1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Orientation {
+    pub top: facelet::Color,
+    pub front: facelet::Color,
 }
 
 pub mod facelet;
@@ -56,7 +79,12 @@ impl CubeState {
     pub fn new() -> Self {
         CubeState {
             stickers: vec![0x01; 20],
-            orientation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
+            orientation: Some(Quaternion {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            }),
             motion: MotionState::Stable,
             logic: facelet::FaceletCube::new(),
         }
@@ -130,4 +158,3 @@ impl CubeState {
         roux::RouxSolver::invert_moves(moves)
     }
 }
-

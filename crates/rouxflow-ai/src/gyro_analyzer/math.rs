@@ -1,27 +1,17 @@
+pub use rouxflow_core::cube::facelet::Color;
+use rouxflow_core::cube::Orientation;
 use rouxflow_core::telemetry::GyroSample;
 
 // ========== Color / Orientation types ==========
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Color {
-    White,
-    Yellow,
-    Green,
-    Blue,
-    Red,
-    Orange,
-}
-
-impl Color {
-    pub fn label(&self) -> char {
-        match self {
-            Color::White => 'W',
-            Color::Yellow => 'Y',
-            Color::Green => 'G',
-            Color::Blue => 'B',
-            Color::Red => 'R',
-            Color::Orange => 'O',
-        }
+pub fn color_to_char(c: Color) -> char {
+    match c {
+        Color::White => 'W',
+        Color::Yellow => 'Y',
+        Color::Green => 'G',
+        Color::Blue => 'B',
+        Color::Red => 'R',
+        Color::Orange => 'O',
     }
 }
 
@@ -188,14 +178,21 @@ pub fn snap_to_axis(v: &[f32; 3]) -> Color {
 }
 
 /// Estimate (top_color, front_color) from a relative quaternion.
-pub fn estimate_orientation(rel: &[f32; 4]) -> (Color, Color) {
+pub fn estimate_orientation(rel: &[f32; 4]) -> Orientation {
     let up = quat_rotate_vec(rel, &[0.0, 1.0, 0.0]);
     let front = quat_rotate_vec(rel, &[0.0, 0.0, 1.0]);
-    (snap_to_axis(&up), snap_to_axis(&front))
+    Orientation {
+        top: snap_to_axis(&up),
+        front: snap_to_axis(&front),
+    }
 }
 
-pub fn orientation_label(top: Color, front: Color) -> String {
-    format!("{}/{}", top.label(), front.label())
+pub fn orientation_label(orient: Orientation) -> String {
+    format!(
+        "{}/{}",
+        color_to_char(orient.top),
+        color_to_char(orient.front)
+    )
 }
 
 // ========== Color helpers (module-level) ==========
@@ -256,45 +253,49 @@ pub fn char_to_color(c: char) -> Option<Color> {
     }
 }
 
-pub fn parse_orient_label(s: &str) -> Option<(Color, Color)> {
+pub fn parse_orient_label(s: &str) -> Option<Orientation> {
     let mut chars = s.chars();
     let top = char_to_color(chars.next()?)?;
     if chars.next() != Some('/') {
         return None;
     }
     let front = char_to_color(chars.next()?)?;
-    Some((top, front))
+    Some(Orientation { top, front })
 }
 
 // ========== Rotation detection ==========
 
-/// Apply a cube rotation to an orientation, returning the new (top, front).
+/// Apply a cube rotation to an orientation, returning the new Orientation.
 /// x = rotate like R (CW from right side).
 /// y = rotate like U (CW from top).
 /// z = rotate like F (CW from front).
-pub fn apply_rotation(top: Color, front: Color, rot: &str) -> (Color, Color) {
-    let right = compute_right_color(top, front);
-    let bottom = opposite_color(top);
-    let back = opposite_color(front);
+pub fn apply_rotation(orient: Orientation, rot: &str) -> Orientation {
+    let right = compute_right_color(orient.top, orient.front);
+    let bottom = opposite_color(orient.top);
+    let back = opposite_color(orient.front);
     let left = opposite_color(right);
 
-    match rot {
-        "x" => (front, bottom),
-        "x'" => (back, top),
+    let (new_top, new_front) = match rot {
+        "x" => (orient.front, bottom),
+        "x'" => (back, orient.top),
         "x2" => (bottom, back),
-        "y" => (top, right),
-        "y'" => (top, left),
-        "y2" => (top, back),
-        "z" => (left, front),
-        "z'" => (right, front),
-        "z2" => (bottom, front),
-        _ => (top, front),
+        "y" => (orient.top, right),
+        "y'" => (orient.top, left),
+        "y2" => (orient.top, back),
+        "z" => (left, orient.front),
+        "z'" => (right, orient.front),
+        "z2" => (bottom, orient.front),
+        _ => (orient.top, orient.front),
+    };
+    Orientation {
+        top: new_top,
+        front: new_front,
     }
 }
 
 /// Detect which rotation transforms one orientation into another.
 /// Tries single rotations first, then pairs if needed.
-pub fn detect_rotation(from: (Color, Color), to: (Color, Color)) -> String {
+pub fn detect_rotation(from: Orientation, to: Orientation) -> String {
     if from == to {
         return String::new();
     }
@@ -303,16 +304,16 @@ pub fn detect_rotation(from: (Color, Color), to: (Color, Color)) -> String {
 
     // Try single rotation
     for rot in &ROTS {
-        if apply_rotation(from.0, from.1, rot) == to {
+        if apply_rotation(from, rot) == to {
             return rot.to_string();
         }
     }
 
     // Try pair of rotations
     for r1 in &ROTS {
-        let mid = apply_rotation(from.0, from.1, r1);
+        let mid = apply_rotation(from, r1);
         for r2 in &ROTS {
-            if apply_rotation(mid.0, mid.1, r2) == to {
+            if apply_rotation(mid, r2) == to {
                 return format!("{} {}", r1, r2);
             }
         }
@@ -344,8 +345,8 @@ pub fn collect_orient_runs(
         }
         let q = [s.x, s.y, s.z, s.w];
         let rel = relative_quaternion(home, &q);
-        let (top, front) = estimate_orientation(&rel);
-        let label = orientation_label(top, front);
+        let orient = estimate_orientation(&rel);
+        let label = orientation_label(orient);
         if let Some(last) = runs.last_mut() {
             if last.label == label {
                 last.count += 1;
