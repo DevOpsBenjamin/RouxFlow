@@ -1,8 +1,6 @@
 use rouxflow_bitboard::move_indices::Rotation;
 use rouxflow_bitboard::BitCube;
-use rouxflow_core::telemetry::{
-    CubeStateFlags, GyroSample, ParsedSolve, SolveEvent, SolveTelemetry,
-};
+use rouxflow_core::telemetry::{GyroSample, ParsedSolve, SolveEvent, SolveTelemetry};
 
 pub mod math;
 pub mod moves;
@@ -23,29 +21,31 @@ mod tests;
 /// Multi-pass approach:
 /// - Pass 1: Slice detection (body frame, no orientation)
 /// - Pass 2: Gyro orientation table (all samples, majority vote)
-pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) -> ParsedSolve {
+pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSolve {
     let duration = telemetry.solve_end_t - telemetry.solve_start_t;
 
-    println!("=== SOLVE ANALYSIS (multi-pass) ===");
-    println!(
-        "Scramble: {}",
-        if telemetry.scramble.is_empty() {
-            "(not recorded)"
-        } else {
-            &telemetry.scramble
-        }
-    );
-    println!(
-        "Duration: {:.2}s (solve_start={:.3}, solve_end={:.3})",
-        duration, telemetry.solve_start_t, telemetry.solve_end_t
-    );
-    println!(
-        "Scramble gyro: {} samples, Solve gyro: {} samples, Raw moves: {}",
-        telemetry.scramble_gyro.len(),
-        telemetry.solve_gyro.len(),
-        telemetry.solve_moves.len()
-    );
-    println!();
+    if print_output {
+        println!("=== SOLVE ANALYSIS (multi-pass) ===");
+        println!(
+            "Scramble: {}",
+            if telemetry.scramble.is_empty() {
+                "(not recorded)"
+            } else {
+                &telemetry.scramble
+            }
+        );
+        println!(
+            "Duration: {:.2}s (solve_start={:.3}, solve_end={:.3})",
+            duration, telemetry.solve_start_t, telemetry.solve_end_t
+        );
+        println!(
+            "Scramble gyro: {} samples, Solve gyro: {} samples, Raw moves: {}",
+            telemetry.scramble_gyro.len(),
+            telemetry.solve_gyro.len(),
+            telemetry.solve_moves.len()
+        );
+        println!();
+    }
 
     // Compute home orientation from scramble gyro
     let home = compute_home(&telemetry.scramble_gyro);
@@ -55,7 +55,9 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) -> ParsedSolv
     let mut parsed_solve = ParsedSolve {
         solve_duration_ms: duration * 1000.0,
         is_solved: false,
-        steps_reached: Vec::new(),
+        move_count: Default::default(),
+        tps: Default::default(),
+        step_details: rouxflow_core::telemetry::StepDetails::default(),
         initial_orientation: home_orient,
         timeline: Vec::new(),
     };
@@ -81,11 +83,13 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) -> ParsedSolv
         for m in &telemetry.solve_moves {
             cube_ble.apply_move(&m.n);
         }
-        println!(
-            "BLE sanity check (scramble + all raw moves): solved = {}",
-            cube_ble.is_solved()
-        );
-        println!();
+        if print_output {
+            println!(
+                "BLE sanity check (scramble + all raw moves): solved = {}",
+                cube_ble.is_solved()
+            );
+            println!();
+        }
     }
 
     // ========== PASS 1: Slice detection ==========
@@ -122,12 +126,14 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) -> ParsedSolv
         }
     }
 
-    println!(
-        "=== PASS 1: Slice detection ({} raw -> {} moves) ===",
-        raw.len(),
-        p1.len()
-    );
-    println!();
+    if print_output {
+        println!(
+            "=== PASS 1: Slice detection ({} raw -> {} moves) ===",
+            raw.len(),
+            p1.len()
+        );
+        println!();
+    }
 
     // ========== PASS 2: Gyro orientation table ==========
     // For each move, collect ALL gyro samples in the window before and after.
@@ -151,13 +157,18 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) -> ParsedSolv
     const DIM: &str = "\x1b[2m";
     const RESET: &str = "\x1b[0m";
 
-    println!("=== PASS 2: Gyro / Move Timeline ===");
-    println!();
+    if print_output {
+        println!("=== PASS 2: Gyro / Move Timeline ===");
+        println!();
+    }
 
     let solve_start = telemetry.solve_start_t;
 
     let print_gyro_runs =
         |runs: &[GyroRun], solve_start: f64, prev_ctx: Option<&str>, next_ctx: Option<&str>| {
+            if !print_output {
+                return;
+            }
             if runs.is_empty() {
                 return;
             }
@@ -425,24 +436,43 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) -> ParsedSolv
         // We will just do a placeholder for now since the original code didn't do it inline.
         let relative_move = body_move;
 
-        let state_after = CubeStateFlags {
-            is_fb: f_stat == green_v,
-            is_sb: s_stat == green_v,
-            is_cmll: c_stat == green_v,
-            is_lse_ul_ur: u_stat == green_v,
-            bad_edges_count: aligned_cube.map(|c| c.count_bad_edges()).unwrap_or(0),
-        };
+        // Step logic Tracking
+        let is_fb = f_stat == green_v;
+        let is_sb = s_stat == green_v;
+        let is_cmll = c_stat == green_v;
+        let is_ur_lr = u_stat == green_v;
+        let bad_edges_count = aligned_cube
+            .as_ref()
+            .map(|c| c.count_bad_edges())
+            .unwrap_or(0);
+
+        let move_idx = (idx + 1) as isize;
+        if is_fb && parsed_solve.step_details.fb == -1 {
+            parsed_solve.step_details.fb = move_idx;
+        }
+        if is_sb && parsed_solve.step_details.sb == -1 {
+            parsed_solve.step_details.sb = move_idx;
+        }
+        if is_cmll && parsed_solve.step_details.cmll == -1 {
+            parsed_solve.step_details.cmll = move_idx;
+        }
+        // Count bad_edges == 0 as EO being solved, ONLY if FB+SB are solved
+        if is_fb && is_sb && bad_edges_count == 0 && parsed_solve.step_details.eo == -1 {
+            parsed_solve.step_details.eo = move_idx;
+        }
+        if is_ur_lr && parsed_solve.step_details.ur_lr == -1 {
+            parsed_solve.step_details.ur_lr = move_idx;
+        }
 
         parsed_solve.timeline.push(SolveEvent::Move {
             t: m.t,
             original: m.body_raw.clone(),
             body_move,
             relative_move,
-            state_after,
         });
 
-        // Print cube state if idx_print is set and we're past it
-        if idx_print > 0 && idx + 1 >= idx_print {
+        // Print cube state if logging is enabled
+        if print_output {
             let label = format!("#{} {}", idx + 1, m.body_label);
             print_cubes_side_by_side(&[(&cube_body, &label)]);
         }
@@ -452,7 +482,7 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) -> ParsedSolv
         print_gyro_runs(&window_runs[w], solve_start, pc.as_deref(), nc.as_deref());
     }
 
-    if idx_print > 0 {
+    if print_output {
         println!("Body cube solved: {}", cube_body.is_solved());
         println!();
     }
@@ -464,7 +494,7 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) -> ParsedSolv
     // A rotation requires 2 consecutive windows to agree on the new orientation.
     // Also detects round-trip rotations (inspection: rotate → peek → rotate back).
 
-    const MIN_ROTATION_SAMPLES: usize = 3;
+    const MIN_ROTATION_SAMPLES: usize = 1;
 
     struct DetectedRotation {
         before_move: usize, // 1-indexed
@@ -477,7 +507,7 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) -> ParsedSolv
     let mut detected_rotations: Vec<DetectedRotation> = Vec::new();
     let mut move_orients: Vec<String> = Vec::with_capacity(p1.len());
 
-    const SLICE_LOOKBACK: usize = 2; // skip rotation detection if a slice is within this many moves
+    const SLICE_LOOKBACK: usize = 0; // skip rotation detection if a slice is within this many moves
 
     // Reuse window_ctx for Pass 3 context (same slice-boundary awareness)
 
@@ -584,7 +614,7 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) -> ParsedSolv
         move_orients.push(current_orient.clone());
     }
 
-    if idx_print > 0 {
+    if print_output {
         println!("=== PASS 3: Rotation Detection ===");
         if detected_rotations.is_empty() {
             println!("  No rotations detected.");
@@ -600,24 +630,13 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) -> ParsedSolv
     }
 
     parsed_solve.is_solved = cube_body.is_solved();
+    parsed_solve.move_count = p1.len();
+    if duration > 0.0 {
+        parsed_solve.tps = p1.len() as f64 / duration;
+    }
 
-    // Reconstruct steps reached from the backwards timeline
-    if let Some(SolveEvent::Move { state_after, .. }) = parsed_solve.timeline.last() {
-        if state_after.is_fb {
-            parsed_solve.steps_reached.push("FB".to_string());
-        }
-        if state_after.is_sb {
-            parsed_solve.steps_reached.push("SB".to_string());
-        }
-        if state_after.is_cmll {
-            parsed_solve.steps_reached.push("CMLL".to_string());
-        }
-        if state_after.is_lse_ul_ur {
-            parsed_solve.steps_reached.push("LSE_UL_UR".to_string());
-        }
-        if parsed_solve.is_solved {
-            parsed_solve.steps_reached.push("SOLVED".to_string());
-        }
+    if parsed_solve.is_solved {
+        parsed_solve.step_details.l4e = p1.len() as isize;
     }
 
     // Sort timeline by time so Rotations interleave with Moves correctly

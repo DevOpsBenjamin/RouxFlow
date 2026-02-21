@@ -10,6 +10,7 @@ pub struct Solution {
 }
 
 // Colors: U=0, D=1, F=2, B=3, R=4, L=5
+#[allow(dead_code)]
 const COLORS: [&str; 6] = ["White", "Yellow", "Green", "Blue", "Red", "Orange"];
 
 // Local definition of normalization operations since Move doesn't have rotations
@@ -76,7 +77,7 @@ impl AISolver {
         let start = Instant::now();
         let transforms = get_normalization_transforms();
 
-        let mut all_solutions: Vec<Solution> = Vec::new();
+        let _all_solutions: Vec<Solution> = Vec::new();
         let moves = Move::ALL;
 
         for depth in 1..=max_depth {
@@ -210,6 +211,7 @@ impl AISolver {
         }
     }
 
+    #[allow(dead_code)]
     fn dfs_numerical(
         cube: &mut BitCube,
         path: &mut Vec<Move>,

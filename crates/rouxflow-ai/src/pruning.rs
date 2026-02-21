@@ -1,7 +1,6 @@
 use crate::BitCube;
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::Path;
 
 pub struct PruningTable {
     pub table: Vec<u8>,
@@ -93,9 +92,9 @@ impl PruningTable {
         }
 
         let mut e_idx = (edge_pos[0] * 11 * 10 + edge_pos[1] * 10 + edge_pos[2]) * 8;
-        e_idx += (edge_ori[0] as usize * 4 + edge_ori[1] as usize * 2 + edge_ori[2] as usize);
+        e_idx += edge_ori[0] as usize * 4 + edge_ori[1] as usize * 2 + edge_ori[2] as usize ;
         let mut c_idx = (corn_pos[0] * 7 + corn_pos[1]) * 9;
-        c_idx += (corn_ori[0] as usize * 3 + corn_ori[1] as usize);
+        c_idx += corn_ori[0] as usize * 3 + corn_ori[1] as usize ;
         e_idx * (56 * 9) + c_idx
     }
 

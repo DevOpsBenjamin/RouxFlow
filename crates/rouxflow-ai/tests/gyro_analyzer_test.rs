@@ -18,14 +18,13 @@ fn test_analyze_solve_1_debug() {
         "solve moves should not be empty"
     );
 
-    // Parse IDX_PRINT from env: start printing cubes from this move index
-    // Usage: IDX_PRINT=20 cargo test --test gyro_analyzer_test -- --nocapture
-    let idx_print: usize = std::env::var("IDX_PRINT")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0);
+    // Parse PRINT_OUTPUT from env: whether to print cube states/logging
+    // Usage: PRINT_OUTPUT=1 cargo test --test gyro_analyzer_test -- --nocapture
+    let print_output: bool = std::env::var("PRINT_OUTPUT")
+        .map(|v| v != "0" && v != "false")
+        .unwrap_or(true);
 
-    let parsed = rouxflow_ai::analyze_solve(&telemetry, idx_print);
+    let parsed = rouxflow_ai::analyze_solve(&telemetry, print_output);
     let json = serde_json::to_string_pretty(&parsed).unwrap();
     std::fs::write("solve1.json", json).unwrap();
 }
@@ -51,12 +50,11 @@ fn test_analyze_solve_2_debug() {
         "scramble should not be empty"
     );
 
-    let idx_print: usize = std::env::var("IDX_PRINT")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0);
+    let print_output: bool = std::env::var("PRINT_OUTPUT")
+        .map(|v| v != "0" && v != "false")
+        .unwrap_or(true);
 
-    let parsed = rouxflow_ai::analyze_solve(&telemetry, idx_print);
+    let parsed = rouxflow_ai::analyze_solve(&telemetry, print_output);
     let json = serde_json::to_string_pretty(&parsed).unwrap();
     std::fs::write("solve2.json", json).unwrap();
 }
