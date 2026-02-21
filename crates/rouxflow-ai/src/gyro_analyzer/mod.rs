@@ -276,12 +276,12 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
 
         let opp = |c: usize| -> usize {
             match c {
-                0 => 3,
-                3 => 0,
-                1 => 4,
-                4 => 1,
-                2 => 5,
-                5 => 2,
+                0 => 1, // W <-> Y
+                1 => 0,
+                2 => 3, // G <-> B
+                3 => 2,
+                4 => 5, // R <-> O
+                5 => 4,
                 _ => c,
             }
         };
@@ -345,31 +345,23 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, idx_print: usize) {
                 // Check SB (opposite to FB)
                 let r = opp(l);
 
-                // SB Check: Use BitCube constants but ignore centers and U-layer stickers (lines 20, 45, 47)
-                // This ensures SB is detected even if CMLL is not solved.
-
-                // R strict (no center, no top row - R_BLOCK already excludes top row)
+                // SB Check: Use BitCube constants.
+                // R strict (no center, no top row - R_BLOCK already excludes them)
                 let sb_r_ok = (aligned.boards[r] & BitCube::R_BLOCK) == BitCube::R_BLOCK;
 
-                // D strict (Right bar of D - D_BAR_R is bottom layer only)
+                // D strict (Right bar of D)
                 let sb_d_ok = (aligned.boards[d] & BitCube::D_BAR_R) == BitCube::D_BAR_R;
 
-                // F strict (Right bar of F - F_BAR_R includes bit 20 (U-layer), mask it out)
-                let mask_f = BitCube::F_BAR_R & !(1 << 20);
-                let sb_f_ok = (aligned.boards[f] & mask_f) == mask_f;
+                // F strict (Right bar of F)
+                // Note: F_BAR_R in BitCube (23|26) already excludes top row (20).
+                let sb_f_ok = (aligned.boards[f] & BitCube::F_BAR_R) == BitCube::F_BAR_R;
 
-                // B strict (Left bar of B (from B persp)? No, B_BAR_R is Left Bar of B touching R)
-                // B_BAR_R matches col 45,48,51. 45 is Top Row. Mask it out.
-                let mask_b = BitCube::B_BAR_R & !(1 << 45);
-                let sb_b_ok = (aligned.boards[b] & mask_b) == mask_b;
+                // B strict (Left bar of B)
+                // Note: B_BAR_R in BitCube (48|51) already excludes top row (45).
+                let sb_b_ok = (aligned.boards[b] & BitCube::B_BAR_R) == BitCube::B_BAR_R;
 
                 if sb_r_ok && sb_d_ok && sb_f_ok && sb_b_ok {
                     s_stat = green_v.clone();
-                } else {
-                    /*
-                    println!("DEBUG SB FAIL: r{} d{} f{} b{} | L_col={} R_col={}",
-                        sb_r_ok, sb_d_ok, sb_f_ok, sb_b_ok, l, r);
-                    */
                 }
 
                 // CMLL (Corners on U, permutation)
