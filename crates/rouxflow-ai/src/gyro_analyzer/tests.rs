@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::gyro_analyzer::{math::*, moves::*};
+    use rouxflow_core::cube::facelet::Color;
+    use rouxflow_core::cube::Orientation;
+    use rouxflow_core::telemetry::{GyroSample, RawMove};
 
     #[test]
     fn test_quat_conjugate() {
@@ -37,18 +40,22 @@ mod tests {
     #[test]
     fn test_estimate_orientation_identity() {
         let id = [0.0, 0.0, 0.0, 1.0];
-        let (top, front) = estimate_orientation(&id);
-        assert_eq!(top, Color::White);
-        assert_eq!(front, Color::Green);
+        let orient = estimate_orientation(&id);
+        assert_eq!(orient.top, Color::White);
+        assert_eq!(orient.front, Color::Green);
     }
 
     #[test]
     fn test_remap_identity() {
         // W/G = home -> all moves pass through unchanged
-        assert_eq!(remap_move("U", Color::White, Color::Green), "U");
-        assert_eq!(remap_move("U'", Color::White, Color::Green), "U'");
-        assert_eq!(remap_move("R", Color::White, Color::Green), "R");
-        assert_eq!(remap_move("F2", Color::White, Color::Green), "F2");
+        let orient = Orientation {
+            top: Color::White,
+            front: Color::Green,
+        };
+        assert_eq!(remap_move("U", orient), "U");
+        assert_eq!(remap_move("U'", orient), "U'");
+        assert_eq!(remap_move("R", orient), "R");
+        assert_eq!(remap_move("F2", orient), "F2");
     }
 
     #[test]
@@ -113,8 +120,20 @@ mod tests {
 
     #[test]
     fn test_orientation_label() {
-        assert_eq!(orientation_label(Color::White, Color::Green), "W/G");
-        assert_eq!(orientation_label(Color::Yellow, Color::Red), "Y/R");
+        assert_eq!(
+            orientation_label(Orientation {
+                top: Color::White,
+                front: Color::Green
+            }),
+            "W/G"
+        );
+        assert_eq!(
+            orientation_label(Orientation {
+                top: Color::Yellow,
+                front: Color::Red
+            }),
+            "Y/R"
+        );
     }
 
     #[test]
@@ -147,10 +166,14 @@ mod tests {
         // Body +Z (F) now points toward Red (+X in home) -> body F = home R
         // Body +X (R) now points toward Blue (-Z in home) -> body R = home B
         // Direction is always preserved (no flip).
-        let remapped = remap_move("F", Color::White, Color::Red);
+        let orient = Orientation {
+            top: Color::White,
+            front: Color::Red,
+        };
+        let remapped = remap_move("F", orient);
         assert_eq!(remapped, "R", "Body F in W/R should map to home R");
 
-        let remapped = remap_move("R", Color::White, Color::Red);
+        let remapped = remap_move("R", orient);
         assert_eq!(remapped, "B", "Body R in W/R should map to home B");
     }
 
@@ -158,14 +181,18 @@ mod tests {
     fn test_remap_x2_rotation() {
         // After x2: Yellow top, Blue front (Y/B)
         // Body U -> home D, Body F -> home B
-        let remapped = remap_move("U", Color::Yellow, Color::Blue);
+        let orient = Orientation {
+            top: Color::Yellow,
+            front: Color::Blue,
+        };
+        let remapped = remap_move("U", orient);
         assert_eq!(remapped, "D", "Body U in Y/B should map to home D");
 
-        let remapped = remap_move("F", Color::Yellow, Color::Blue);
+        let remapped = remap_move("F", orient);
         assert_eq!(remapped, "B", "Body F in Y/B should map to home B");
 
         // R stays R (x2 doesn't change left/right axis)
-        let remapped = remap_move("R", Color::Yellow, Color::Blue);
+        let remapped = remap_move("R", orient);
         assert_eq!(remapped, "R", "Body R in Y/B should map to home R");
     }
 
@@ -173,14 +200,18 @@ mod tests {
     fn test_remap_z_prime_rotation() {
         // After z' (CCW from front): Red top, Green front (R/G)
         // Body U -> home R, Body D -> home L
-        let remapped = remap_move("U", Color::Red, Color::Green);
+        let orient = Orientation {
+            top: Color::Red,
+            front: Color::Green,
+        };
+        let remapped = remap_move("U", orient);
         assert_eq!(remapped, "R", "Body U in R/G should map to home R");
 
-        let remapped = remap_move("D", Color::Red, Color::Green);
+        let remapped = remap_move("D", orient);
         assert_eq!(remapped, "L", "Body D in R/G should map to home L");
 
         // Front stays front
-        let remapped = remap_move("F", Color::Red, Color::Green);
+        let remapped = remap_move("F", orient);
         assert_eq!(remapped, "F", "Body F in R/G should stay home F");
     }
 
@@ -206,21 +237,29 @@ mod tests {
     fn test_remap_slice_yr() {
         // In Y/R: BLE F'(-1)+B(+1) = core S in body frame → home M'
         // (body S follows body F = home R → slice follows R = home M')
-        let home_slice = remap_slice("F'", "B", Color::Yellow, Color::Red);
+        let orient = Orientation {
+            top: Color::Yellow,
+            front: Color::Red,
+        };
+        let home_slice = remap_slice("F'", "B", orient);
         assert_eq!(
             home_slice, "M'",
             "Body core-S in Y/R should remap to home M'"
         );
 
         // In Y/R: BLE B(+1)+F'(-1) same pair, still = home M'
-        let home_slice = remap_slice("B", "F'", Color::Yellow, Color::Red);
+        let home_slice = remap_slice("B", "F'", orient);
         assert_eq!(home_slice, "M'", "Body B+F' in Y/R should remap to home M'");
     }
 
     #[test]
     fn test_remap_slice_identity() {
         // In W/G (home): BLE L(+1)+R'(-1) = core M' stays M'
-        let home_slice = remap_slice("L", "R'", Color::White, Color::Green);
+        let orient = Orientation {
+            top: Color::White,
+            front: Color::Green,
+        };
+        let home_slice = remap_slice("L", "R'", orient);
         assert_eq!(home_slice, "M'");
     }
 

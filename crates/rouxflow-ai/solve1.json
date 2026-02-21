@@ -22,12 +22,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Move",
@@ -35,12 +31,8 @@
       "original": [
         "L"
       ],
-      "body_move": {
-        "Face": "L"
-      },
-      "relative_move": {
-        "Face": "L"
-      }
+      "body_move": "L",
+      "relative_move": "L"
     },
     {
       "type": "Move",
@@ -48,12 +40,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -61,12 +49,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -74,12 +58,8 @@
       "original": [
         "D'"
       ],
-      "body_move": {
-        "Face": "Dp"
-      },
-      "relative_move": {
-        "Face": "Dp"
-      }
+      "body_move": "D'",
+      "relative_move": "D'"
     },
     {
       "type": "Move",
@@ -87,12 +67,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -100,12 +76,8 @@
       "original": [
         "D"
       ],
-      "body_move": {
-        "Face": "D"
-      },
-      "relative_move": {
-        "Face": "D"
-      }
+      "body_move": "D",
+      "relative_move": "D"
     },
     {
       "type": "Move",
@@ -113,12 +85,8 @@
       "original": [
         "D"
       ],
-      "body_move": {
-        "Face": "D"
-      },
-      "relative_move": {
-        "Face": "D"
-      }
+      "body_move": "D",
+      "relative_move": "D"
     },
     {
       "type": "Move",
@@ -126,12 +94,8 @@
       "original": [
         "R"
       ],
-      "body_move": {
-        "Face": "R"
-      },
-      "relative_move": {
-        "Face": "R"
-      }
+      "body_move": "R",
+      "relative_move": "R"
     },
     {
       "type": "Move",
@@ -139,12 +103,8 @@
       "original": [
         "D"
       ],
-      "body_move": {
-        "Face": "D"
-      },
-      "relative_move": {
-        "Face": "D"
-      }
+      "body_move": "D",
+      "relative_move": "D"
     },
     {
       "type": "Move",
@@ -152,12 +112,8 @@
       "original": [
         "R'"
       ],
-      "body_move": {
-        "Face": "Rp"
-      },
-      "relative_move": {
-        "Face": "Rp"
-      }
+      "body_move": "R'",
+      "relative_move": "R'"
     },
     {
       "type": "Move",
@@ -165,12 +121,8 @@
       "original": [
         "D'"
       ],
-      "body_move": {
-        "Face": "Dp"
-      },
-      "relative_move": {
-        "Face": "Dp"
-      }
+      "body_move": "D'",
+      "relative_move": "D'"
     },
     {
       "type": "Move",
@@ -178,12 +130,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -191,12 +139,8 @@
       "original": [
         "D"
       ],
-      "body_move": {
-        "Face": "D"
-      },
-      "relative_move": {
-        "Face": "D"
-      }
+      "body_move": "D",
+      "relative_move": "D"
     },
     {
       "type": "Move",
@@ -204,12 +148,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -217,12 +157,8 @@
       "original": [
         "D'"
       ],
-      "body_move": {
-        "Face": "Dp"
-      },
-      "relative_move": {
-        "Face": "Dp"
-      }
+      "body_move": "D'",
+      "relative_move": "D'"
     },
     {
       "type": "Move",
@@ -230,12 +166,8 @@
       "original": [
         "L"
       ],
-      "body_move": {
-        "Face": "L"
-      },
-      "relative_move": {
-        "Face": "L"
-      }
+      "body_move": "L",
+      "relative_move": "L"
     },
     {
       "type": "Move",
@@ -243,12 +175,8 @@
       "original": [
         "D'"
       ],
-      "body_move": {
-        "Face": "Dp"
-      },
-      "relative_move": {
-        "Face": "Dp"
-      }
+      "body_move": "D'",
+      "relative_move": "D'"
     },
     {
       "type": "Move",
@@ -256,12 +184,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -269,12 +193,8 @@
       "original": [
         "D"
       ],
-      "body_move": {
-        "Face": "D"
-      },
-      "relative_move": {
-        "Face": "D"
-      }
+      "body_move": "D",
+      "relative_move": "D"
     },
     {
       "type": "Move",
@@ -282,12 +202,8 @@
       "original": [
         "D"
       ],
-      "body_move": {
-        "Face": "D"
-      },
-      "relative_move": {
-        "Face": "D"
-      }
+      "body_move": "D",
+      "relative_move": "D"
     },
     {
       "type": "Move",
@@ -295,12 +211,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -308,12 +220,8 @@
       "original": [
         "D'"
       ],
-      "body_move": {
-        "Face": "Dp"
-      },
-      "relative_move": {
-        "Face": "Dp"
-      }
+      "body_move": "D'",
+      "relative_move": "D'"
     },
     {
       "type": "Move",
@@ -322,12 +230,8 @@
         "F'",
         "B"
       ],
-      "body_move": {
-        "Slice": "S"
-      },
-      "relative_move": {
-        "Slice": "S"
-      }
+      "body_move": "S",
+      "relative_move": "S"
     },
     {
       "type": "Move",
@@ -336,12 +240,8 @@
         "F'",
         "B"
       ],
-      "body_move": {
-        "Slice": "S"
-      },
-      "relative_move": {
-        "Slice": "S"
-      }
+      "body_move": "S",
+      "relative_move": "S"
     },
     {
       "type": "Move",
@@ -349,12 +249,8 @@
       "original": [
         "L"
       ],
-      "body_move": {
-        "Face": "L"
-      },
-      "relative_move": {
-        "Face": "L"
-      }
+      "body_move": "L",
+      "relative_move": "L"
     },
     {
       "type": "Rotation",
@@ -375,12 +271,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -388,12 +280,8 @@
       "original": [
         "L'"
       ],
-      "body_move": {
-        "Face": "Lp"
-      },
-      "relative_move": {
-        "Face": "Lp"
-      }
+      "body_move": "L'",
+      "relative_move": "L'"
     },
     {
       "type": "Move",
@@ -401,12 +289,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -414,12 +298,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -427,12 +307,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -440,12 +316,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -453,12 +325,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -466,12 +334,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Move",
@@ -479,12 +343,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -492,12 +352,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -505,12 +361,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -518,12 +370,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -531,12 +379,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Move",
@@ -544,12 +388,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Move",
@@ -557,12 +397,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -570,12 +406,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -583,12 +415,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -596,12 +424,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -609,12 +433,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -622,12 +442,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -635,12 +451,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Move",
@@ -648,12 +460,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -661,12 +469,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -674,12 +478,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -687,12 +487,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -700,12 +496,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -713,12 +505,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Move",
@@ -726,12 +514,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Move",
@@ -739,12 +523,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -752,12 +532,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -765,12 +541,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -778,12 +550,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -791,12 +559,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -804,12 +568,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Move",
@@ -817,12 +577,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -830,12 +586,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -843,12 +595,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Move",
@@ -856,12 +604,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -869,12 +613,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -882,12 +622,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Move",
@@ -895,12 +631,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Move",
@@ -908,12 +640,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -921,12 +649,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -934,12 +658,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -947,12 +667,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -960,12 +676,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -973,12 +685,8 @@
       "original": [
         "L'"
       ],
-      "body_move": {
-        "Face": "Lp"
-      },
-      "relative_move": {
-        "Face": "Lp"
-      }
+      "body_move": "L'",
+      "relative_move": "L'"
     },
     {
       "type": "Move",
@@ -986,12 +694,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -999,12 +703,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -1012,12 +712,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -1025,12 +721,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Move",
@@ -1038,12 +730,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -1051,12 +739,8 @@
       "original": [
         "L"
       ],
-      "body_move": {
-        "Face": "L"
-      },
-      "relative_move": {
-        "Face": "L"
-      }
+      "body_move": "L",
+      "relative_move": "L"
     },
     {
       "type": "Move",
@@ -1064,12 +748,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -1077,12 +757,8 @@
       "original": [
         "F"
       ],
-      "body_move": {
-        "Face": "F"
-      },
-      "relative_move": {
-        "Face": "F"
-      }
+      "body_move": "F",
+      "relative_move": "F"
     },
     {
       "type": "Move",
@@ -1090,12 +766,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Move",
@@ -1103,12 +775,8 @@
       "original": [
         "F'"
       ],
-      "body_move": {
-        "Face": "Fp"
-      },
-      "relative_move": {
-        "Face": "Fp"
-      }
+      "body_move": "F'",
+      "relative_move": "F'"
     },
     {
       "type": "Move",
@@ -1116,12 +784,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -1129,12 +793,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -1143,12 +803,8 @@
         "B",
         "F'"
       ],
-      "body_move": {
-        "Slice": "S"
-      },
-      "relative_move": {
-        "Slice": "S"
-      }
+      "body_move": "S",
+      "relative_move": "S"
     },
     {
       "type": "Move",
@@ -1156,12 +812,8 @@
       "original": [
         "L'"
       ],
-      "body_move": {
-        "Face": "Lp"
-      },
-      "relative_move": {
-        "Face": "Lp"
-      }
+      "body_move": "L'",
+      "relative_move": "L'"
     },
     {
       "type": "Rotation",
@@ -1183,12 +835,8 @@
         "F",
         "B'"
       ],
-      "body_move": {
-        "Slice": "Sp"
-      },
-      "relative_move": {
-        "Slice": "Sp"
-      }
+      "body_move": "S'",
+      "relative_move": "S'"
     },
     {
       "type": "Move",
@@ -1196,12 +844,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Rotation",
@@ -1222,12 +866,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Move",
@@ -1236,12 +876,8 @@
         "F",
         "B'"
       ],
-      "body_move": {
-        "Slice": "Sp"
-      },
-      "relative_move": {
-        "Slice": "Sp"
-      }
+      "body_move": "S'",
+      "relative_move": "S'"
     },
     {
       "type": "Move",
@@ -1249,12 +885,8 @@
       "original": [
         "R'"
       ],
-      "body_move": {
-        "Face": "Rp"
-      },
-      "relative_move": {
-        "Face": "Rp"
-      }
+      "body_move": "R'",
+      "relative_move": "R'"
     },
     {
       "type": "Rotation",
@@ -1276,12 +908,8 @@
         "B",
         "F'"
       ],
-      "body_move": {
-        "Slice": "S"
-      },
-      "relative_move": {
-        "Slice": "S"
-      }
+      "body_move": "S",
+      "relative_move": "S"
     },
     {
       "type": "Move",
@@ -1289,12 +917,8 @@
       "original": [
         "U'"
       ],
-      "body_move": {
-        "Face": "Up"
-      },
-      "relative_move": {
-        "Face": "Up"
-      }
+      "body_move": "U'",
+      "relative_move": "U'"
     },
     {
       "type": "Rotation",
@@ -1316,12 +940,8 @@
         "B'",
         "F"
       ],
-      "body_move": {
-        "Slice": "Sp"
-      },
-      "relative_move": {
-        "Slice": "Sp"
-      }
+      "body_move": "S'",
+      "relative_move": "S'"
     },
     {
       "type": "Move",
@@ -1329,12 +949,8 @@
       "original": [
         "R'"
       ],
-      "body_move": {
-        "Face": "Rp"
-      },
-      "relative_move": {
-        "Face": "Rp"
-      }
+      "body_move": "R'",
+      "relative_move": "R'"
     },
     {
       "type": "Rotation",
@@ -1356,12 +972,8 @@
         "F",
         "B'"
       ],
-      "body_move": {
-        "Slice": "Sp"
-      },
-      "relative_move": {
-        "Slice": "Sp"
-      }
+      "body_move": "S'",
+      "relative_move": "S'"
     },
     {
       "type": "Move",
@@ -1369,12 +981,8 @@
       "original": [
         "D'"
       ],
-      "body_move": {
-        "Face": "Dp"
-      },
-      "relative_move": {
-        "Face": "Dp"
-      }
+      "body_move": "D'",
+      "relative_move": "D'"
     },
     {
       "type": "Rotation",
@@ -1396,12 +1004,8 @@
         "F'",
         "B"
       ],
-      "body_move": {
-        "Slice": "S"
-      },
-      "relative_move": {
-        "Slice": "S"
-      }
+      "body_move": "S",
+      "relative_move": "S"
     },
     {
       "type": "Move",
@@ -1410,12 +1014,8 @@
         "B",
         "F'"
       ],
-      "body_move": {
-        "Slice": "S"
-      },
-      "relative_move": {
-        "Slice": "S"
-      }
+      "body_move": "S",
+      "relative_move": "S"
     },
     {
       "type": "Move",
@@ -1423,12 +1023,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Rotation",
@@ -1449,12 +1045,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -1463,12 +1055,8 @@
         "B",
         "F'"
       ],
-      "body_move": {
-        "Slice": "S"
-      },
-      "relative_move": {
-        "Slice": "S"
-      }
+      "body_move": "S",
+      "relative_move": "S"
     },
     {
       "type": "Move",
@@ -1477,12 +1065,8 @@
         "B",
         "F'"
       ],
-      "body_move": {
-        "Slice": "S"
-      },
-      "relative_move": {
-        "Slice": "S"
-      }
+      "body_move": "S",
+      "relative_move": "S"
     },
     {
       "type": "Move",
@@ -1490,12 +1074,8 @@
       "original": [
         "D"
       ],
-      "body_move": {
-        "Face": "D"
-      },
-      "relative_move": {
-        "Face": "D"
-      }
+      "body_move": "D",
+      "relative_move": "D"
     },
     {
       "type": "Rotation",
@@ -1517,12 +1097,8 @@
         "F'",
         "B"
       ],
-      "body_move": {
-        "Slice": "S"
-      },
-      "relative_move": {
-        "Slice": "S"
-      }
+      "body_move": "S",
+      "relative_move": "S"
     },
     {
       "type": "Move",
@@ -1530,12 +1106,8 @@
       "original": [
         "R"
       ],
-      "body_move": {
-        "Face": "R"
-      },
-      "relative_move": {
-        "Face": "R"
-      }
+      "body_move": "R",
+      "relative_move": "R"
     },
     {
       "type": "Rotation",
@@ -1556,12 +1128,8 @@
       "original": [
         "R'"
       ],
-      "body_move": {
-        "Face": "Rp"
-      },
-      "relative_move": {
-        "Face": "Rp"
-      }
+      "body_move": "R'",
+      "relative_move": "R'"
     },
     {
       "type": "Move",
@@ -1570,12 +1138,8 @@
         "B'",
         "F"
       ],
-      "body_move": {
-        "Slice": "Sp"
-      },
-      "relative_move": {
-        "Slice": "Sp"
-      }
+      "body_move": "S'",
+      "relative_move": "S'"
     },
     {
       "type": "Move",
@@ -1583,12 +1147,8 @@
       "original": [
         "D"
       ],
-      "body_move": {
-        "Face": "D"
-      },
-      "relative_move": {
-        "Face": "D"
-      }
+      "body_move": "D",
+      "relative_move": "D"
     },
     {
       "type": "Rotation",
@@ -1609,12 +1169,8 @@
       "original": [
         "D"
       ],
-      "body_move": {
-        "Face": "D"
-      },
-      "relative_move": {
-        "Face": "D"
-      }
+      "body_move": "D",
+      "relative_move": "D"
     },
     {
       "type": "Move",
@@ -1622,12 +1178,8 @@
       "original": [
         "D'"
       ],
-      "body_move": {
-        "Face": "Dp"
-      },
-      "relative_move": {
-        "Face": "Dp"
-      }
+      "body_move": "D'",
+      "relative_move": "D'"
     },
     {
       "type": "Move",
@@ -1635,12 +1187,8 @@
       "original": [
         "D'"
       ],
-      "body_move": {
-        "Face": "Dp"
-      },
-      "relative_move": {
-        "Face": "Dp"
-      }
+      "body_move": "D'",
+      "relative_move": "D'"
     },
     {
       "type": "Move",
@@ -1649,12 +1197,8 @@
         "F'",
         "B"
       ],
-      "body_move": {
-        "Slice": "S"
-      },
-      "relative_move": {
-        "Slice": "S"
-      }
+      "body_move": "S",
+      "relative_move": "S"
     },
     {
       "type": "Move",
@@ -1662,12 +1206,8 @@
       "original": [
         "R"
       ],
-      "body_move": {
-        "Face": "R"
-      },
-      "relative_move": {
-        "Face": "R"
-      }
+      "body_move": "R",
+      "relative_move": "R"
     },
     {
       "type": "Rotation",
@@ -1688,12 +1228,8 @@
       "original": [
         "R"
       ],
-      "body_move": {
-        "Face": "R"
-      },
-      "relative_move": {
-        "Face": "R"
-      }
+      "body_move": "R",
+      "relative_move": "R"
     },
     {
       "type": "Move",
@@ -1702,12 +1238,8 @@
         "B",
         "F'"
       ],
-      "body_move": {
-        "Slice": "S"
-      },
-      "relative_move": {
-        "Slice": "S"
-      }
+      "body_move": "S",
+      "relative_move": "S"
     },
     {
       "type": "Move",
@@ -1715,12 +1247,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Rotation",
@@ -1741,12 +1269,8 @@
       "original": [
         "U"
       ],
-      "body_move": {
-        "Face": "U"
-      },
-      "relative_move": {
-        "Face": "U"
-      }
+      "body_move": "U",
+      "relative_move": "U"
     },
     {
       "type": "Move",
@@ -1755,12 +1279,8 @@
         "F'",
         "B"
       ],
-      "body_move": {
-        "Slice": "S"
-      },
-      "relative_move": {
-        "Slice": "S"
-      }
+      "body_move": "S",
+      "relative_move": "S"
     },
     {
       "type": "Move",
@@ -1769,12 +1289,8 @@
         "F'",
         "B"
       ],
-      "body_move": {
-        "Slice": "S"
-      },
-      "relative_move": {
-        "Slice": "S"
-      }
+      "body_move": "S",
+      "relative_move": "S"
     }
   ]
 }

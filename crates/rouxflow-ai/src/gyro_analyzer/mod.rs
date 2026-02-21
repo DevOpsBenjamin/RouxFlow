@@ -494,7 +494,7 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
     // A rotation requires 2 consecutive windows to agree on the new orientation.
     // Also detects round-trip rotations (inspection: rotate → peek → rotate back).
 
-    const MIN_ROTATION_SAMPLES: usize = 1;
+    const MIN_ROTATION_SAMPLES: usize = 3;
 
     struct DetectedRotation {
         before_move: usize, // 1-indexed
@@ -503,11 +503,11 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
         to: String,
     }
 
-    let mut current_orient = "?/?".to_string();
+    let mut current_orient = orientation_label(home_orient);
     let mut detected_rotations: Vec<DetectedRotation> = Vec::new();
     let mut move_orients: Vec<String> = Vec::with_capacity(p1.len());
 
-    const SLICE_LOOKBACK: usize = 0; // skip rotation detection if a slice is within this many moves
+    const SLICE_LOOKBACK: usize = 2; // skip rotation detection if a slice is within this many moves
 
     // Reuse window_ctx for Pass 3 context (same slice-boundary awareness)
 
