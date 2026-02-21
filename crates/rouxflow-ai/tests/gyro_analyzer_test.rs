@@ -27,6 +27,10 @@ fn test_analyze_solve_1_debug() {
     let parsed = rouxflow_ai::analyze_solve(&telemetry, print_output);
     let json = serde_json::to_string_pretty(&parsed).unwrap();
     std::fs::write("solve1.json", json).unwrap();
+
+    let clean = parsed.to_clean();
+    let clean_json = serde_json::to_string_pretty(&clean).unwrap();
+    std::fs::write("solve1_clean.json", clean_json).unwrap();
 }
 
 #[test]
@@ -57,4 +61,8 @@ fn test_analyze_solve_2_debug() {
     let parsed = rouxflow_ai::analyze_solve(&telemetry, print_output);
     let json = serde_json::to_string_pretty(&parsed).unwrap();
     std::fs::write("solve2.json", json).unwrap();
+
+    let clean = parsed.to_clean();
+    let clean_json = serde_json::to_string_pretty(&clean).unwrap();
+    std::fs::write("solve2_clean.json", clean_json).unwrap();
 }

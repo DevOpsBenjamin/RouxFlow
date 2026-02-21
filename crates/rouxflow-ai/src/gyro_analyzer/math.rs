@@ -230,6 +230,69 @@ pub fn color_to_home_face(c: Color) -> &'static str {
     }
 }
 
+pub fn face_to_color(face: &str) -> Option<Color> {
+    match face {
+        "U" => Some(Color::White),
+        "D" => Some(Color::Yellow),
+        "F" => Some(Color::Green),
+        "B" => Some(Color::Blue),
+        "R" => Some(Color::Red),
+        "L" => Some(Color::Orange),
+        _ => None,
+    }
+}
+
+pub fn color_to_perspectival_face(c: Color, orient: Orientation) -> Option<&'static str> {
+    if c == orient.top {
+        return Some("U");
+    }
+    if c == opposite_color(orient.top) {
+        return Some("D");
+    }
+    if c == orient.front {
+        return Some("F");
+    }
+    if c == opposite_color(orient.front) {
+        return Some("B");
+    }
+    let right = compute_right_color(orient.top, orient.front);
+    if c == right {
+        return Some("R");
+    }
+    if c == opposite_color(right) {
+        return Some("L");
+    }
+    None
+}
+
+use rouxflow_bitboard::move_indices::Move;
+
+pub fn map_move_to_orientation(m: Move, orient: Orientation) -> Move {
+    let face_str = match m {
+        Move::Face(f) => &f.as_str()[0..1],
+        Move::Wide(w) => &w.as_str()[0..1].to_uppercase(),
+        Move::Slice(s) => match s {
+            rouxflow_bitboard::move_indices::SliceMove::M
+            | rouxflow_bitboard::move_indices::SliceMove::Mp
+            | rouxflow_bitboard::move_indices::SliceMove::M2 => "L",
+            rouxflow_bitboard::move_indices::SliceMove::E
+            | rouxflow_bitboard::move_indices::SliceMove::Ep
+            | rouxflow_bitboard::move_indices::SliceMove::E2 => "D",
+            rouxflow_bitboard::move_indices::SliceMove::S
+            | rouxflow_bitboard::move_indices::SliceMove::Sp
+            | rouxflow_bitboard::move_indices::SliceMove::S2 => "F",
+        },
+        _ => return m,
+    };
+
+    if let Some(hardware_color) = face_to_color(face_str) {
+        if let Some(perspectival_face) = color_to_perspectival_face(hardware_color, orient) {
+            return m.with_face(perspectival_face).unwrap_or(m);
+        }
+    }
+    m
+}
+
 pub fn compute_right_color(top: Color, front: Color) -> Color {
     let up_dir = color_axis(top);
     let front_dir = color_axis(front);

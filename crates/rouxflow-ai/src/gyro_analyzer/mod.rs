@@ -92,10 +92,8 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
         }
     }
 
-    // ========== PASS 1: Slice detection ==========
-    // Merge simultaneous opposite-face move pairs into slice notation.
-    // Body frame only — no orientation or remap.
-
+    // ========== PASS 1: Move consolidation ==========
+    // Stage 1: Slice detection (opposite-face simultaneous moves)
     struct P1Move {
         body_label: String,
         body_raw: Vec<String>,
@@ -103,26 +101,57 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
     }
 
     let raw = &telemetry.solve_moves;
-    let mut p1: Vec<P1Move> = Vec::new();
+    let mut p0: Vec<P1Move> = Vec::new();
     let mut i = 0;
     while i < raw.len() {
         if i + 1 < raw.len() && is_slice_pair(&raw[i], &raw[i + 1]) {
             let (f1, d1) = parse_face_dir(&raw[i].n).unwrap();
             let (f2, d2) = parse_face_dir(&raw[i + 1].n).unwrap();
             let body_slice = slice_name(f1, d1, f2, d2);
-            p1.push(P1Move {
+            p0.push(P1Move {
                 body_label: format!("{} ({}+{})", body_slice, raw[i].n, raw[i + 1].n),
                 body_raw: vec![raw[i].n.clone(), raw[i + 1].n.clone()],
                 t: raw[i].t,
             });
             i += 2;
         } else {
-            p1.push(P1Move {
+            p0.push(P1Move {
                 body_label: raw[i].n.clone(),
                 body_raw: vec![raw[i].n.clone()],
                 t: raw[i].t,
             });
             i += 1;
+        }
+    }
+
+    // Stage 2: Generalized double-turn merging (consecutive identical turns within 400ms)
+    let mut p1: Vec<P1Move> = Vec::new();
+    let mut j = 0;
+    while j < p0.len() {
+        if j + 1 < p0.len()
+            && can_merge_labels(
+                &p0[j].body_label,
+                &p0[j + 1].body_label,
+                p0[j + 1].t - p0[j].t,
+            )
+        {
+            let merged_label = merge_labels(&p0[j].body_label, &p0[j + 1].body_label);
+            let mut body_raw = p0[j].body_raw.clone();
+            body_raw.extend(p0[j + 1].body_raw.clone());
+
+            p1.push(P1Move {
+                body_label: merged_label,
+                body_raw,
+                t: p0[j].t,
+            });
+            j += 2;
+        } else {
+            p1.push(P1Move {
+                body_label: p0[j].body_label.clone(),
+                body_raw: p0[j].body_raw.clone(),
+                t: p0[j].t,
+            });
+            j += 1;
         }
     }
 
@@ -412,21 +441,10 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
             None
         };
 
-        // For the timeline event, we pick the first raw move body string.
-        // Or if it's a slice we use the slice name.
-        let body_move_str = if is_slice {
-            let slice_move = m
-                .body_label
-                .split_whitespace()
-                .next()
-                .unwrap_or(&m.body_label);
-            slice_move.to_string()
-        } else {
-            m.body_raw[0].clone()
-        };
+        let body_move_str = canonical_label(&m.body_label);
 
         let body_move =
-            parse_move_str(&body_move_str).unwrap_or(rouxflow_bitboard::move_indices::Move::Face(
+            parse_move_str(body_move_str).unwrap_or(rouxflow_bitboard::move_indices::Move::Face(
                 rouxflow_bitboard::move_indices::FaceMove::U,
             )); // fallback
 
@@ -507,6 +525,76 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
     let mut detected_rotations: Vec<DetectedRotation> = Vec::new();
     let mut move_orients: Vec<String> = Vec::with_capacity(p1.len());
 
+    // Emit an initial Rotation at t = first_move - 0.001 if the solver is already
+    // holding a different orientation than home when the solve begins.
+    // Scan window_runs starting from w=1 (after first move) to find the first
+    // reliable gyro window — that gives the true starting orientation.
+    {
+        let mut initial_orient: Option<String> = None;
+        'find_init: for w in 1..window_runs.len().min(6) {
+            let runs = &window_runs[w];
+            let total: usize = runs.iter().map(|r| r.count).sum();
+            if total < 1 {
+                continue;
+            }
+            let (pc, nc) = window_ctx(w);
+            let eff = window_effective_orient(runs, pc.as_deref(), nc.as_deref());
+            if eff != "?/?" && eff != current_orient {
+                initial_orient = Some(eff);
+                break 'find_init;
+            }
+        }
+
+        if let Some(solve_start_orient) = initial_orient {
+            if let (Some(from), Some(to)) = (
+                parse_orient_label(&current_orient),
+                parse_orient_label(&solve_start_orient),
+            ) {
+                let rot_str = detect_rotation(from, to);
+                let parts: Vec<&str> = rot_str.split_whitespace().collect();
+                let mut t_offset = 0.0;
+
+                for part in parts {
+                    let rot_enum = match part {
+                        "x" => Some(Rotation::X),
+                        "x'" => Some(Rotation::Xp),
+                        "x2" => Some(Rotation::X2),
+                        "y" => Some(Rotation::Y),
+                        "y'" => Some(Rotation::Yp),
+                        "y2" => Some(Rotation::Y2),
+                        "z" => Some(Rotation::Z),
+                        "z'" => Some(Rotation::Zp),
+                        "z2" => Some(Rotation::Z2),
+                        _ => None,
+                    };
+
+                    if let Some(r) = rot_enum {
+                        let t_initial = p1
+                            .first()
+                            .map(|m| m.t - 0.001 + t_offset)
+                            .unwrap_or(telemetry.solve_start_t + t_offset);
+                        parsed_solve.timeline.push(SolveEvent::Rotation {
+                            t: t_initial,
+                            axis: r,
+                            from_orientation: from, // Note: intermediate orientations not tracked here
+                            to_orientation: to,     // but this is the final goal
+                            is_inspection: false,
+                        });
+                        t_offset += 0.0001;
+                    }
+                }
+
+                detected_rotations.push(DetectedRotation {
+                    before_move: 1,
+                    rotation: rot_str,
+                    from: current_orient.clone(),
+                    to: solve_start_orient.clone(),
+                });
+            }
+            current_orient = solve_start_orient;
+        }
+    }
+
     const SLICE_LOOKBACK: usize = 2; // skip rotation detection if a slice is within this many moves
 
     // Reuse window_ctx for Pass 3 context (same slice-boundary awareness)
@@ -539,37 +627,17 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
         if current_orient == "?/?" {
             current_orient = effective.clone();
         } else if effective != current_orient {
-            // Potential rotation — require NEXT reliable window to confirm.
-            let confirmed = {
-                let mut found = false;
-                for fwd in (idx + 1)..p1.len() {
-                    let fwd_runs = &window_runs[fwd];
-                    let fwd_total: usize = fwd_runs.iter().map(|r| r.count).sum();
-                    let fwd_near_slice = (1..=SLICE_LOOKBACK).any(|d| {
-                        if d > fwd {
-                            return false;
-                        }
-                        p1[fwd - d].body_raw.len() == 2
-                    });
-                    if fwd_total < MIN_ROTATION_SAMPLES || fwd_near_slice {
-                        continue;
-                    }
-                    let (fpc, fnc) = window_ctx(fwd);
-                    found = window_effective_orient(fwd_runs, fpc.as_deref(), fnc.as_deref())
-                        == effective;
-                    break;
-                }
-                found
-            };
+            // Potential rotation — immediately accept if window is reliable
+            if let (Some(from), Some(to)) = (
+                parse_orient_label(&current_orient),
+                parse_orient_label(&effective),
+            ) {
+                let rot_str = detect_rotation(from, to);
+                let parts: Vec<&str> = rot_str.split_whitespace().collect();
+                let mut t_offset = 0.0;
 
-            if confirmed {
-                if let (Some(from), Some(to)) = (
-                    parse_orient_label(&current_orient),
-                    parse_orient_label(&effective),
-                ) {
-                    let rot_str = detect_rotation(from, to);
-                    // Map string rotation to enum
-                    let rot_enum = match rot_str.as_str() {
+                for part in parts {
+                    let rot_enum = match part {
                         "x" => Some(Rotation::X),
                         "x'" => Some(Rotation::Xp),
                         "x2" => Some(Rotation::X2),
@@ -593,21 +661,22 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
                             };
 
                         parsed_solve.timeline.push(SolveEvent::Rotation {
-                            t: t_rot,
+                            t: t_rot + t_offset,
                             axis: r,
                             from_orientation: from,
                             to_orientation: to,
                             is_inspection: false,
                         });
+                        t_offset += 0.0001;
                     }
-
-                    detected_rotations.push(DetectedRotation {
-                        before_move: idx + 1,
-                        rotation: rot_str,
-                        from: current_orient.clone(),
-                        to: effective.clone(),
-                    });
                 }
+
+                detected_rotations.push(DetectedRotation {
+                    before_move: idx + 1,
+                    rotation: rot_str,
+                    from: current_orient.clone(),
+                    to: effective.clone(),
+                });
                 current_orient = effective.clone();
             }
         }
@@ -745,16 +814,30 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
 
     // Sort timeline by time so Rotations interleave with Moves correctly
     parsed_solve.timeline.sort_by(|a, b| {
-        let ta = match a {
-            SolveEvent::Move { t, .. } => *t,
-            SolveEvent::Rotation { t, .. } => *t,
-        };
-        let tb = match b {
-            SolveEvent::Move { t, .. } => *t,
-            SolveEvent::Rotation { t, .. } => *t,
-        };
-        ta.partial_cmp(&tb).unwrap_or(std::cmp::Ordering::Equal)
+        a.t()
+            .partial_cmp(&b.t())
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
+
+    // ========== Perspectival Move Mapping ==========
+    // Re-map hardware moves to relative moves based on the current orientation at the time of the move.
+    {
+        let mut active_orient = home_orient;
+        for event in &mut parsed_solve.timeline {
+            match event {
+                SolveEvent::Rotation { to_orientation, .. } => {
+                    active_orient = *to_orientation;
+                }
+                SolveEvent::Move {
+                    body_move,
+                    relative_move,
+                    ..
+                } => {
+                    *relative_move = map_move_to_orientation(*body_move, active_orient);
+                }
+            }
+        }
+    }
 
     parsed_solve
 }

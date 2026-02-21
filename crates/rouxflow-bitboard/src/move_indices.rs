@@ -23,6 +23,75 @@ pub enum FaceMove {
     B2,
 }
 
+impl FaceMove {
+    pub fn with_face(self, face: &str) -> Option<Self> {
+        let suffix = match self {
+            FaceMove::U | FaceMove::D | FaceMove::L | FaceMove::R | FaceMove::F | FaceMove::B => "",
+            FaceMove::Up
+            | FaceMove::Dp
+            | FaceMove::Lp
+            | FaceMove::Rp
+            | FaceMove::Fp
+            | FaceMove::Bp => "'",
+            FaceMove::U2
+            | FaceMove::D2
+            | FaceMove::L2
+            | FaceMove::R2
+            | FaceMove::F2
+            | FaceMove::B2 => "2",
+        };
+        let target = format!("{}{}", face, suffix);
+        for m in [
+            FaceMove::U,
+            FaceMove::Up,
+            FaceMove::U2,
+            FaceMove::D,
+            FaceMove::Dp,
+            FaceMove::D2,
+            FaceMove::L,
+            FaceMove::Lp,
+            FaceMove::L2,
+            FaceMove::R,
+            FaceMove::Rp,
+            FaceMove::R2,
+            FaceMove::F,
+            FaceMove::Fp,
+            FaceMove::F2,
+            FaceMove::B,
+            FaceMove::Bp,
+            FaceMove::B2,
+        ] {
+            if m.as_str() == target {
+                return Some(m);
+            }
+        }
+        None
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            FaceMove::U => "U",
+            FaceMove::Up => "U'",
+            FaceMove::U2 => "U2",
+            FaceMove::D => "D",
+            FaceMove::Dp => "D'",
+            FaceMove::D2 => "D2",
+            FaceMove::L => "L",
+            FaceMove::Lp => "L'",
+            FaceMove::L2 => "L2",
+            FaceMove::R => "R",
+            FaceMove::Rp => "R'",
+            FaceMove::R2 => "R2",
+            FaceMove::F => "F",
+            FaceMove::Fp => "F'",
+            FaceMove::F2 => "F2",
+            FaceMove::B => "B",
+            FaceMove::Bp => "B'",
+            FaceMove::B2 => "B2",
+        }
+    }
+}
+
 /// Slice moves: M, E, S
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum SliceMove {
@@ -35,6 +104,53 @@ pub enum SliceMove {
     S,
     Sp,
     S2,
+}
+
+impl SliceMove {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SliceMove::M => "M",
+            SliceMove::Mp => "M'",
+            SliceMove::M2 => "M2",
+            SliceMove::E => "E",
+            SliceMove::Ep => "E'",
+            SliceMove::E2 => "E2",
+            SliceMove::S => "S",
+            SliceMove::Sp => "S'",
+            SliceMove::S2 => "S2",
+        }
+    }
+
+    pub fn with_face(self, face: &str) -> Option<Self> {
+        let suffix = match self {
+            SliceMove::M | SliceMove::E | SliceMove::S => "",
+            SliceMove::Mp | SliceMove::Ep | SliceMove::Sp => "'",
+            SliceMove::M2 | SliceMove::E2 | SliceMove::S2 => "2",
+        };
+        let prefix = match face {
+            "L" | "R" => "M",
+            "U" | "D" => "E",
+            "F" | "B" => "S",
+            _ => return None,
+        };
+        let target = format!("{}{}", prefix, suffix);
+        for m in [
+            SliceMove::M,
+            SliceMove::Mp,
+            SliceMove::M2,
+            SliceMove::E,
+            SliceMove::Ep,
+            SliceMove::E2,
+            SliceMove::S,
+            SliceMove::Sp,
+            SliceMove::S2,
+        ] {
+            if m.as_str() == target {
+                return Some(m);
+            }
+        }
+        None
+    }
 }
 
 /// Wide moves: u, d, l, r, f, b
@@ -60,6 +176,80 @@ pub enum WideMove {
     Bw2,
 }
 
+impl WideMove {
+    pub fn with_face(self, face: &str) -> Option<Self> {
+        let suffix = match self {
+            WideMove::Uw
+            | WideMove::Dw
+            | WideMove::Lw
+            | WideMove::Rw
+            | WideMove::Fw
+            | WideMove::Bw => "w",
+            WideMove::Uwp
+            | WideMove::Dwp
+            | WideMove::Lwp
+            | WideMove::Rwp
+            | WideMove::Fwp
+            | WideMove::Bwp => "w'",
+            WideMove::Uw2
+            | WideMove::Dw2
+            | WideMove::Lw2
+            | WideMove::Rw2
+            | WideMove::Fw2
+            | WideMove::Bw2 => "w2",
+        };
+        let target = format!("{}{}", face.to_lowercase(), suffix);
+        for m in [
+            WideMove::Uw,
+            WideMove::Uwp,
+            WideMove::Uw2,
+            WideMove::Dw,
+            WideMove::Dwp,
+            WideMove::Dw2,
+            WideMove::Lw,
+            WideMove::Lwp,
+            WideMove::Lw2,
+            WideMove::Rw,
+            WideMove::Rwp,
+            WideMove::Rw2,
+            WideMove::Fw,
+            WideMove::Fwp,
+            WideMove::Fw2,
+            WideMove::Bw,
+            WideMove::Bwp,
+            WideMove::Bw2,
+        ] {
+            if m.as_str() == target {
+                return Some(m);
+            }
+        }
+        None
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            WideMove::Uw => "u",
+            WideMove::Uwp => "u'",
+            WideMove::Uw2 => "u2",
+            WideMove::Dw => "d",
+            WideMove::Dwp => "d'",
+            WideMove::Dw2 => "d2",
+            WideMove::Lw => "l",
+            WideMove::Lwp => "l'",
+            WideMove::Lw2 => "l2",
+            WideMove::Rw => "r",
+            WideMove::Rwp => "r'",
+            WideMove::Rw2 => "r2",
+            WideMove::Fw => "f",
+            WideMove::Fwp => "f'",
+            WideMove::Fw2 => "f2",
+            WideMove::Bw => "b",
+            WideMove::Bwp => "b'",
+            WideMove::Bw2 => "b2",
+        }
+    }
+}
+
 /// Global cube rotations: x, y, z
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Rotation {
@@ -81,6 +271,17 @@ pub enum Move {
     Slice(SliceMove),
     Wide(WideMove),
     Rotate(Rotation),
+}
+
+impl Move {
+    pub fn with_face(self, face: &str) -> Option<Self> {
+        match self {
+            Move::Face(m) => m.with_face(face).map(Move::Face),
+            Move::Wide(m) => m.with_face(face).map(Move::Wide),
+            Move::Slice(m) => m.with_face(face).map(Move::Slice),
+            _ => Some(self),
+        }
+    }
 }
 
 impl Serialize for Move {
@@ -160,26 +361,7 @@ impl Move {
 
     pub fn as_str(&self) -> &'static str {
         match self {
-            Move::Face(m) => match m {
-                FaceMove::U => "U",
-                FaceMove::Up => "U'",
-                FaceMove::U2 => "U2",
-                FaceMove::D => "D",
-                FaceMove::Dp => "D'",
-                FaceMove::D2 => "D2",
-                FaceMove::L => "L",
-                FaceMove::Lp => "L'",
-                FaceMove::L2 => "L2",
-                FaceMove::R => "R",
-                FaceMove::Rp => "R'",
-                FaceMove::R2 => "R2",
-                FaceMove::F => "F",
-                FaceMove::Fp => "F'",
-                FaceMove::F2 => "F2",
-                FaceMove::B => "B",
-                FaceMove::Bp => "B'",
-                FaceMove::B2 => "B2",
-            },
+            Move::Face(m) => m.as_str(),
             Move::Slice(m) => match m {
                 SliceMove::M => "M",
                 SliceMove::Mp => "M'",
@@ -191,26 +373,7 @@ impl Move {
                 SliceMove::Sp => "S'",
                 SliceMove::S2 => "S2",
             },
-            Move::Wide(m) => match m {
-                WideMove::Uw => "u",
-                WideMove::Uwp => "u'",
-                WideMove::Uw2 => "u2",
-                WideMove::Dw => "d",
-                WideMove::Dwp => "d'",
-                WideMove::Dw2 => "d2",
-                WideMove::Lw => "l",
-                WideMove::Lwp => "l'",
-                WideMove::Lw2 => "l2",
-                WideMove::Rw => "r",
-                WideMove::Rwp => "r'",
-                WideMove::Rw2 => "r2",
-                WideMove::Fw => "f",
-                WideMove::Fwp => "f'",
-                WideMove::Fw2 => "f2",
-                WideMove::Bw => "b",
-                WideMove::Bwp => "b'",
-                WideMove::Bw2 => "b2",
-            },
+            Move::Wide(m) => m.as_str(),
             Move::Rotate(m) => match m {
                 Rotation::X => "x",
                 Rotation::Xp => "x'",

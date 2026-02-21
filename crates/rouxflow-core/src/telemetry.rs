@@ -89,3 +89,67 @@ pub enum SolveEvent {
         is_inspection: bool,
     },
 }
+
+impl SolveEvent {
+    pub fn t(&self) -> f64 {
+        match self {
+            SolveEvent::Move { t, .. } => *t,
+            SolveEvent::Rotation { t, .. } => *t,
+        }
+    }
+}
+
+// ========== Clean / User-facing Output Models ==========
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "type")]
+pub enum SimpleSolveEvent {
+    Move {
+        t: f64,
+        #[serde(rename = "move")]
+        m: Move,
+    },
+    Rotation {
+        t: f64,
+        axis: Rotation,
+    },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CleanParsedSolve {
+    pub solve_duration_ms: f64,
+    pub move_count: usize,
+    pub tps: f64,
+    pub step_details: StepDetails,
+    pub initial_orientation: Orientation,
+    pub timeline: Vec<SimpleSolveEvent>,
+}
+
+impl ParsedSolve {
+    pub fn to_clean(&self) -> CleanParsedSolve {
+        let timeline = self
+            .timeline
+            .iter()
+            .map(|event| match event {
+                SolveEvent::Move {
+                    t, relative_move, ..
+                } => SimpleSolveEvent::Move {
+                    t: *t,
+                    m: *relative_move,
+                },
+                SolveEvent::Rotation { t, axis, .. } => {
+                    SimpleSolveEvent::Rotation { t: *t, axis: *axis }
+                }
+            })
+            .collect();
+
+        CleanParsedSolve {
+            solve_duration_ms: self.solve_duration_ms,
+            move_count: self.move_count,
+            tps: self.tps,
+            step_details: self.step_details.clone(),
+            initial_orientation: self.initial_orientation,
+            timeline,
+        }
+    }
+}

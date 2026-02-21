@@ -140,6 +140,51 @@ pub fn remap_slice(n1: &str, n2: &str, orient: Orientation) -> String {
     }
 }
 
+/// Check if two consecutive raw moves form a double-turn (e.g. U + U).
+pub fn is_double_pair(m1: &RawMove, m2: &RawMove) -> bool {
+    // Within 400ms
+    if (m1.t - m2.t).abs() > 0.400 {
+        return false;
+    }
+    let Some((f1, d1)) = parse_face_dir(&m1.n) else {
+        return false;
+    };
+    let Some((f2, d2)) = parse_face_dir(&m2.n) else {
+        return false;
+    };
+    // Same face, same direction (U + U = U2, U' + U' = U2)
+    // Actually in cubing U+U=U2, U'+U'=U2. U+U'=solved (not merged).
+    f1 == f2 && d1 == d2 && d1 != 2 // Don't merge U2 + U (yet)
+}
+
+/// Name a double-turn from two moves.
+pub fn merge_double_label(m1: &str, _m2: &str) -> String {
+    let (face, _dir) = parse_notation(m1);
+    format!("{}2", face)
+}
+
+/// Strip direction and detailed notation like " (F'+B)"
+pub fn canonical_label(label: &str) -> &str {
+    label.split_whitespace().next().unwrap_or(label)
+}
+
+/// Check if two move labels can be merged into a double-turn.
+pub fn can_merge_labels(l1: &str, l2: &str, dt: f64) -> bool {
+    if dt.abs() > 0.400 {
+        return false;
+    }
+    let c1 = canonical_label(l1);
+    let c2 = canonical_label(l2);
+    // Same label, not already a double
+    c1 == c2 && !c1.ends_with('2')
+}
+
+/// Merge two labels into a double notation.
+pub fn merge_labels(l1: &str, _l2: &str) -> String {
+    let base = strip_suffix(canonical_label(l1));
+    format!("{}2", base)
+}
+
 // ========== Intermediate representation ==========
 
 /// A single analyzed move after slice detection + orientation remap.
