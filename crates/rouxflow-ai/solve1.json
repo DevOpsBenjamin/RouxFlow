@@ -1,13 +1,16 @@
 {
   "solve_duration_ms": 43618.39999997616,
   "is_solved": true,
-  "steps_reached": [
-    "FB",
-    "SB",
-    "CMLL",
-    "LSE_UL_UR",
-    "SOLVED"
-  ],
+  "move_count": 121,
+  "tps": 2.774058654147473,
+  "step_details": {
+    "fb": 17,
+    "sb": 43,
+    "cmll": 83,
+    "eo": 95,
+    "ur_lr": 96,
+    "l4e": 121
+  },
   "initial_orientation": {
     "top": "White",
     "front": "Green"
@@ -24,13 +27,6 @@
       },
       "relative_move": {
         "Face": "Up"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -44,13 +40,6 @@
       },
       "relative_move": {
         "Face": "L"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -64,13 +53,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -84,13 +66,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -104,13 +79,6 @@
       },
       "relative_move": {
         "Face": "Dp"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -124,13 +92,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -144,13 +105,6 @@
       },
       "relative_move": {
         "Face": "D"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -164,13 +118,6 @@
       },
       "relative_move": {
         "Face": "D"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -184,13 +131,6 @@
       },
       "relative_move": {
         "Face": "R"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -204,13 +144,6 @@
       },
       "relative_move": {
         "Face": "D"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -224,13 +157,6 @@
       },
       "relative_move": {
         "Face": "Rp"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -244,13 +170,6 @@
       },
       "relative_move": {
         "Face": "Dp"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -264,13 +183,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -284,13 +196,6 @@
       },
       "relative_move": {
         "Face": "D"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -304,13 +209,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -324,13 +222,6 @@
       },
       "relative_move": {
         "Face": "Dp"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -344,13 +235,6 @@
       },
       "relative_move": {
         "Face": "L"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
       }
     },
     {
@@ -364,13 +248,6 @@
       },
       "relative_move": {
         "Face": "Dp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
       }
     },
     {
@@ -384,13 +261,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
       }
     },
     {
@@ -404,13 +274,6 @@
       },
       "relative_move": {
         "Face": "D"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
       }
     },
     {
@@ -424,13 +287,6 @@
       },
       "relative_move": {
         "Face": "D"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
       }
     },
     {
@@ -444,13 +300,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 4
       }
     },
     {
@@ -464,13 +313,6 @@
       },
       "relative_move": {
         "Face": "Dp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 4
       }
     },
     {
@@ -485,13 +327,6 @@
       },
       "relative_move": {
         "Slice": "S"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
       }
     },
     {
@@ -506,13 +341,6 @@
       },
       "relative_move": {
         "Slice": "S"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 4
       }
     },
     {
@@ -526,13 +354,19 @@
       },
       "relative_move": {
         "Face": "L"
+      }
+    },
+    {
+      "type": "Rotation",
+      "t": 57.836,
+      "axis": "Z2",
+      "from_orientation": {
+        "top": "Yellow",
+        "front": "Red"
       },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
+      "to_orientation": {
+        "top": "White",
+        "front": "Red"
       }
     },
     {
@@ -546,13 +380,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -566,13 +393,6 @@
       },
       "relative_move": {
         "Face": "Lp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -586,13 +406,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -606,13 +419,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -626,13 +432,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -646,13 +445,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -666,13 +458,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -686,13 +471,6 @@
       },
       "relative_move": {
         "Face": "Up"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -706,13 +484,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -726,13 +497,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -746,13 +510,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -766,13 +523,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -786,13 +536,6 @@
       },
       "relative_move": {
         "Face": "Up"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -806,13 +549,6 @@
       },
       "relative_move": {
         "Face": "Up"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -826,13 +562,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -846,13 +575,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
       }
     },
     {
@@ -866,13 +588,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -886,13 +601,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -906,13 +614,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
       }
     },
     {
@@ -926,13 +627,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -946,13 +640,6 @@
       },
       "relative_move": {
         "Face": "Up"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
       }
     },
     {
@@ -966,13 +653,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -986,13 +666,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -1006,13 +679,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -1026,13 +692,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
       }
     },
     {
@@ -1046,13 +705,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -1066,13 +718,6 @@
       },
       "relative_move": {
         "Face": "Up"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -1086,13 +731,6 @@
       },
       "relative_move": {
         "Face": "Up"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -1106,13 +744,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
       }
     },
     {
@@ -1126,13 +757,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -1146,13 +770,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -1166,13 +783,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -1186,13 +796,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 4
       }
     },
     {
@@ -1206,13 +809,6 @@
       },
       "relative_move": {
         "Face": "Up"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 4
       }
     },
     {
@@ -1226,13 +822,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 4
       }
     },
     {
@@ -1246,13 +835,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 4
       }
     },
     {
@@ -1266,13 +848,6 @@
       },
       "relative_move": {
         "Face": "Up"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 4
       }
     },
     {
@@ -1286,13 +861,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -1306,13 +874,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -1326,13 +887,6 @@
       },
       "relative_move": {
         "Face": "Up"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -1346,13 +900,6 @@
       },
       "relative_move": {
         "Face": "Up"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 2
       }
     },
     {
@@ -1366,13 +913,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -1386,13 +926,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -1406,13 +939,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 4
       }
     },
     {
@@ -1426,13 +952,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -1446,13 +965,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -1466,13 +978,6 @@
       },
       "relative_move": {
         "Face": "Lp"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -1486,13 +991,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -1506,13 +1004,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -1526,13 +1017,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -1546,13 +1030,6 @@
       },
       "relative_move": {
         "Face": "Up"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -1566,13 +1043,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": false,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -1586,13 +1056,6 @@
       },
       "relative_move": {
         "Face": "L"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 4
       }
     },
     {
@@ -1606,13 +1069,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -1626,13 +1082,6 @@
       },
       "relative_move": {
         "Face": "F"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 5
       }
     },
     {
@@ -1646,13 +1095,6 @@
       },
       "relative_move": {
         "Face": "Up"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": false,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
       }
     },
     {
@@ -1666,13 +1108,6 @@
       },
       "relative_move": {
         "Face": "Fp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -1686,13 +1121,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -1706,13 +1134,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 6
       }
     },
     {
@@ -1727,13 +1148,6 @@
       },
       "relative_move": {
         "Slice": "S"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
       }
     },
     {
@@ -1747,13 +1161,19 @@
       },
       "relative_move": {
         "Face": "Lp"
+      }
+    },
+    {
+      "type": "Rotation",
+      "t": 75.59589999997615,
+      "axis": "Zp",
+      "from_orientation": {
+        "top": "White",
+        "front": "Red"
       },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
+      "to_orientation": {
+        "top": "Blue",
+        "front": "Red"
       }
     },
     {
@@ -1768,13 +1188,6 @@
       },
       "relative_move": {
         "Slice": "Sp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 2
       }
     },
     {
@@ -1788,13 +1201,19 @@
       },
       "relative_move": {
         "Face": "Up"
+      }
+    },
+    {
+      "type": "Rotation",
+      "t": 77.338,
+      "axis": "Z",
+      "from_orientation": {
+        "top": "Blue",
+        "front": "Red"
       },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 2
+      "to_orientation": {
+        "top": "White",
+        "front": "Red"
       }
     },
     {
@@ -1808,13 +1227,6 @@
       },
       "relative_move": {
         "Face": "Up"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 2
       }
     },
     {
@@ -1829,13 +1241,6 @@
       },
       "relative_move": {
         "Slice": "Sp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
       }
     },
     {
@@ -1849,13 +1254,19 @@
       },
       "relative_move": {
         "Face": "Rp"
+      }
+    },
+    {
+      "type": "Rotation",
+      "t": 78.12170000004768,
+      "axis": "Z",
+      "from_orientation": {
+        "top": "White",
+        "front": "Red"
       },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 3
+      "to_orientation": {
+        "top": "Green",
+        "front": "Red"
       }
     },
     {
@@ -1870,13 +1281,6 @@
       },
       "relative_move": {
         "Slice": "S"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 4
       }
     },
     {
@@ -1890,13 +1294,19 @@
       },
       "relative_move": {
         "Face": "Up"
+      }
+    },
+    {
+      "type": "Rotation",
+      "t": 78.59589999997615,
+      "axis": "Zp",
+      "from_orientation": {
+        "top": "Green",
+        "front": "Red"
       },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 4
+      "to_orientation": {
+        "top": "White",
+        "front": "Red"
       }
     },
     {
@@ -1911,13 +1321,6 @@
       },
       "relative_move": {
         "Slice": "Sp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -1931,13 +1334,19 @@
       },
       "relative_move": {
         "Face": "Rp"
+      }
+    },
+    {
+      "type": "Rotation",
+      "t": 79.138,
+      "axis": "Z",
+      "from_orientation": {
+        "top": "White",
+        "front": "Red"
       },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": true,
-        "bad_edges_count": 0
+      "to_orientation": {
+        "top": "Green",
+        "front": "Red"
       }
     },
     {
@@ -1952,13 +1361,6 @@
       },
       "relative_move": {
         "Slice": "Sp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": true,
-        "bad_edges_count": 0
       }
     },
     {
@@ -1972,13 +1374,19 @@
       },
       "relative_move": {
         "Face": "Dp"
+      }
+    },
+    {
+      "type": "Rotation",
+      "t": 80.03620000004769,
+      "axis": "Z",
+      "from_orientation": {
+        "top": "Green",
+        "front": "Red"
       },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
+      "to_orientation": {
+        "top": "Yellow",
+        "front": "Red"
       }
     },
     {
@@ -1993,13 +1401,6 @@
       },
       "relative_move": {
         "Slice": "S"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 2
       }
     },
     {
@@ -2014,13 +1415,6 @@
       },
       "relative_move": {
         "Slice": "S"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -2034,13 +1428,19 @@
       },
       "relative_move": {
         "Face": "U"
+      }
+    },
+    {
+      "type": "Rotation",
+      "t": 80.75570000004768,
+      "axis": "Z2",
+      "from_orientation": {
+        "top": "Yellow",
+        "front": "Red"
       },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
+      "to_orientation": {
+        "top": "White",
+        "front": "Red"
       }
     },
     {
@@ -2054,13 +1454,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -2075,13 +1468,6 @@
       },
       "relative_move": {
         "Slice": "S"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 2
       }
     },
     {
@@ -2096,13 +1482,6 @@
       },
       "relative_move": {
         "Slice": "S"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -2116,13 +1495,19 @@
       },
       "relative_move": {
         "Face": "D"
+      }
+    },
+    {
+      "type": "Rotation",
+      "t": 81.839,
+      "axis": "Z2",
+      "from_orientation": {
+        "top": "White",
+        "front": "Red"
       },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
+      "to_orientation": {
+        "top": "Yellow",
+        "front": "Red"
       }
     },
     {
@@ -2137,13 +1522,6 @@
       },
       "relative_move": {
         "Slice": "S"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": true,
-        "bad_edges_count": 0
       }
     },
     {
@@ -2157,13 +1535,19 @@
       },
       "relative_move": {
         "Face": "R"
+      }
+    },
+    {
+      "type": "Rotation",
+      "t": 84.05889999997616,
+      "axis": "Zp",
+      "from_orientation": {
+        "top": "Yellow",
+        "front": "Red"
       },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
+      "to_orientation": {
+        "top": "Green",
+        "front": "Red"
       }
     },
     {
@@ -2177,13 +1561,6 @@
       },
       "relative_move": {
         "Face": "Rp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": true,
-        "bad_edges_count": 0
       }
     },
     {
@@ -2198,13 +1575,6 @@
       },
       "relative_move": {
         "Slice": "Sp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -2218,13 +1588,19 @@
       },
       "relative_move": {
         "Face": "D"
+      }
+    },
+    {
+      "type": "Rotation",
+      "t": 84.83639999997615,
+      "axis": "Z",
+      "from_orientation": {
+        "top": "Green",
+        "front": "Red"
       },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
+      "to_orientation": {
+        "top": "Yellow",
+        "front": "Red"
       }
     },
     {
@@ -2238,13 +1614,6 @@
       },
       "relative_move": {
         "Face": "D"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -2258,13 +1627,6 @@
       },
       "relative_move": {
         "Face": "Dp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -2278,13 +1640,6 @@
       },
       "relative_move": {
         "Face": "Dp"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": false,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -2299,13 +1654,6 @@
       },
       "relative_move": {
         "Slice": "S"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": true,
-        "bad_edges_count": 0
       }
     },
     {
@@ -2319,13 +1667,19 @@
       },
       "relative_move": {
         "Face": "R"
+      }
+    },
+    {
+      "type": "Rotation",
+      "t": 86.63820000004769,
+      "axis": "Zp",
+      "from_orientation": {
+        "top": "Yellow",
+        "front": "Red"
       },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
+      "to_orientation": {
+        "top": "Green",
+        "front": "Red"
       }
     },
     {
@@ -2339,13 +1693,6 @@
       },
       "relative_move": {
         "Face": "R"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -2360,13 +1707,6 @@
       },
       "relative_move": {
         "Slice": "S"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
       }
     },
     {
@@ -2380,13 +1720,19 @@
       },
       "relative_move": {
         "Face": "U"
+      }
+    },
+    {
+      "type": "Rotation",
+      "t": 87.35570000004769,
+      "axis": "Zp",
+      "from_orientation": {
+        "top": "Green",
+        "front": "Red"
       },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": false,
-        "bad_edges_count": 0
+      "to_orientation": {
+        "top": "White",
+        "front": "Red"
       }
     },
     {
@@ -2400,13 +1746,6 @@
       },
       "relative_move": {
         "Face": "U"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": true,
-        "bad_edges_count": 0
       }
     },
     {
@@ -2421,13 +1760,6 @@
       },
       "relative_move": {
         "Slice": "S"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": true,
-        "bad_edges_count": 0
       }
     },
     {
@@ -2442,13 +1774,6 @@
       },
       "relative_move": {
         "Slice": "S"
-      },
-      "state_after": {
-        "is_fb": true,
-        "is_sb": true,
-        "is_cmll": true,
-        "is_lse_ul_ur": true,
-        "bad_edges_count": 0
       }
     }
   ]
