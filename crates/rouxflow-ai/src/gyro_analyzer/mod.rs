@@ -597,6 +597,7 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
                             axis: r,
                             from_orientation: from,
                             to_orientation: to,
+                            is_inspection: false,
                         });
                     }
 
@@ -627,6 +628,109 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
             }
         }
         println!();
+    }
+
+    // ========== Inspection detection ==========
+    // A window where stable gyro labels form a round-trip (A -> B -> A) is an inspection:
+    // the solver peeked at another face and rotated back. Each transition is stored as a
+    // SolveEvent::Rotation with is_inspection = true. These never affect move_count / tps.
+    {
+        let str_to_rot_enum = |s: &str| -> Option<Rotation> {
+            match s {
+                "x" => Some(Rotation::X),
+                "x'" => Some(Rotation::Xp),
+                "x2" => Some(Rotation::X2),
+                "y" => Some(Rotation::Y),
+                "y'" => Some(Rotation::Yp),
+                "y2" => Some(Rotation::Y2),
+                "z" => Some(Rotation::Z),
+                "z'" => Some(Rotation::Zp),
+                "z2" => Some(Rotation::Z2),
+                _ => None,
+            }
+        };
+
+        let mut inspections_found = false;
+        for (w, runs) in window_runs.iter().enumerate() {
+            let (pc, nc) = window_ctx(w);
+            // Collect non-noise run labels for this window
+            let stable: Vec<&str> = runs
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !is_noise(runs, *i, 1, pc.as_deref(), nc.as_deref()))
+                .map(|(_, r)| r.label.as_str())
+                .collect();
+
+            if stable.len() < 3 {
+                continue; // need at least: start -> peek -> back
+            }
+            let first = stable[0];
+            let last = stable[stable.len() - 1];
+            if first != last {
+                continue; // not a round-trip
+            }
+            let has_different = stable[1..stable.len() - 1].iter().any(|s| *s != first);
+            if !has_different {
+                continue;
+            }
+
+            // Build deduplicated sequence of visited orientations
+            let mut visited: Vec<&str> = vec![first];
+            for s in &stable[1..] {
+                if *s != *visited.last().unwrap() {
+                    visited.push(s);
+                }
+            }
+
+            // Distribute the window's time equally across each rotation step
+            let t_win_start = boundaries[w];
+            let t_win_end = boundaries[w + 1];
+            let n_steps = visited.len().saturating_sub(1).max(1);
+            let step_dt = (t_win_end - t_win_start) / n_steps as f64;
+
+            // Emit one SolveEvent::Rotation(is_inspection=true) per consecutive pair
+            for pair_idx in 0..visited.len().saturating_sub(1) {
+                let from_str = visited[pair_idx];
+                let to_str = visited[pair_idx + 1];
+                if let (Some(from_o), Some(to_o)) =
+                    (parse_orient_label(from_str), parse_orient_label(to_str))
+                {
+                    let rot_str = detect_rotation(from_o, to_o);
+                    if let Some(r) = str_to_rot_enum(&rot_str) {
+                        let t_step = t_win_start + step_dt * pair_idx as f64;
+                        parsed_solve.timeline.push(SolveEvent::Rotation {
+                            t: t_step,
+                            axis: r,
+                            from_orientation: from_o,
+                            to_orientation: to_o,
+                            is_inspection: true,
+                        });
+                    }
+                }
+            }
+
+            if print_output {
+                let after_move = if w > 0 { w } else { 0 };
+                let before_move = if w < p1.len() { w + 1 } else { w };
+                let duration_ms = (t_win_end - t_win_start) * 1000.0;
+                println!(
+                    "  Between moves {:>3}-{:>3} ({:.0}ms): {}",
+                    after_move,
+                    before_move,
+                    duration_ms,
+                    visited.join(" -> "),
+                );
+                inspections_found = true;
+            }
+        }
+
+        if print_output {
+            if !inspections_found {
+                println!("Inspections (in-window round-trips):");
+                println!("  None detected.");
+            }
+            println!();
+        }
     }
 
     parsed_solve.is_solved = cube_body.is_solved();

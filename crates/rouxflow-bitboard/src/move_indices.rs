@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Standard face moves: U, D, L, R, F, B
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -75,12 +75,29 @@ pub enum Rotation {
 }
 
 /// Unified Move enum that wraps all categories
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Move {
     Face(FaceMove),
     Slice(SliceMove),
     Wide(WideMove),
     Rotate(Rotation),
+}
+
+impl Serialize for Move {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for Move {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(d)?;
+        Move::ALL
+            .iter()
+            .find(|m| m.as_str() == raw)
+            .copied()
+            .ok_or_else(|| serde::de::Error::unknown_variant(&raw, &[]))
+    }
 }
 
 impl Move {

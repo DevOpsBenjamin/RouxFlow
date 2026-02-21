@@ -75,10 +75,17 @@ pub enum SolveEvent {
         body_move: Move,
         relative_move: Move,
     },
+    /// A cube rotation detected by the gyro.
+    /// Does NOT count toward move_count or TPS.
+    ///
+    /// `is_inspection = true`  → round-trip peek (rotate to look, then rotate back).
+    /// `is_inspection = false` → persistent orientation change the solver kept.
     Rotation {
         t: f64,
         axis: Rotation,
         from_orientation: Orientation,
         to_orientation: Orientation,
+        /// True when this rotation is part of a within-window round-trip (inspection peek).
+        is_inspection: bool,
     },
 }
