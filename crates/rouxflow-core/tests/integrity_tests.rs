@@ -103,3 +103,16 @@ fn dnf_solve_gets_valid_signature() {
     solve.integrity = Some(sign_solve(&solve));
     assert!(verify_solve(&solve));
 }
+
+#[test]
+fn different_solves_have_different_signatures() {
+    let mut solve1 = make_solve();
+    let mut solve2 = make_solve();
+    solve2.id = "different-uuid".to_string();
+    assert_ne!(sign_solve(&solve1), sign_solve(&solve2));
+
+    solve1.integrity = Some(sign_solve(&solve1));
+    solve2.integrity = Some(sign_solve(&solve2));
+    assert!(verify_solve(&solve1));
+    assert!(verify_solve(&solve2));
+}

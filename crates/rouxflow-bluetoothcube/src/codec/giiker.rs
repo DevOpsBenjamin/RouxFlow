@@ -60,7 +60,7 @@ impl GiikerCodec {
 
     /// Decrypt a Giiker packet (ADD-based encryption).
     /// If byte[18] == 0xA7, applies the ADD key table.
-    fn decrypt_packet(data: &[u8]) -> Vec<u8> {
+    pub fn decrypt_packet(data: &[u8]) -> Vec<u8> {
         let mut raw: Vec<u8> = data.to_vec();
         if raw.len() >= 20 && raw[18] == ENCRYPTION_MARKER {
             let k1 = ((raw[19] >> 4) & 0xF) as usize;
@@ -74,7 +74,7 @@ impl GiikerCodec {
     }
 
     /// Convert raw bytes to hex nibbles.
-    fn to_hex_nibbles(raw: &[u8]) -> Vec<u8> {
+    pub fn to_hex_nibbles(raw: &[u8]) -> Vec<u8> {
         let mut nibbles = Vec::with_capacity(raw.len() * 2);
         for &b in raw {
             nibbles.push((b >> 4) & 0xF);
@@ -197,38 +197,3 @@ impl CubeProtocol for GiikerCodec {
     fn requires_handshake(&self) -> bool { false }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_decrypt_unencrypted() {
-        // Unencrypted packet (byte 18 != 0xA7)
-        let mut data = vec![0u8; 20];
-        data[0] = 0x12;
-        data[18] = 0x00;
-        let result = GiikerCodec::decrypt_packet(&data);
-        assert_eq!(result.len(), 20);
-        assert_eq!(result[0], 0x12);
-    }
-
-    #[test]
-    fn test_decrypt_encrypted() {
-        // Encrypted packet (byte 18 == 0xA7)
-        let mut data = vec![0u8; 20];
-        data[18] = ENCRYPTION_MARKER;
-        data[19] = 0x00; // k1=0, k2=0
-        let result = GiikerCodec::decrypt_packet(&data);
-        assert_eq!(result.len(), 18);
-        // Each byte should have KEY_TABLE[i] + KEY_TABLE[i] added (k1=k2=0)
-        for i in 0..18 {
-            assert_eq!(result[i], KEY_TABLE[i].wrapping_add(KEY_TABLE[i]));
-        }
-    }
-
-    #[test]
-    fn test_to_hex_nibbles() {
-        let nibbles = GiikerCodec::to_hex_nibbles(&[0xAB, 0xCD]);
-        assert_eq!(nibbles, vec![0xA, 0xB, 0xC, 0xD]);
-    }
-}

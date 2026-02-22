@@ -8,9 +8,8 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use log::debug;
 use rouxflow_bluetoothcube::codec::{self, CubeCommand, CubeEvent, CubeProtocol};
-use rouxflow_core::cube::{CubeMove, facelet::Color as FaceletColor};
+use rouxflow_core::cube::CubeMove;
 use rouxflow_core::session::CoreAction;
-use rouxflow_core::telemetry::{GyroSample, RawMove, SolveTelemetry};
 
 // ========== INIT ==========
 
@@ -255,8 +254,6 @@ impl WasmStorageManager {
 struct WasmAppState {
     inner: rouxflow_core::AppState,
     protocol: Option<Box<dyn CubeProtocol>>,
-    /// Logical cube state — tracks moves and produces facelets for rendering
-    cube_logic: rouxflow_core::cube::CubeState,
     /// Last decrypted gyro packet as hex string (for debug)
     last_gyro_hex: String,
     /// Last 500 gyro packet arrival timestamps (seconds) for interval analysis
@@ -267,12 +264,6 @@ struct WasmAppState {
     debug_moves_pending_gyro: Vec<String>,
     /// Debug: whether we've logged the home quaternion yet this solve
     debug_home_logged: bool,
-    /// Telemetry: raw solve data for future analyzer
-    telemetry: Option<SolveTelemetry>,
-    /// Telemetry recording active?
-    telemetry_recording: bool,
-    /// Telemetry phase: 0=idle, 1=scramble, 2=solve
-    telemetry_phase: u8,
 }
 
 thread_local! {
@@ -301,19 +292,14 @@ fn exit_wasm() {
 #[wasm_bindgen]
 pub fn cm_init() {
     APP_STATE.with(|s| {
-        let cube_logic = rouxflow_core::cube::CubeState::new();
         *s.borrow_mut() = Some(WasmAppState {
             inner: rouxflow_core::AppState::new(),
             protocol: None,
-            cube_logic,
             last_gyro_hex: String::new(),
             gyro_timestamps: Vec::with_capacity(500),
             debug_last_gyro: None,
             debug_moves_pending_gyro: Vec::new(),
             debug_home_logged: false,
-            telemetry: None,
-            telemetry_recording: false,
-            telemetry_phase: 0,
         });
     });
 }
@@ -539,7 +525,7 @@ pub fn cm_connect(device_name: String, mac_address: String, protocol_name: Strin
         st.protocol = Some(protocol);
         st.inner.bluetooth.connect(device_name, mac_address, protocol_name, has_gyro);
         // Reset logical cube to solved; will be overwritten by RawFacelets from cube
-        st.cube_logic = rouxflow_core::cube::CubeState::new();
+        st.inner.cube_logic = rouxflow_core::cube::CubeState::new();
         // Configure interpreter and session for this cube
         st.inner.interpreter.set_has_gyro(has_gyro);
         st.inner.interpreter.reset();
@@ -583,156 +569,6 @@ pub fn cm_get_device_info() -> Option<String> {
 
 // ========== Scramble Generator ==========
 
-fn generate_scramble() -> String {
-    let faces = ["U", "R", "F", "D", "L", "B"];
-    let mods = ["", "'", "2"];
-    let mut result = Vec::with_capacity(20);
-    let mut last: Option<usize> = None;
-    let mut second_last: Option<usize> = None;
-    for _ in 0..20 {
-        loop {
-            let fi = (js_sys::Math::random() * 6.0) as usize % 6;
-            if last == Some(fi) { continue; }
-            // Prevent 3 consecutive on same axis (U/D=0/3, R/L=1/4, F/B=2/5)
-            if let (Some(l), Some(sl)) = (last, second_last) {
-                if fi % 3 == l % 3 && l % 3 == sl % 3 { continue; }
-            }
-            let mi = (js_sys::Math::random() * 3.0) as usize % 3;
-            result.push(format!("{}{}", faces[fi], mods[mi]));
-            second_last = last;
-            last = Some(fi);
-            break;
-        }
-    }
-    result.join(" ")
-}
-
-/// Flow coordinator: after a move, check flow state and react accordingly.
-fn flow_coordinate(st: &mut WasmAppState, timestamp: f64, actions: &mut Vec<String>, _notation: Option<&str>) {
-    use rouxflow_core::session::FlowState;
-
-    let flow = st.inner.session.get_flow_state_enum();
-
-    match flow {
-        FlowState::Idle => {
-            // If cube is solved in Idle, auto-generate scramble (unless WCA session is full)
-            if st.cube_logic.is_solved() && !st.inner.session.is_wca_full() {
-                let scramble = generate_scramble();
-                debug!("[flow] Idle -> Scrambling (auto, cube solved)");
-                let action = st.inner.session.start_scramble(&scramble);
-                if !action.is_empty() {
-                    debug!("[calibration] started (new scramble)");
-                    st.inner.calibrator.start();
-                    st.debug_home_logged = false;
-                    // Telemetry: start recording scramble phase
-                    st.telemetry = Some(SolveTelemetry {
-                        scramble: scramble.clone(),
-                        scramble_gyro: Vec::new(),
-                        solve_gyro: Vec::new(),
-                        solve_moves: Vec::new(),
-                        scramble_start_t: timestamp,
-                        solve_start_t: 0.0,
-                        solve_end_t: 0.0,
-                    });
-                    st.telemetry_recording = true;
-                    st.telemetry_phase = 1;
-                    actions.push(action);
-                }
-            }
-        }
-        FlowState::Scrambling => {
-            // If scramble was invalidated, reset to Idle so user can start over
-            if st.inner.session.is_scramble_invalid() {
-                debug!("[flow] Scrambling -> Idle (scramble invalidated)");
-                st.telemetry = None;
-                st.telemetry_recording = false;
-                st.telemetry_phase = 0;
-                let action = st.inner.session.reset_flow();
-                if !action.is_empty() { actions.push(action); }
-            }
-        }
-        FlowState::Inspection => {
-            // First move during inspection → start solving
-            debug!("[flow] Inspection -> Solving (first move)");
-            // Telemetry: switch to solve phase
-            if let Some(ref mut tel) = st.telemetry {
-                tel.solve_start_t = timestamp;
-            }
-            st.telemetry_phase = 2;
-            let action = st.inner.start_solving(timestamp);
-            if !action.is_empty() { actions.push(action); }
-        }
-        FlowState::Solving => {
-            // Check if cube is solved → auto-complete
-            if st.cube_logic.is_solved() {
-                let time_ms = st.inner.timer.get_current_time_ms() as u32;
-                debug!("[flow] Solving -> complete! time={}ms", time_ms);
-                let moves_json = st.inner.timer.get_moves_json();
-
-                if st.inner.session.requires_putdown_confirm() {
-                    // WCA+gyro: hold solve, wait for putdown to confirm
-                    debug!("[flow] WCA+gyro: holding solve, waiting for putdown");
-                    // Telemetry: record solve end, stop recording
-                    if let Some(ref mut tel) = st.telemetry {
-                        tel.solve_end_t = timestamp;
-                    }
-                    st.telemetry_recording = false;
-                    st.inner.hold_solve(timestamp, &moves_json);
-                    let action = serde_json::to_string(
-                        &CoreAction::FlowStateChanged(rouxflow_core::session::FlowState::Summary)
-                    ).unwrap_or_default();
-                    if !action.is_empty() { actions.push(action); }
-                    // Don't chain — putdown handler will chain to next scramble
-                } else {
-                    // Standard flow: record immediately and chain
-                    // Telemetry: record solve end, stop recording
-                    if let Some(ref mut tel) = st.telemetry {
-                        tel.solve_end_t = timestamp;
-                    }
-                    st.telemetry_recording = false;
-                    let action = st.inner.record_solve(timestamp, time_ms, &moves_json);
-                    if !action.is_empty() { actions.push(action); }
-                    // Skip Summary: immediately start next scramble (unless WCA session is full)
-                    if !st.inner.session.is_wca_full() {
-                        let next = generate_scramble();
-                        debug!("[flow] chaining to next scramble");
-                        let action2 = st.inner.session.start_scramble(&next);
-                        if !action2.is_empty() {
-                            debug!("[calibration] started (next scramble)");
-                            st.inner.calibrator.start();
-                            actions.push(action2);
-                        }
-                    } else {
-                        debug!("[flow] WCA session full — not generating next scramble");
-                        let action2 = st.inner.session.reset_flow();
-                        if !action2.is_empty() { actions.push(action2); }
-                    }
-                }
-            }
-        }
-        FlowState::Summary => {
-            // WCA+gyro: don't chain while waiting for putdown to confirm solve
-            if st.inner.session.has_pending_solve() {
-                return;
-            }
-            if !st.inner.session.is_wca_full() {
-                // Fallback: if somehow in Summary, auto-chain to next scramble
-                debug!("[flow] Summary -> Scrambling (fallback chain)");
-                let next = generate_scramble();
-                let action = st.inner.session.start_scramble(&next);
-                if !action.is_empty() {
-                    debug!("[calibration] started (summary chain)");
-                    st.inner.calibrator.start();
-                    actions.push(action);
-                }
-            } else {
-                let action = st.inner.session.reset_flow();
-                if !action.is_empty() { actions.push(action); }
-            }
-        }
-    }
-}
-
 /// Process a raw BLE packet through the protocol handler and update state.
 /// Returns JSON array of CoreActions.
 #[wasm_bindgen]
@@ -753,7 +589,7 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
         let decrypted = protocol.decrypt(raw_data);
         let events = protocol.decode_event(&decrypted);
 
-        // Store decrypted hex + record timestamp for interval analysis
+        // Debug: store decrypted hex + record timestamp for interval analysis
         if events.iter().any(|e| matches!(e, CubeEvent::Gyro { .. })) {
             st.last_gyro_hex = decrypted.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
             if st.gyro_timestamps.len() >= 500 {
@@ -764,7 +600,6 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
 
         let wall_ms = timestamp * 1000.0;
         let mut actions: Vec<String> = Vec::new();
-        let mut latest_gyro_q: Option<rouxflow_core::cube::Quaternion> = None;
 
         // ===== Feed phase: push events into interpreter =====
         for event in &events {
@@ -777,47 +612,12 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     } else {
                         debug!("[raw-move] {} | no gyro yet", notation);
                     }
-                    // Record raw BLE face move for telemetry
-                    if st.telemetry_recording && st.telemetry_phase == 2 {
-                        if let Some(ref mut tel) = st.telemetry {
-                            tel.solve_moves.push(RawMove {
-                                n: notation.clone(),
-                                t: timestamp,
-                                k: rouxflow_core::move_interpreter::MoveKind::Face,
-                            });
-                        }
-                    }
-                    st.inner.interpreter.feed_face_move(*face, *direction, wall_ms);
+                    st.inner.feed_ble_move(*face, *direction, timestamp, wall_ms);
                 }
                 CubeEvent::Gyro { quaternion, .. } => {
-                    // Update cube_logic orientation for the 3D renderer
-                    let q = rouxflow_core::cube::Quaternion {
-                        x: quaternion.x,
-                        y: quaternion.y,
-                        z: quaternion.z,
-                        w: quaternion.w,
-                    };
-                    st.cube_logic.orientation = Some(q);
-
-                    // Record raw gyro for telemetry
-                    if st.telemetry_recording {
-                        if let Some(ref mut tel) = st.telemetry {
-                            let sample = GyroSample { t: timestamp, x: quaternion.x, y: quaternion.y, z: quaternion.z, w: quaternion.w };
-                            match st.telemetry_phase {
-                                1 => tel.scramble_gyro.push(sample),
-                                2 => tel.solve_gyro.push(sample),
-                                _ => {}
-                            }
-                        }
-                    }
-
-                    // Process orientation for pickup/putdown detection
-                    let action = st.inner.session.process_orientation(
-                        quaternion.x,
-                        quaternion.y,
-                        quaternion.z,
-                        quaternion.w,
-                        timestamp,
+                    let (action, putdown_actions, cal_started) = st.inner.feed_ble_gyro(
+                        quaternion.x, quaternion.y, quaternion.z, quaternion.w,
+                        timestamp, wall_ms, &mut || js_sys::Math::random(),
                     );
                     if !action.is_empty() {
                         if action.contains("Pickup") {
@@ -831,7 +631,6 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                                 "[gyro] putdown detected | stable_since={:.3}s last_putdown={:.3}s pickup={:.3}s solve_pickup={:?} calc_time={:.0}ms now={:.3}s",
                                 stable_since, putdown_t, last_pickup.unwrap_or(0.0), solve_pickup, calc_time_ms, timestamp
                             );
-                            // Dump gyro debug buffer (deltas from solve complete to putdown)
                             let gyro_dbg = st.inner.session.drain_gyro_debug();
                             if !gyro_dbg.is_empty() {
                                 let first_ts = gyro_dbg[0].0;
@@ -841,43 +640,16 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                                 }).collect();
                                 debug!("[gyro-debug] {} samples from solve→putdown:\n{}", lines.len(), lines.join("\n"));
                             }
-
-                            // WCA+gyro: if a solve is pending putdown, confirm it now
-                            if st.inner.session.has_pending_solve() {
-                                debug!("[flow] putdown confirms pending solve");
-                                let save_action = st.inner.session.confirm_pending_solve();
-                                if !save_action.is_empty() {
-                                    actions.push(save_action);
-                                }
-                                // Chain to next scramble (unless WCA full)
-                                if !st.inner.session.is_wca_full() {
-                                    let next = generate_scramble();
-                                    debug!("[flow] chaining to next scramble after putdown");
-                                    let action2 = st.inner.session.start_scramble(&next);
-                                    if !action2.is_empty() {
-                                        debug!("[calibration] started (putdown chain)");
-                                        st.inner.calibrator.start();
-                                        actions.push(action2);
-                                    }
-                                } else {
-                                    debug!("[flow] WCA session full after putdown confirm");
-                                    let action2 = st.inner.session.reset_flow();
-                                    if !action2.is_empty() { actions.push(action2); }
-                                }
-                            }
                         }
                         actions.push(action);
                     }
-
-                    // Feed gyro to interpreter for rotation detection
-                    st.inner.interpreter.feed_gyro(&q, wall_ms);
-
-                    // Feed gyro to calibrator if active
-                    if st.inner.calibrator.is_active() {
-                        st.inner.calibrator.feed(&q);
-                    }
+                    if cal_started { st.debug_home_logged = false; }
+                    actions.extend(putdown_actions);
 
                     // Debug: log "after" gyro for pending moves
+                    let q = rouxflow_core::cube::Quaternion {
+                        x: quaternion.x, y: quaternion.y, z: quaternion.z, w: quaternion.w,
+                    };
                     if !st.debug_moves_pending_gyro.is_empty() {
                         for mv in st.debug_moves_pending_gyro.drain(..) {
                             debug!("[move-gyro] {} AFTER  gyro=({:.4}, {:.4}, {:.4}, {:.4})",
@@ -885,10 +657,6 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                         }
                     }
                     st.debug_last_gyro = Some(q);
-
-                    // Store latest gyro for zone tracking after dispatch
-                    // (must happen after dispatch so compensate_slice is applied first)
-                    latest_gyro_q = Some(q);
                 }
                 CubeEvent::Battery { level } => {
                     st.inner.bluetooth.update_battery(*level);
@@ -908,18 +676,7 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     ));
                 }
                 CubeEvent::RawFacelets { facelet_string } => {
-                    let colors: Vec<FaceletColor> = facelet_string.chars().map(|c| match c {
-                        'U' => FaceletColor::White,
-                        'R' => FaceletColor::Red,
-                        'F' => FaceletColor::Green,
-                        'D' => FaceletColor::Yellow,
-                        'L' => FaceletColor::Orange,
-                        'B' => FaceletColor::Blue,
-                        _ => FaceletColor::White,
-                    }).collect();
-                    if colors.len() == 54 {
-                        st.cube_logic.logic.facelets = colors;
-                    }
+                    st.inner.handle_raw_facelets(facelet_string);
                     actions.push(format!(r#"{{"type":"RawFacelets","data":"{}"}}"#, facelet_string));
                 }
                 _ => {
@@ -931,27 +688,16 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
             }
         }
 
-        // ===== Flush phase: set zone rotation hint, then get interpreted moves =====
-        let has_zone_rotation = st.inner.calibrator.has_pending_zone_rotation();
-        st.inner.interpreter.set_zone_rotation_hint(has_zone_rotation);
-        let solve_start_ms = st.inner.timer.start_time_ms();
-        let interpreted = st.inner.interpreter.flush(wall_ms, solve_start_ms);
+        // ===== Flush + Dispatch phase (core) =====
+        let dispatch = st.inner.flush_and_dispatch(timestamp, wall_ms, &mut || js_sys::Math::random());
 
-        // ===== Dispatch phase: process each interpreted move =====
-        for imove in &interpreted {
-            // Remap notation from body frame to home frame using gyro zone state.
-            // Raw face moves (for cube_logic and scramble validation) stay in body frame.
-            let remapped = st.inner.calibrator.remap_notation(&imove.notation);
-            let was_remapped = remapped != imove.notation;
-
-            // Log interpreted move (compact: notation + kind, show remap if different)
-            if was_remapped {
-                debug!("[move] {} -> {} ({:?})", imove.notation, remapped, imove.kind);
+        // Debug logging for interpreted moves
+        for info in &dispatch.interpreted_info {
+            if info.remapped != info.notation {
+                debug!("[move] {} -> {} ({:?})", info.notation, info.remapped, info.kind);
             } else {
-                debug!("[move] {} ({:?})", imove.notation, imove.kind);
+                debug!("[move] {} ({:?})", info.notation, info.kind);
             }
-
-            // Debug: log gyro before each move, home on first move
             if let Some(ref gq) = st.debug_last_gyro {
                 if !st.debug_home_logged {
                     if let Some(home) = st.inner.calibrator.home() {
@@ -961,100 +707,21 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                     st.debug_home_logged = true;
                 }
                 debug!("[move-gyro] {} BEFORE gyro=({:.4}, {:.4}, {:.4}, {:.4}) | {:?}{}",
-                    imove.notation, gq.x, gq.y, gq.z, gq.w, imove.kind,
-                    if was_remapped { format!(" -> {}", remapped) } else { String::new() });
-                st.debug_moves_pending_gyro.push(remapped.clone());
-            }
-
-            // Apply raw face moves to cube_logic (correct facelet state — always body frame)
-            for &(face, dir) in &imove.raw_face_moves {
-                let notation = CubeMove { face, amount: dir }.notation();
-                st.cube_logic.apply_move(&notation);
-            }
-
-            // Record interpreted move in timer with remapped notation
-            let mut remapped_move = imove.clone();
-            remapped_move.notation = remapped.clone();
-            st.inner.record_interpreted_move(&remapped_move);
-
-            // Animate remapped notation — skip Rotation and Wide moves since
-            // the gyro already drives the renderer orientation continuously.
-            // Face and Slice moves are safe: body doesn't rotate, only layers turn.
-            match imove.kind {
-                rouxflow_core::move_interpreter::MoveKind::Face
-                | rouxflow_core::move_interpreter::MoveKind::Slice => {
-                    rouxflow_render::queue_move_anim(remapped.clone(), 0.15);
-                }
-                _ => {} // Rotation/Wide: gyro + facelet update handles the visual
-            }
-
-            // Slice compensation: the gyro sensor is in the core, so M/E/S slices
-            // rotate the sensor without rotating the shell. Compensate the calibrator's
-            // core offset so zone tracking stays aligned with the user's shell orientation.
-            // Use the RAW (body-frame) notation since that's what the hardware produced.
-            if imove.kind == rouxflow_core::move_interpreter::MoveKind::Slice {
-                st.inner.calibrator.compensate_slice(&imove.notation);
-            }
-
-            // Scramble validation: feed raw face moves (scrambles = body frame, always)
-            let flow_before = st.inner.session.get_flow_state_enum();
-            for &(face, dir) in &imove.raw_face_moves {
-                let notation = CubeMove { face, amount: dir }.notation();
-                let a = st.inner.session.handle_scramble_move(&notation, timestamp);
-                if !a.is_empty() { actions.push(a); }
-            }
-
-            // Check for Scrambling → Inspection transition: finalize gyro calibration
-            let flow_after = st.inner.session.get_flow_state_enum();
-            if flow_before != flow_after {
-                debug!("[flow] {:?} -> {:?}", flow_before, flow_after);
-            }
-            if flow_before == rouxflow_core::session::FlowState::Scrambling
-                && flow_after == rouxflow_core::session::FlowState::Inspection
-            {
-                // Telemetry: transition from scramble to solve phase
-                st.telemetry_phase = 2;
-
-                match st.inner.calibrator.finalize() {
-                    Some(_home) => {
-                        debug!("[calibration] finalized ({} samples)", st.inner.calibrator.sample_count());
-                        if let Some((ox, oy, oz, ow)) = st.inner.calibrator.compute_render_offset() {
-                            rouxflow_render::set_gyro_offset(ox, oy, oz, ow);
-                        }
-                    }
-                    None => {
-                        debug!("[calibration] finalize failed (< 10 samples)");
-                    }
-                }
-            }
-
-            // Emit CoreAction::Move with remapped notation
-            let action_json = serde_json::to_string(&CoreAction::Move(remapped.clone()))
-                .unwrap_or_default();
-            if !action_json.is_empty() {
-                actions.push(action_json);
-            }
-
-            // Flow coordination: only for face/slice moves, not rotations
-            // (rotations during inspection should not start the solve timer)
-            if imove.kind != rouxflow_core::move_interpreter::MoveKind::Rotation {
-                if flow_before == flow_after {
-                    flow_coordinate(st, timestamp, &mut actions, Some(&remapped));
-                }
+                    info.notation, gq.x, gq.y, gq.z, gq.w, info.kind,
+                    if info.remapped != info.notation { format!(" -> {}", info.remapped) } else { String::new() });
+                st.debug_moves_pending_gyro.push(info.remapped.clone());
             }
         }
 
-        // Consume pending zone rotations if a standalone gyro rotation was emitted
-        if interpreted.iter().any(|m| m.kind == rouxflow_core::move_interpreter::MoveKind::Rotation) {
-            // Deprecated: zone tracking removed
-        }
+        if dispatch.calibration_started { st.debug_home_logged = false; }
+        actions.extend(dispatch.actions);
 
-        // Zone tracking: runs AFTER dispatch so compensate_slice has been applied.
-        // This ensures zones see the correct core_offset (no one-packet lag).
-        if let Some(ref _gq) = latest_gyro_q {
-            if !st.inner.calibrator.is_active() && st.inner.calibrator.home().is_some() {
-                // Deprecated: zone tracking removed
-            }
+        // Animate moves via renderer
+        for (notation, _kind) in &dispatch.animations {
+            rouxflow_render::queue_move_anim(notation.clone(), 0.15);
+        }
+        if let Some((ox, oy, oz, ow)) = dispatch.render_offset {
+            rouxflow_render::set_gyro_offset(ox, oy, oz, ow);
         }
 
         if actions.is_empty() {
@@ -1105,7 +772,7 @@ pub fn cm_get_cube_state() -> String {
         s.borrow().as_ref().map_or_else(
             || "{}".to_string(),
             |st| {
-                let facelets = st.cube_logic.facelets();
+                let facelets = st.inner.cube_logic.facelets();
                 format!(r#"{{"facelets":{:?}}}"#, facelets)
             },
         )
@@ -1118,7 +785,7 @@ pub fn cm_get_orientation() -> String {
         s.borrow().as_ref().map_or_else(
             || "[0,0,0,1]".to_string(),
             |st| {
-                if let Some(q) = st.cube_logic.orientation {
+                if let Some(q) = st.inner.cube_logic.orientation {
                     format!("[{},{},{},{}]", q.x, q.y, q.z, q.w)
                 } else {
                     "[0,0,0,1]".to_string()
@@ -1134,7 +801,7 @@ pub fn cm_get_orientation_debug() -> String {
         s.borrow().as_ref().map_or_else(
             || r#"{"raw":[0,0,0,1],"home":null,"shell":[0,0,0,1]}"#.to_string(),
             |st| {
-                if let Some(q) = st.cube_logic.orientation {
+                if let Some(q) = st.inner.cube_logic.orientation {
                     let home_str = st.inner.calibrator.home().map_or("null".to_string(), |h| format!("[{},{},{},{}]", h.x, h.y, h.z, h.w));
                     let mut pos_str = "\"Unknown\"".to_string();
                     let mut shell_str = format!("[{},{},{},{}]", q.x, q.y, q.z, q.w);
@@ -1164,7 +831,7 @@ pub fn cm_get_orientation_debug() -> String {
 pub fn cm_force_home() {
     APP_STATE.with(|s| {
         if let Some(st) = s.borrow_mut().as_mut() {
-            if let Some(q) = st.cube_logic.orientation {
+            if let Some(q) = st.inner.cube_logic.orientation {
                 st.inner.calibrator.start();
                 for _ in 0..15 {
                     st.inner.calibrator.feed(&q);
@@ -1185,7 +852,7 @@ pub fn cm_get_facelets() -> String {
         s.borrow().as_ref().map_or_else(
             || "[]".to_string(),
             |st| {
-                let f = st.cube_logic.facelets();
+                let f = st.inner.cube_logic.facelets();
                 let parts: Vec<String> = f.iter().map(|b| b.to_string()).collect();
                 format!("[{}]", parts.join(","))
             },
@@ -1225,52 +892,14 @@ pub fn cm_update_timer(timestamp: f64) -> String {
             Some(st) => st,
             None => return String::new(),
         };
-        st.inner.timer.update(timestamp);
-
-        // Check scramble move timeout → invalidate (stays visible until next BLE move resets flow)
-        if st.inner.session.get_flow_state_enum() == rouxflow_core::session::FlowState::Scrambling {
-            if st.inner.session.check_scramble_timeout(timestamp) {
-                debug!("[flow] Scramble move timeout -> invalidated");
-            }
+        let actions = st.inner.update_timer(timestamp, &mut || js_sys::Math::random());
+        if actions.is_empty() {
+            String::new()
+        } else if actions.len() == 1 {
+            actions.into_iter().next().unwrap()
+        } else {
+            format!("[{}]", actions.join(","))
         }
-
-        // Check inspection timeout → DNF
-        if st.inner.session.get_flow_state_enum() == rouxflow_core::session::FlowState::Inspection {
-            if st.inner.session.is_inspection_expired(timestamp) {
-                debug!("[flow] Inspection expired -> DNF");
-                // Telemetry: discard on DNF
-                st.telemetry = None;
-                st.telemetry_recording = false;
-                st.telemetry_phase = 0;
-                let mut actions = Vec::new();
-                // Record DNF solve
-                let action = st.inner.record_dnf(timestamp);
-                if !action.is_empty() { actions.push(action); }
-                // Chain to next scramble (unless WCA full)
-                if !st.inner.session.is_wca_full() {
-                    let next = generate_scramble();
-                    let action2 = st.inner.session.start_scramble(&next);
-                    if !action2.is_empty() {
-                        debug!("[calibration] started (DNF chain)");
-                        st.inner.calibrator.start();
-                        actions.push(action2);
-                    }
-                } else {
-                    debug!("[flow] WCA session full after DNF — not generating next scramble");
-                    let action2 = st.inner.session.reset_flow();
-                    if !action2.is_empty() { actions.push(action2); }
-                }
-                if !actions.is_empty() {
-                    return if actions.len() == 1 {
-                        actions.into_iter().next().unwrap()
-                    } else {
-                        format!("[{}]", actions.join(","))
-                    };
-                }
-            }
-        }
-
-        String::new()
     })
 }
 
@@ -1327,24 +956,9 @@ pub fn cm_start_scramble(scramble: &str) -> String {
     APP_STATE.with(|s| {
         s.borrow_mut().as_mut().map_or_else(String::new, |st| {
             debug!("[flow] cm_start_scramble called");
-            debug!("[calibration] started (cm_start_scramble)");
-            st.inner.calibrator.start();
-            let action = st.inner.session.start_scramble(scramble);
-
             let now = js_sys::Date::now() / 1000.0;
-            st.telemetry = Some(SolveTelemetry {
-                scramble: scramble.to_string(),
-                scramble_gyro: Vec::new(),
-                solve_gyro: Vec::new(),
-                solve_moves: Vec::new(),
-                scramble_start_t: now,
-                solve_start_t: 0.0,
-                solve_end_t: 0.0,
-            });
-            st.telemetry_recording = true;
-            st.telemetry_phase = 1;
-
-            action
+            st.debug_home_logged = false;
+            st.inner.start_scramble_with(scramble, now)
         })
     })
 }
@@ -1430,7 +1044,7 @@ pub fn cm_is_wca_session_full() -> bool {
 #[wasm_bindgen]
 pub fn cm_is_cube_solved() -> bool {
     APP_STATE.with(|s| {
-        s.borrow().as_ref().map_or(true, |st| st.cube_logic.is_solved())
+        s.borrow().as_ref().map_or(true, |st| st.inner.cube_logic.is_solved())
     })
 }
 
@@ -1439,36 +1053,16 @@ pub fn cm_reset_flow() -> String {
     APP_STATE.with(|s| {
         s.borrow_mut().as_mut().map_or_else(String::new, |st| {
             debug!("[flow] cm_reset_flow called");
-            // Telemetry: abort any in-progress recording
-            st.telemetry = None;
-            st.telemetry_recording = false;
-            st.telemetry_phase = 0;
-            let action = st.inner.session.reset_flow();
-            // If cube is solved, auto-generate a scramble (unless WCA full)
-            if st.cube_logic.is_solved() && !st.inner.session.is_wca_full() {
-                let scramble = generate_scramble();
-                let action2 = st.inner.session.start_scramble(&scramble);
-                if !action2.is_empty() {
-                    debug!("[calibration] started (reset_flow + solved)");
-                    st.inner.calibrator.start();
-                    
-                    let now = js_sys::Date::now() / 1000.0;
-                    st.telemetry = Some(SolveTelemetry {
-                        scramble: scramble.clone(),
-                        scramble_gyro: Vec::new(),
-                        solve_gyro: Vec::new(),
-                        solve_moves: Vec::new(),
-                        scramble_start_t: now,
-                        solve_start_t: 0.0,
-                        solve_end_t: 0.0,
-                    });
-                    st.telemetry_recording = true;
-                    st.telemetry_phase = 1;
-
-                    return action2;
-                }
+            let cube_solved = st.inner.cube_logic.is_solved();
+            let (actions, cal_started) = st.inner.reset_flow(cube_solved, &mut || js_sys::Math::random());
+            if cal_started {
+                st.debug_home_logged = false;
             }
-            action
+            if actions.is_empty() {
+                String::new()
+            } else {
+                actions.into_iter().last().unwrap()
+            }
         })
     })
 }
@@ -1550,26 +1144,13 @@ pub fn cm_generate_new_scramble() -> String {
                 debug!("[flow] cm_generate_new_scramble: WCA session full, skipping");
                 return String::new();
             }
-            let scramble = generate_scramble();
             debug!("[flow] cm_generate_new_scramble called");
-            debug!("[calibration] started (new scramble generated)");
-            st.inner.calibrator.start();
-            st.inner.session.start_scramble(&scramble);
-
-            let now = js_sys::Date::now() / 1000.0;
-            st.telemetry = Some(SolveTelemetry {
-                scramble: scramble.clone(),
-                scramble_gyro: Vec::new(),
-                solve_gyro: Vec::new(),
-                solve_moves: Vec::new(),
-                scramble_start_t: now,
-                solve_start_t: 0.0,
-                solve_end_t: 0.0,
-            });
-            st.telemetry_recording = true;
-            st.telemetry_phase = 1;
-
-            scramble
+            let (_actions, cal_started) = st.inner.generate_new_scramble(&mut || js_sys::Math::random());
+            if cal_started {
+                st.debug_home_logged = false;
+            }
+            // Return the scramble string from the session
+            st.inner.session.get_pending_scramble().unwrap_or("").to_string()
         })
     })
 }
@@ -1694,7 +1275,7 @@ pub fn cm_drain_solve_telemetry() -> String {
     APP_STATE.with(|s| {
         let mut state = s.borrow_mut();
         match state.as_mut() {
-            Some(st) => match st.telemetry.take() {
+            Some(st) => match st.inner.telemetry.take() {
                 Some(t) => serde_json::to_string(&t).unwrap_or_else(|_| "null".into()),
                 None => "null".into(),
             },

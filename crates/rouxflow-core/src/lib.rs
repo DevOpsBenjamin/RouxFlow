@@ -5,6 +5,7 @@ pub mod gyro_calibrator;
 pub mod gyro_snap;
 pub mod integrity;
 pub mod move_interpreter;
+pub mod scramble;
 pub mod session;
 pub mod stats;
 pub mod storage;

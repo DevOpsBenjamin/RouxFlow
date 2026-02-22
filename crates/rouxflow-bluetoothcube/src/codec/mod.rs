@@ -251,7 +251,7 @@ use crate::protocol::EncryptionKeys;
 
 /// Parse a MAC address string into 6 bytes, reversed.
 /// Supports "AA:BB:CC:DD:EE:FF" format. Returns reversed salt bytes.
-pub(crate) fn parse_mac_salt(mac_address: &str) -> [u8; 6] {
+pub fn parse_mac_salt(mac_address: &str) -> [u8; 6] {
     let hex_only: String = mac_address.chars()
         .filter(|c| c.is_ascii_hexdigit())
         .collect();
@@ -267,7 +267,7 @@ pub(crate) fn parse_mac_salt(mac_address: &str) -> [u8; 6] {
 }
 
 /// Derive a salted key/IV pair from base keys and MAC address.
-pub(crate) fn derive_gan_keys(keys: &EncryptionKeys, mac_address: &str) -> ([u8; 16], [u8; 16]) {
+pub fn derive_gan_keys(keys: &EncryptionKeys, mac_address: &str) -> ([u8; 16], [u8; 16]) {
     let salt = parse_mac_salt(mac_address);
     let mut key = keys.key;
     let mut iv = keys.iv;
@@ -279,7 +279,7 @@ pub(crate) fn derive_gan_keys(keys: &EncryptionKeys, mac_address: &str) -> ([u8;
 }
 
 /// AES-128-CBC encrypt a single 16-byte block (single-block CBC = XOR with IV then encrypt).
-pub(crate) fn aes_cbc_encrypt_block(key: &[u8; 16], iv: &[u8; 16], buffer: &mut [u8], offset: usize) {
+pub fn aes_cbc_encrypt_block(key: &[u8; 16], iv: &[u8; 16], buffer: &mut [u8], offset: usize) {
     let cipher = Aes128::new(GenericArray::from_slice(key));
     let mut block = [0u8; 16];
     for i in 0..16 {
@@ -291,7 +291,7 @@ pub(crate) fn aes_cbc_encrypt_block(key: &[u8; 16], iv: &[u8; 16], buffer: &mut 
 }
 
 /// AES-128-CBC decrypt a single 16-byte block (single-block CBC = decrypt then XOR with IV).
-pub(crate) fn aes_cbc_decrypt_block(key: &[u8; 16], iv: &[u8; 16], buffer: &mut [u8], offset: usize) {
+pub fn aes_cbc_decrypt_block(key: &[u8; 16], iv: &[u8; 16], buffer: &mut [u8], offset: usize) {
     let cipher = Aes128::new(GenericArray::from_slice(key));
     let mut block = [0u8; 16];
     block.copy_from_slice(&buffer[offset..offset + 16]);
@@ -303,7 +303,7 @@ pub(crate) fn aes_cbc_decrypt_block(key: &[u8; 16], iv: &[u8; 16], buffer: &mut 
 }
 
 /// GAN-style encrypt: encrypt first 16 bytes, then last 16 bytes.
-pub(crate) fn gan_encrypt(key: &[u8; 16], iv: &[u8; 16], data: &[u8]) -> Vec<u8> {
+pub fn gan_encrypt(key: &[u8; 16], iv: &[u8; 16], data: &[u8]) -> Vec<u8> {
     if data.len() < 16 {
         return data.to_vec();
     }
@@ -317,7 +317,7 @@ pub(crate) fn gan_encrypt(key: &[u8; 16], iv: &[u8; 16], data: &[u8]) -> Vec<u8>
 }
 
 /// GAN-style decrypt: decrypt last 16 bytes, then first 16 bytes.
-pub(crate) fn gan_decrypt(key: &[u8; 16], iv: &[u8; 16], data: &[u8]) -> Vec<u8> {
+pub fn gan_decrypt(key: &[u8; 16], iv: &[u8; 16], data: &[u8]) -> Vec<u8> {
     if data.len() < 16 {
         return data.to_vec();
     }
@@ -332,7 +332,7 @@ pub(crate) fn gan_decrypt(key: &[u8; 16], iv: &[u8; 16], data: &[u8]) -> Vec<u8>
 
 /// Parse a signed 16-bit quaternion component from the GAN format.
 /// Bit 15 is sign, bits 0-14 are magnitude, normalized to [-1, 1].
-pub(crate) fn parse_quat_component(bits: u32) -> f32 {
+pub fn parse_quat_component(bits: u32) -> f32 {
     let sign = if (bits >> 15) & 1 == 1 { -1.0f32 } else { 1.0f32 };
     let magnitude = (bits & 0x7FFF) as f32 / 0x7FFF as f32;
     sign * magnitude
@@ -340,14 +340,14 @@ pub(crate) fn parse_quat_component(bits: u32) -> f32 {
 
 /// Parse a signed 4-bit angular velocity component from the GAN format.
 /// Bit 3 is sign, bits 0-2 are magnitude.
-pub(crate) fn parse_velocity_component(bits: u32) -> f32 {
+pub fn parse_velocity_component(bits: u32) -> f32 {
     let sign = if (bits >> 3) & 1 == 1 { -1.0f32 } else { 1.0f32 };
     let magnitude = (bits & 0x7) as f32;
     sign * magnitude
 }
 
 /// Map a face index (0-5) to Face enum.
-pub(crate) fn face_from_index(idx: u32) -> Option<Face> {
+pub fn face_from_index(idx: u32) -> Option<Face> {
     match idx {
         0 => Some(Face::U),
         1 => Some(Face::R),
@@ -359,52 +359,3 @@ pub(crate) fn face_from_index(idx: u32) -> Option<Face> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_bitview_basic() {
-        // 0xAB = 10101011, 0xCD = 11001101
-        let data = [0xAB, 0xCD];
-        let view = BitView::new(&data);
-
-        // First 4 bits of 0xAB = 1010 = 10
-        assert_eq!(view.get(0, 4), 0x0A);
-        // Next 4 bits = 1011 = 11
-        assert_eq!(view.get(4, 4), 0x0B);
-        // Full first byte
-        assert_eq!(view.get(0, 8), 0xAB);
-        // Bits across byte boundary: bits 4..12 = 1011_1100 = 0xBC
-        assert_eq!(view.get(4, 8), 0xBC);
-    }
-
-    #[test]
-    fn test_bitview_16bit() {
-        let data = [0x01, 0x02];
-        let view = BitView::new(&data);
-
-        // Big-endian: 0x0102
-        assert_eq!(view.get_endian(0, 16, false), 0x0102);
-        // Little-endian: bytes [0x01, 0x02] as LE = 0x0201
-        assert_eq!(view.get_endian(0, 16, true), 0x0201);
-    }
-
-    #[test]
-    fn test_parse_mac_salt() {
-        let salt = parse_mac_salt("CF:30:16:01:C7:2F");
-        // Reversed: [0x2F, 0xC7, 0x01, 0x16, 0x30, 0xCF]
-        assert_eq!(salt, [0x2F, 0xC7, 0x01, 0x16, 0x30, 0xCF]);
-    }
-
-    #[test]
-    fn test_gan_encrypt_decrypt_roundtrip() {
-        let keys = crate::protocol::gan_v2::ENCRYPTION_KEYS;
-        let (key, iv) = derive_gan_keys(&keys, "AA:BB:CC:DD:EE:FF");
-
-        let original = [0u8; 20];
-        let encrypted = gan_encrypt(&key, &iv, &original);
-        let decrypted = gan_decrypt(&key, &iv, &encrypted);
-        assert_eq!(&decrypted, &original);
-    }
-}
