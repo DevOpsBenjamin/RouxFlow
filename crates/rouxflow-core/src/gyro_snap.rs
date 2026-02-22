@@ -190,4 +190,30 @@ impl AbsoluteStateTracker {
             None
         }
     }
+
+    /// Computes the relative orientation of the shell (what the user actually sees)
+    /// compared to the original home position.
+    /// Formula: q_rel_shell = conjugate(home) * q_current
+    pub fn compute_rel_shell(home: &Quaternion, q_current: &Quaternion) -> Quaternion {
+        let conj = Quaternion {
+            x: -home.x,
+            y: -home.y,
+            z: -home.z,
+            w: home.w,
+        };
+
+        Quaternion {
+            w: conj.w * q_current.w
+                - conj.x * q_current.x
+                - conj.y * q_current.y
+                - conj.z * q_current.z,
+            x: conj.w * q_current.x + conj.x * q_current.w + conj.y * q_current.z
+                - conj.z * q_current.y,
+            y: conj.w * q_current.y - conj.x * q_current.z
+                + conj.y * q_current.w
+                + conj.z * q_current.x,
+            z: conj.w * q_current.z + conj.x * q_current.y - conj.y * q_current.x
+                + conj.z * q_current.w,
+        }
+    }
 }

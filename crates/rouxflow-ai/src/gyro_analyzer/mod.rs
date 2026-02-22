@@ -223,7 +223,11 @@ pub fn analyze_solve(
 
     let (pc0, nc0) = window_ctx(0);
     // Initial state before move 1 could be recorded here if desired
-    let initial_raw = window_effective_orient(&window_runs[0], pc0.as_deref(), nc0.as_deref());
+    let initial_run = window_effective_run(&window_runs[0], pc0.as_deref(), nc0.as_deref());
+    let initial_raw = initial_run
+        .map(|r| r.label.clone())
+        .unwrap_or_else(|| "?/?".to_string());
+    let initial_q = initial_run.map(|r| r.q_raw);
 
     // Track centers for compensated orientation in Pass 2
     let mut centers_orient = home_orient;
@@ -239,6 +243,8 @@ pub fn analyze_solve(
         debug_runs0.push(rouxflow_core::telemetry::DebugGyroRun {
             t: run.t_start - solve_start,
             label,
+            q_raw: Some(run.q_raw),
+            q_raws: run.q_raws.clone(),
         });
     }
 
@@ -249,6 +255,8 @@ pub fn analyze_solve(
             active_gyro_window: initial_raw, // Initial doesn't have center shifts yet
             gyro_runs: debug_runs0,
             cube_state: cube_body.to_html_string(),
+            q_raw: initial_q,
+            q_home: Some(home),
         });
     }
 
@@ -361,7 +369,11 @@ pub fn analyze_solve(
 
         let w = idx + 1;
         let (pc, nc) = window_ctx(w);
-        let raw_eff = window_effective_orient(&window_runs[w], pc.as_deref(), nc.as_deref());
+        let effect_run = window_effective_run(&window_runs[w], pc.as_deref(), nc.as_deref());
+        let raw_eff = effect_run
+            .map(|r| r.label.clone())
+            .unwrap_or_else(|| "?/?".to_string());
+        let raw_q = effect_run.map(|r| r.q_raw);
 
         // Compensate the debug display so it shows PERSPECTIVAL orientation
         let eff = if let Some(shell) = parse_orient_label(&raw_eff) {
@@ -383,6 +395,8 @@ pub fn analyze_solve(
             debug_runs.push(rouxflow_core::telemetry::DebugGyroRun {
                 t: run.t_start - solve_start,
                 label,
+                q_raw: Some(run.q_raw),
+                q_raws: run.q_raws.clone(),
             });
         }
 
@@ -393,6 +407,8 @@ pub fn analyze_solve(
                 active_gyro_window: eff,
                 gyro_runs: debug_runs,
                 cube_state: cube_body.to_html_string(),
+                q_raw: raw_q,
+                q_home: Some(home),
             });
         }
     }

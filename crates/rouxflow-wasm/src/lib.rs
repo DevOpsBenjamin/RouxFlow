@@ -1046,14 +1046,14 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
 
         // Consume pending zone rotations if a standalone gyro rotation was emitted
         if interpreted.iter().any(|m| m.kind == rouxflow_core::move_interpreter::MoveKind::Rotation) {
-            st.inner.calibrator.consume_zone_rotations();
+            // Deprecated: zone tracking removed
         }
 
         // Zone tracking: runs AFTER dispatch so compensate_slice has been applied.
         // This ensures zones see the correct core_offset (no one-packet lag).
-        if let Some(ref gq) = latest_gyro_q {
+        if let Some(ref _gq) = latest_gyro_q {
             if !st.inner.calibrator.is_active() && st.inner.calibrator.home().is_some() {
-                let _zone_logs = st.inner.calibrator.track_orientation(gq);
+                // Deprecated: zone tracking removed
             }
         }
 
@@ -1119,16 +1119,64 @@ pub fn cm_get_orientation() -> String {
             || "[0,0,0,1]".to_string(),
             |st| {
                 if let Some(q) = st.cube_logic.orientation {
-                    // Return shell orientation (compensated for slice-induced core rotation)
-                    // so the renderer shows the user's actual cube shell position.
-                    let shell = st.inner.calibrator.compute_shell_quaternion(&q);
-                    format!("[{},{},{},{}]", shell.x, shell.y, shell.z, shell.w)
+                    format!("[{},{},{},{}]", q.x, q.y, q.z, q.w)
                 } else {
                     "[0,0,0,1]".to_string()
                 }
             },
         )
     })
+}
+
+#[wasm_bindgen]
+pub fn cm_get_orientation_debug() -> String {
+    APP_STATE.with(|s| {
+        s.borrow().as_ref().map_or_else(
+            || r#"{"raw":[0,0,0,1],"home":null,"shell":[0,0,0,1]}"#.to_string(),
+            |st| {
+                if let Some(q) = st.cube_logic.orientation {
+                    let home_str = st.inner.calibrator.home().map_or("null".to_string(), |h| format!("[{},{},{},{}]", h.x, h.y, h.z, h.w));
+                    let mut pos_str = "\"Unknown\"".to_string();
+                    let mut shell_str = format!("[{},{},{},{}]", q.x, q.y, q.z, q.w);
+                    
+                    if let Some(h) = st.inner.calibrator.home() {
+                        let q_rel_shell = rouxflow_core::gyro_snap::AbsoluteStateTracker::compute_rel_shell(h, &q);
+                        shell_str = format!("[{},{},{},{}]", q_rel_shell.x, q_rel_shell.y, q_rel_shell.z, q_rel_shell.w);
+                        
+                        if let Some((_idx, cp)) = rouxflow_core::gyro_snap::AbsoluteStateTracker::get_nearest_posture(&q_rel_shell) {
+                            pos_str = format!(r#"{{ "top": "{:?}", "front": "{:?}" }}"#, cp.top, cp.front);
+                        }
+                    }
+
+                    format!(
+                        r#"{{"raw":[{},{},{},{}],"home":{},"shell":{},"posture":{}}}"#,
+                        q.x, q.y, q.z, q.w, home_str, shell_str, pos_str
+                    )
+                } else {
+                    r#"{"raw":[0,0,0,1],"home":null,"shell":[0,0,0,1],"posture":"Unknown"}"#.to_string()
+                }
+            },
+        )
+    })
+}
+
+#[wasm_bindgen]
+pub fn cm_force_home() {
+    APP_STATE.with(|s| {
+        if let Some(st) = s.borrow_mut().as_mut() {
+            if let Some(q) = st.cube_logic.orientation {
+                st.inner.calibrator.start();
+                for _ in 0..15 {
+                    st.inner.calibrator.feed(&q);
+                }
+                if let Some(_) = st.inner.calibrator.finalize() {
+                    if let Some((ox, oy, oz, ow)) = st.inner.calibrator.compute_render_offset() {
+                        rouxflow_render::set_gyro_offset(ox, oy, oz, ow);
+                    }
+                }
+            }
+        }
+    });
 }
 
 #[wasm_bindgen]

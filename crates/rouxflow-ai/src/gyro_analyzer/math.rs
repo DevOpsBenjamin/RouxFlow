@@ -408,6 +408,8 @@ pub struct GyroRun {
     pub label: String,
     pub count: usize,
     pub t_start: f64, // timestamp of first sample in this run
+    pub q_raw: [f32; 4],
+    pub q_raws: Vec<[f32; 4]>,
 }
 
 /// Collect consecutive runs of same-orientation samples in a time window.
@@ -430,6 +432,7 @@ pub fn collect_orient_runs(
         if let Some(last) = runs.last_mut() {
             if last.label == label {
                 last.count += 1;
+                last.q_raws.push(q);
                 continue;
             }
         }
@@ -437,6 +440,8 @@ pub fn collect_orient_runs(
             label,
             count: 1,
             t_start: s.t,
+            q_raw: q,
+            q_raws: vec![q],
         });
     }
     runs
@@ -481,20 +486,26 @@ pub fn window_boundary_labels(runs: &[GyroRun]) -> (Option<String>, Option<Strin
     (first, last)
 }
 
+pub fn window_effective_run<'a>(
+    runs: &'a [GyroRun],
+    prev_ctx: Option<&str>,
+    next_ctx: Option<&str>,
+) -> Option<&'a GyroRun> {
+    for i in 0..runs.len() {
+        if !is_noise(runs, i, 1, prev_ctx, next_ctx) {
+            return Some(&runs[i]);
+        }
+    }
+    runs.first()
+}
+
 /// Get the effective orientation of a window (ignoring noise runs, using last stable run).
 pub fn window_effective_orient(
     runs: &[GyroRun],
     prev_ctx: Option<&str>,
     next_ctx: Option<&str>,
 ) -> String {
-    // Walk forward to find first non-noise run
-    for i in 0..runs.len() {
-        if !is_noise(runs, i, 1, prev_ctx, next_ctx) {
-            return runs[i].label.clone();
-        }
-    }
-    // Fallback: first run
-    runs.first()
+    window_effective_run(runs, prev_ctx, next_ctx)
         .map(|r| r.label.clone())
         .unwrap_or_else(|| "?/?".to_string())
 }

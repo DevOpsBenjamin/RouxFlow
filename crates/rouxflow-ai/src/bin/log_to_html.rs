@@ -10,6 +10,8 @@ struct TimelineRow {
     pass2_state: Option<String>,
     pass2_gyro_eff: Option<String>,
     pass2_gyro_runs: Vec<String>,
+    pass2_q_raw: Option<[f32; 4]>,
+    pass2_q_home: Option<[f32; 4]>,
     pass3_rot: Vec<String>,
     pass4_move: Option<(String, bool)>, // label, is_rot
     pass4_state: Option<String>,
@@ -32,11 +34,43 @@ fn generate_html(trace: &DebugTrace, title: &str) -> String {
         let row = timeline.entry(ms).or_default();
         row.pass2_state = Some(p2.cube_state.clone());
         row.pass2_gyro_eff = Some(p2.active_gyro_window.clone());
+        row.pass2_q_raw = p2.q_raw;
+        row.pass2_q_home = p2.q_home;
 
         for run in &p2.gyro_runs {
             let run_ms = (run.t * 1000.0) as i64;
             let run_row = timeline.entry(run_ms).or_default();
-            run_row.pass2_gyro_runs.push(run.label.clone());
+
+            let mut html_str = run.label.clone();
+            html_str.push_str(
+                "<div style='margin-left:8px; border-left:1px solid #555; padding-left:4px'>",
+            );
+            for (idx, q_raw) in run.q_raws.iter().enumerate() {
+                if let Some(q_home) = p2.q_home {
+                    let grav =
+                        rouxflow_ai::gyro_analyzer::math::quat_rotate_vec(q_raw, &[0.0, 0.0, -1.0]);
+                    let rel = rouxflow_ai::gyro_analyzer::math::relative_quaternion(&q_home, q_raw);
+                    let prefix = if run.q_raws.len() > 1 {
+                        format!("[{}] ", idx + 1)
+                    } else {
+                        String::from("")
+                    };
+                    html_str.push_str(&format!(
+                        "<div style='margin-top:4px;'><span style='color:#bbb; font-size:0.85em'>{}q_raw:  [{:6.3}, {:6.3}, {:6.3}, {:6.3}]</span><br>",
+                        prefix, q_raw[0], q_raw[1], q_raw[2], q_raw[3]
+                    ));
+                    html_str.push_str(&format!(
+                        "<span style='color:#9bb; font-size:0.85em'>{}q_rel:  [{:6.3}, {:6.3}, {:6.3}, {:6.3}]</span><br>",
+                        prefix, rel[0], rel[1], rel[2], rel[3]
+                    ));
+                    html_str.push_str(&format!(
+                        "<span style='color:#7b7; font-size:0.85em'>{}grav_z: [{:6.3}, {:6.3}, {:6.3}]</span></div>",
+                        prefix, grav[0], grav[1], grav[2]
+                    ));
+                }
+            }
+            html_str.push_str("</div>");
+            run_row.pass2_gyro_runs.push(html_str);
         }
     }
 
@@ -163,6 +197,22 @@ fn generate_html(trace: &DebugTrace, title: &str) -> String {
                 g
             ));
         }
+        if let (Some(q_raw), Some(q_home)) = (row.pass2_q_raw, row.pass2_q_home) {
+            let grav = rouxflow_ai::gyro_analyzer::math::quat_rotate_vec(&q_raw, &[0.0, 0.0, -1.0]);
+            html.push_str(&format!(
+                "<div class='gyro-run' style='color:#bbb; font-size:0.85em'>q_raw:  [{:6.3}, {:6.3}, {:6.3}, {:6.3}]</div>",
+                q_raw[0], q_raw[1], q_raw[2], q_raw[3]
+            ));
+            let rel = rouxflow_ai::gyro_analyzer::math::relative_quaternion(&q_home, &q_raw);
+            html.push_str(&format!(
+                "<div class='gyro-run' style='color:#9bb; font-size:0.85em'>q_rel:  [{:6.3}, {:6.3}, {:6.3}, {:6.3}]</div>",
+                rel[0], rel[1], rel[2], rel[3]
+            ));
+            html.push_str(&format!(
+                "<div class='gyro-run' style='color:#7b7; font-size:0.85em'>grav_z: [{:6.3}, {:6.3}, {:6.3}]</div>",
+                grav[0], grav[1], grav[2]
+            ));
+        }
         html.push_str("</td>\n");
 
         // Pass 2: State
@@ -219,7 +269,7 @@ fn main() {
         let output_file = &args[2];
         process_file(input_file, output_file);
     } else {
-        for solve_id in &["1", "2"] {
+        for solve_id in &["1", "2", "3"] {
             let input_file = format!("solve{}_trace.json", solve_id);
             let output_file = format!("solve{}_debug.html", solve_id);
             process_file(&input_file, &output_file);

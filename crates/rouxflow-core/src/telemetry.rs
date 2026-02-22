@@ -167,6 +167,10 @@ pub struct DebugPass1Move {
 pub struct DebugGyroRun {
     pub t: f64,
     pub label: String,
+    #[serde(default)]
+    pub q_raw: Option<[f32; 4]>,
+    #[serde(default)]
+    pub q_raws: Vec<[f32; 4]>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -176,6 +180,10 @@ pub struct DebugPass2State {
     pub active_gyro_window: String,
     pub gyro_runs: Vec<DebugGyroRun>,
     pub cube_state: String,
+    #[serde(default)]
+    pub q_raw: Option<[f32; 4]>,
+    #[serde(default)]
+    pub q_home: Option<[f32; 4]>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
