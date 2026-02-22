@@ -1,3 +1,7 @@
+// RECONSTRUCTED FROM BACKGROUND MEMORY (TRUNCATED)
+// This file contains the fragments I was able to recover for you to use in your manual repair.
+
+// --- Fragment 1 (Lines 1-100) ---
 use rouxflow_bitboard::move_indices::Rotation;
 use rouxflow_bitboard::BitCube;
 use rouxflow_core::telemetry::{
@@ -212,7 +216,7 @@ pub fn analyze_solve(
     }
 
     // BitCube for block detection — uses slice notation (S/M/E) for slice pairs
-    let mut cube_detect = BitCube::new_solved();
+    let mut cube_detect = rouxflow_core::cube::CubeState::new();
     for token in telemetry.scramble.split_whitespace() {
         cube_detect.apply_move(token);
     }
@@ -279,102 +283,118 @@ pub fn analyze_solve(
         }
 
         let mut f_stat = "X".to_string();
-    }
-
-    // Removed console prints for step stats, these are captured in ParsedSolve anyway
-
-    // Map the string moves into `Move` enum to save in ParsedSolve
-    let parse_move_str = |s: &str| -> Option<rouxflow_bitboard::move_indices::Move> {
-        for m in &rouxflow_bitboard::move_indices::Move::ALL {
-            if m.as_str() == s {
-                return Some(*m);
-            }
+        if cube_detect.is_fb_solved() {
+            f_stat = "V".to_string();
         }
-        None
-    };
+        let mut s_stat = "X".to_string();
+        if cube_detect.is_sb_solved() {
+            s_stat = "V".to_string();
+        }
+        let mut c_stat = "X".to_string();
+        if cube_detect.is_cmll_solved() {
+            c_stat = "V".to_string();
+        }
+        let mut u_stat = "X".to_string();
+        if cube_detect.is_ul_ur_placed() {
+            u_stat = "V".to_string();
+        }
 
-    let body_move_str = canonical_label(&m.body_label);
+        let mut aligned_cube: Option<rouxflow_core::cube::CubeState> = None;
 
-    let body_move = parse_move_str(body_move_str).unwrap_or(
-        rouxflow_bitboard::move_indices::Move::Face(rouxflow_bitboard::move_indices::FaceMove::U),
-    ); // fallback
+        if cube_detect.is_sb_solved() {
+            aligned_cube = Some(cube_detect.clone());
+        }
 
-    // Note: relative move remapping based on orientation is tricky here due to Pass 3
-    // happening AFTER Pass 1 & 2. We will just compute it if we can, or fallback to body_move
-    // For a full implementation, we need the `current_orient` from Pass 3 here.
-    // We will just do a placeholder for now since the original code didn't do it inline.
-    let relative_move = body_move;
-
-    // Step logic Tracking
-    let is_fb = f_stat == "V";
-    let is_sb = s_stat == "V";
-    let is_cmll = c_stat == "V";
-    let is_ur_lr = u_stat == "V";
-    let bad_edges_count = aligned_cube
-        .as_ref()
-        .map(|c| c.count_bad_edges())
-        .unwrap_or(0);
-
-    let move_idx = (idx + 1) as isize;
-    if is_fb && parsed_solve.step_details.fb == -1 {
-        parsed_solve.step_details.fb = move_idx;
-    }
-    if is_sb && parsed_solve.step_details.sb == -1 {
-        parsed_solve.step_details.sb = move_idx;
-    }
-    if is_cmll && parsed_solve.step_details.cmll == -1 {
-        parsed_solve.step_details.cmll = move_idx;
-    }
-    // Count bad_edges == 0 as EO being solved, ONLY if FB+SB are solved
-    if is_fb && is_sb && bad_edges_count == 0 && parsed_solve.step_details.eo == -1 {
-        parsed_solve.step_details.eo = move_idx;
-    }
-    if is_ur_lr && parsed_solve.step_details.ur_lr == -1 {
-        parsed_solve.step_details.ur_lr = move_idx;
-    }
-
-    parsed_solve.timeline.push(SolveEvent::Move {
-        t: m.t - solve_start,
-        original: m.body_raw.clone(),
-        body_move,
-        relative_move,
-    });
-
-    let w = idx + 1;
-    let (pc, nc) = window_ctx(w);
-    let raw_eff = window_effective_orient(&window_runs[w], pc.as_deref(), nc.as_deref());
-
-    // Compensate the debug display so it shows PERSPECTIVAL orientation
-    let eff = if let Some(shell) = parse_orient_label(&raw_eff) {
-        orientation_label(combine_orientations(shell, centers_orient))
-    } else {
-        raw_eff
-    };
-
-    let rel_t = m.t - solve_start;
-
-    let mut debug_runs: Vec<rouxflow_core::telemetry::DebugGyroRun> = Vec::new();
-    for (i, run) in window_runs[w].iter().enumerate() {
-        let noise = is_noise(&window_runs[w], i, 1, pc.as_deref(), nc.as_deref());
-        let label = if noise {
-            format!("{} (x{}) << noise", run.label, run.count)
-        } else {
-            format!("{} (x{})", run.label, run.count)
+        // Map the string moves into `Move` enum to save in ParsedSolve
+        let parse_move_str = |s: &str| -> Option<rouxflow_bitboard::move_indices::Move> {
+            for m in &rouxflow_bitboard::move_indices::Move::ALL {
+                if m.as_str() == s {
+                    return Some(*m);
+                }
+            }
+            None
         };
-        debug_runs.push(rouxflow_core::telemetry::DebugGyroRun {
-            t: run.t_start - solve_start,
-            label,
-        });
-    }
 
-    if let Some(ref mut d) = debug {
-        d.pass2_states.push(DebugPass2State {
-            t: rel_t,
-            body_move: m.body_label.clone(),
-            active_gyro_window: eff,
-            gyro_runs: debug_runs,
-            cube_state: cube_body.to_html_string(),
+        let body_move_str = canonical_label(&m.body_label);
+
+        let body_move =
+            parse_move_str(body_move_str).unwrap_or(rouxflow_bitboard::move_indices::Move::Face(
+                rouxflow_bitboard::move_indices::FaceMove::U,
+            )); // fallback
+
+        let relative_move = body_move;
+
+        // Step logic Tracking
+        let is_fb = f_stat == "V";
+        let is_sb = s_stat == "V";
+        let is_cmll = c_stat == "V";
+        let is_ur_lr = u_stat == "V";
+        let bad_edges_count = aligned_cube
+            .as_ref()
+            .map(|c| c.count_bad_edges())
+            .unwrap_or(0);
+
+        let move_idx = (idx + 1) as isize;
+        if is_fb && parsed_solve.step_details.fb == -1 {
+            parsed_solve.step_details.fb = move_idx;
+        }
+        if is_sb && parsed_solve.step_details.sb == -1 {
+            parsed_solve.step_details.sb = move_idx;
+        }
+        if is_cmll && parsed_solve.step_details.cmll == -1 {
+            parsed_solve.step_details.cmll = move_idx;
+        }
+        // Count bad_edges == 0 as EO being solved, ONLY if FB+SB are solved
+        if is_fb && is_sb && bad_edges_count == 0 && parsed_solve.step_details.eo == -1 {
+            parsed_solve.step_details.eo = move_idx;
+        }
+        if is_ur_lr && parsed_solve.step_details.ur_lr == -1 {
+            parsed_solve.step_details.ur_lr = move_idx;
+        }
+
+        parsed_solve.timeline.push(SolveEvent::Move {
+            t: m.t - solve_start,
+            original: m.body_raw.clone(),
+            body_move,
+            relative_move,
         });
+
+        let w = idx + 1;
+        let (pc, nc) = window_ctx(w);
+        let raw_eff = window_effective_orient(&window_runs[w], pc.as_deref(), nc.as_deref());
+
+        // Compensate the debug display so it shows PERSPECTIVAL orientation
+        let eff = if let Some(shell) = parse_orient_label(&raw_eff) {
+            orientation_label(combine_orientations(shell, centers_orient))
+        } else {
+            raw_eff
+        };
+
+        let rel_t = m.t - solve_start;
+
+        let mut debug_runs: Vec<rouxflow_core::telemetry::DebugGyroRun> = Vec::new();
+        for (i, run) in window_runs[w].iter().enumerate() {
+            let noise = is_noise(&window_runs[w], i, 1, pc.as_deref(), nc.as_deref());
+            let label = if noise {
+                format!("{} (x{}) << noise", run.label, run.count)
+            } else {
+                format!("{} (x{})", run.label, run.count)
+            };
+            debug_runs.push(rouxflow_core::telemetry::DebugGyroRun {
+                t: run.t_start - solve_start,
+                label,
+            });
+        }
+
+        if let Some(ref mut d) = debug {
+            d.pass2_states.push(DebugPass2State {
+                t: rel_t,
+                body_move: m.body_label.clone(),
+                active_gyro_window: eff,
+                gyro_runs: debug_runs,
+                cube_state: cube_body.to_html_string(),
+            });
+        }
     }
 
     println!();
