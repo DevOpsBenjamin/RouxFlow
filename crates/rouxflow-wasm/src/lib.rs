@@ -1281,7 +1281,22 @@ pub fn cm_start_scramble(scramble: &str) -> String {
             debug!("[flow] cm_start_scramble called");
             debug!("[calibration] started (cm_start_scramble)");
             st.inner.calibrator.start();
-            st.inner.session.start_scramble(scramble)
+            let action = st.inner.session.start_scramble(scramble);
+
+            let now = js_sys::Date::now() / 1000.0;
+            st.telemetry = Some(SolveTelemetry {
+                scramble: scramble.to_string(),
+                scramble_gyro: Vec::new(),
+                solve_gyro: Vec::new(),
+                solve_moves: Vec::new(),
+                scramble_start_t: now,
+                solve_start_t: 0.0,
+                solve_end_t: 0.0,
+            });
+            st.telemetry_recording = true;
+            st.telemetry_phase = 1;
+
+            action
         })
     })
 }
@@ -1388,6 +1403,20 @@ pub fn cm_reset_flow() -> String {
                 if !action2.is_empty() {
                     debug!("[calibration] started (reset_flow + solved)");
                     st.inner.calibrator.start();
+                    
+                    let now = js_sys::Date::now() / 1000.0;
+                    st.telemetry = Some(SolveTelemetry {
+                        scramble: scramble.clone(),
+                        scramble_gyro: Vec::new(),
+                        solve_gyro: Vec::new(),
+                        solve_moves: Vec::new(),
+                        scramble_start_t: now,
+                        solve_start_t: 0.0,
+                        solve_end_t: 0.0,
+                    });
+                    st.telemetry_recording = true;
+                    st.telemetry_phase = 1;
+
                     return action2;
                 }
             }
@@ -1478,6 +1507,20 @@ pub fn cm_generate_new_scramble() -> String {
             debug!("[calibration] started (new scramble generated)");
             st.inner.calibrator.start();
             st.inner.session.start_scramble(&scramble);
+
+            let now = js_sys::Date::now() / 1000.0;
+            st.telemetry = Some(SolveTelemetry {
+                scramble: scramble.clone(),
+                scramble_gyro: Vec::new(),
+                solve_gyro: Vec::new(),
+                solve_moves: Vec::new(),
+                scramble_start_t: now,
+                solve_start_t: 0.0,
+                solve_end_t: 0.0,
+            });
+            st.telemetry_recording = true;
+            st.telemetry_phase = 1;
+
             scramble
         })
     })

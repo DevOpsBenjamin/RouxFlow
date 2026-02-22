@@ -9,3 +9,8 @@ pub fn solve_2() -> SolveTelemetry {
     let json = include_str!("solve_2.json");
     serde_json::from_str(json).expect("Failed to parse solve_2.json")
 }
+
+pub fn solve_3() -> SolveTelemetry {
+    let json = include_str!("solve_3.json");
+    serde_json::from_str(json).expect("Failed to parse solve_3.json")
+}

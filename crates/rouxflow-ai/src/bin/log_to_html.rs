@@ -212,23 +212,34 @@ fn generate_html(trace: &DebugTrace, title: &str) -> String {
 }
 
 fn main() {
-    for solve_id in &["1", "2"] {
-        let input_file = format!("solve{}_trace.json", solve_id);
-        let output_file = format!("solve{}_debug.html", solve_id);
+    let args: Vec<String> = std::env::args().collect();
 
-        if let Ok(content) = fs::read_to_string(&input_file) {
-            match serde_json::from_str::<DebugTrace>(&content) {
-                Ok(trace) => {
-                    let html = generate_html(&trace, &format!("Solve {} Trace Analysis", solve_id));
-                    fs::write(&output_file, html).unwrap();
-                    println!("Generated {}", output_file);
-                }
-                Err(e) => {
-                    println!("Failed to parse {}: {}", input_file, e);
-                }
-            }
-        } else {
-            println!("Could not read {}", input_file);
+    if args.len() >= 3 {
+        let input_file = &args[1];
+        let output_file = &args[2];
+        process_file(input_file, output_file);
+    } else {
+        for solve_id in &["1", "2"] {
+            let input_file = format!("solve{}_trace.json", solve_id);
+            let output_file = format!("solve{}_debug.html", solve_id);
+            process_file(&input_file, &output_file);
         }
+    }
+}
+
+fn process_file(input_file: &str, output_file: &str) {
+    if let Ok(content) = fs::read_to_string(input_file) {
+        match serde_json::from_str::<DebugTrace>(&content) {
+            Ok(trace) => {
+                let html = generate_html(&trace, &format!("Trace Analysis: {}", input_file));
+                fs::write(output_file, html).unwrap();
+                println!("Generated {}", output_file);
+            }
+            Err(e) => {
+                println!("Failed to parse {}: {}", input_file, e);
+            }
+        }
+    } else {
+        println!("Could not read {}", input_file);
     }
 }
