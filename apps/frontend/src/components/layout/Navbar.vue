@@ -81,13 +81,6 @@ onMounted(() => {
         Cube Manager
       </button>
       <button
-        @click="router.push({ name: 'TimingTest' })"
-        class="hover:text-white transition-colors"
-        :class="{ 'text-indigo-400': $route.name === 'TimingTest' }"
-      >
-        Timing Test
-      </button>
-      <button
         @click="router.push({ name: 'GyroDebug' })"
         class="hover:text-white transition-colors"
         :class="{ 'text-indigo-400': $route.name === 'GyroDebug' }"

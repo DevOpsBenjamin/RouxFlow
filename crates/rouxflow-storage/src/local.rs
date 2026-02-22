@@ -9,7 +9,7 @@ use rexie::{Rexie, ObjectStore, TransactionMode};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::JsValue;
 
-use rouxflow_core::session::{PickupMode, Session, SessionType, Solve};
+use rouxflow_core::session::{Session, SessionType, Solve};
 use rouxflow_core::storage::{Cube, Storage, StorageError};
 
 const DB_NAME: &str = "rouxflow";
@@ -38,10 +38,6 @@ struct SolveRecord {
     deleted_at: Option<i64>,
     #[serde(default)]
     integrity: Option<String>,
-    #[serde(default)]
-    reaction_ms: Option<u32>,
-    #[serde(default)]
-    putdown_delay_ms: Option<u32>,
 }
 
 // Intermediate struct for serializing sessions to IndexedDB
@@ -53,8 +49,6 @@ struct SessionRecord {
     first_solve_at: Option<i64>,
     #[serde(default)]
     user_id: Option<String>,
-    #[serde(default)]
-    pickup_mode: Option<String>,
 }
 
 impl LocalStorage {
@@ -178,8 +172,6 @@ impl Storage for LocalStorage {
                     penalty: record.penalty,
                     deleted_at: record.deleted_at,
                     integrity: record.integrity,
-                    reaction_ms: record.reaction_ms,
-                    putdown_delay_ms: record.putdown_delay_ms,
                 };
                 solve_map.entry(record.session_id).or_default().push(solve);
             }
@@ -208,11 +200,6 @@ impl Storage for LocalStorage {
                     SessionType::Free
                 };
                 let solves = solve_map.remove(&record.id).unwrap_or_default();
-                let pickup_mode = match record.pickup_mode.as_deref() {
-                    Some("Gyro") => PickupMode::Gyro,
-                    Some("Fixed") => PickupMode::Fixed,
-                    _ => PickupMode::None,
-                };
                 sessions.push(Session {
                     id: record.id,
                     name: record.name,
@@ -220,7 +207,6 @@ impl Storage for LocalStorage {
                     solves,
                     first_solve_at: record.first_solve_at,
                     user_id: record.user_id,
-                    pickup_mode,
                 });
             }
         }
@@ -243,11 +229,6 @@ impl Storage for LocalStorage {
             },
             first_solve_at: session.first_solve_at,
             user_id: session.user_id.clone(),
-            pickup_mode: match session.pickup_mode {
-                PickupMode::None => None,
-                PickupMode::Fixed => Some("Fixed".to_string()),
-                PickupMode::Gyro => Some("Gyro".to_string()),
-            },
         };
 
         store.put(&to_js(&record)?, None).await
@@ -277,8 +258,6 @@ impl Storage for LocalStorage {
             penalty: solve.penalty.clone(),
             deleted_at: solve.deleted_at,
             integrity: solve.integrity.clone(),
-            reaction_ms: solve.reaction_ms,
-            putdown_delay_ms: solve.putdown_delay_ms,
         };
 
         store.put(&to_js(&record)?, None).await
@@ -316,8 +295,6 @@ impl Storage for LocalStorage {
                         penalty: record.penalty,
                         deleted_at: record.deleted_at,
                         integrity: record.integrity,
-                        reaction_ms: record.reaction_ms,
-                        putdown_delay_ms: record.putdown_delay_ms,
                     });
                 }
             }

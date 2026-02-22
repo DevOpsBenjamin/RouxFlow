@@ -8,9 +8,6 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use log::debug;
 use rouxflow_bluetoothcube::codec::{self, CubeCommand, CubeEvent, CubeProtocol};
-use rouxflow_core::cube::CubeMove;
-use rouxflow_core::session::CoreAction;
-
 // ========== INIT ==========
 
 #[wasm_bindgen(start)]
@@ -19,68 +16,14 @@ pub fn wasm_init() {
     console_log::init_with_level(log::Level::Debug).ok();
 }
 
-/// Process a CubeEvent through the session manager.
-fn handle_cube_event(
-    event: &CubeEvent,
-    session: &mut rouxflow_core::session::SessionManager,
-) -> String {
-    match event {
-        CubeEvent::Move { face, direction, .. } => {
-            let cube_move = CubeMove {
-                face: *face,
-                amount: *direction,
-            };
-            let notation = cube_move.notation();
-            let now = chrono::Utc::now().timestamp_millis() as f64 / 1000.0;
-
-            // Try scramble validation first
-            let action = session.handle_scramble_move(&notation, now);
-            if !action.is_empty() {
-                return action;
-            }
-
-            // If not in scramble phase, emit as a plain move
-            serde_json::to_string(&CoreAction::Move(notation)).unwrap_or_default()
-        }
-        CubeEvent::Gyro { quaternion, .. } => {
-            let now = chrono::Utc::now().timestamp_millis() as f64 / 1000.0;
-            session.process_orientation(quaternion.x, quaternion.y, quaternion.z, quaternion.w, now)
-        }
-        CubeEvent::Battery { level } => {
-            format!(r#"{{"type":"Battery","data":{}}}"#, level)
-        }
-        CubeEvent::Hardware { name, sw_version, hw_version, gyro_supported } => {
-            format!(
-                r#"{{"type":"Hardware","data":{{"name":"{}","swVersion":"{}","hwVersion":"{}","gyroSupported":{}}}}}"#,
-                name, sw_version, hw_version, gyro_supported
-            )
-        }
-        CubeEvent::Facelets { cp, co, ep, eo, .. } => {
-            format!(
-                r#"{{"type":"Facelets","data":{{"cp":{:?},"co":{:?},"ep":{:?},"eo":{:?}}}}}"#,
-                cp, co, ep, eo
-            )
-        }
-        CubeEvent::Disconnect => {
-            r#"{"type":"Disconnect"}"#.to_string()
-        }
-        CubeEvent::MoveHistory { moves } => {
-            let mut last_action = String::new();
-            for m in moves {
-                let action = handle_cube_event(m, session);
-                if !action.is_empty() {
-                    last_action = action;
-                }
-            }
-            last_action
-        }
-        CubeEvent::RawFacelets { facelet_string } => {
-            format!(r#"{{"type":"RawFacelets","data":"{}"}}"#, facelet_string)
-        }
-        CubeEvent::WriteBack { data } => {
-            let bytes: Vec<String> = data.iter().map(|b| b.to_string()).collect();
-            format!(r#"{{"type":"WriteBack","data":[{}]}}"#, bytes.join(","))
-        }
+/// Serialize a list of action JSON strings into a single response.
+fn format_actions(actions: &[String]) -> String {
+    if actions.is_empty() {
+        String::new()
+    } else if actions.len() == 1 {
+        actions[0].clone()
+    } else {
+        format!("[{}]", actions.join(","))
     }
 }
 
@@ -254,16 +197,6 @@ impl WasmStorageManager {
 struct WasmAppState {
     inner: rouxflow_core::AppState,
     protocol: Option<Box<dyn CubeProtocol>>,
-    /// Last decrypted gyro packet as hex string (for debug)
-    last_gyro_hex: String,
-    /// Last 500 gyro packet arrival timestamps (seconds) for interval analysis
-    gyro_timestamps: Vec<f64>,
-    /// Debug: last gyro quaternion (for move-gyro logging)
-    debug_last_gyro: Option<rouxflow_core::cube::Quaternion>,
-    /// Debug: moves waiting for their "after" gyro reading
-    debug_moves_pending_gyro: Vec<String>,
-    /// Debug: whether we've logged the home quaternion yet this solve
-    debug_home_logged: bool,
 }
 
 thread_local! {
@@ -295,11 +228,6 @@ pub fn cm_init() {
         *s.borrow_mut() = Some(WasmAppState {
             inner: rouxflow_core::AppState::new(),
             protocol: None,
-            last_gyro_hex: String::new(),
-            gyro_timestamps: Vec::with_capacity(500),
-            debug_last_gyro: None,
-            debug_moves_pending_gyro: Vec::new(),
-            debug_home_logged: false,
         });
     });
 }
@@ -433,7 +361,7 @@ pub async fn cm_load_active_session_solves() -> Result<(), JsValue> {
     Ok(())
 }
 
-/// Re-persist the active session to IndexedDB (after settings change like pickup_mode).
+/// Re-persist the active session to IndexedDB (after settings change).
 #[wasm_bindgen]
 pub async fn cm_save_active_session() -> Result<(), JsValue> {
     use rouxflow_core::storage::Storage;
@@ -567,8 +495,6 @@ pub fn cm_get_device_info() -> Option<String> {
 
 // ========== BLE Packet Processing ==========
 
-// ========== Scramble Generator ==========
-
 /// Process a raw BLE packet through the protocol handler and update state.
 /// Returns JSON array of CoreActions.
 #[wasm_bindgen]
@@ -576,87 +502,26 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
     enter_wasm("cm_process_ble_packet");
     let result = APP_STATE.with(|s| {
         let mut state = s.borrow_mut();
-        let st = match state.as_mut() {
-            Some(st) => st,
-            None => return String::new(),
-        };
-
-        let protocol = match st.protocol.as_mut() {
-            Some(p) => p,
-            None => return String::new(),
-        };
+        let st = match state.as_mut() { Some(st) => st, None => return String::new() };
+        let protocol = match st.protocol.as_mut() { Some(p) => p, None => return String::new() };
 
         let decrypted = protocol.decrypt(raw_data);
         let events = protocol.decode_event(&decrypted);
 
-        // Debug: store decrypted hex + record timestamp for interval analysis
-        if events.iter().any(|e| matches!(e, CubeEvent::Gyro { .. })) {
-            st.last_gyro_hex = decrypted.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
-            if st.gyro_timestamps.len() >= 500 {
-                st.gyro_timestamps.remove(0);
-            }
-            st.gyro_timestamps.push(timestamp);
-        }
-
         let wall_ms = timestamp * 1000.0;
         let mut actions: Vec<String> = Vec::new();
 
-        // ===== Feed phase: push events into interpreter =====
+        // Feed events into core
         for event in &events {
             match event {
                 CubeEvent::Move { face, direction, .. } => {
-                    let notation = CubeMove { face: *face, amount: *direction }.notation();
-                    if let Some(ref gq) = st.debug_last_gyro {
-                        debug!("[raw-move] {} | gyro=({:.4}, {:.4}, {:.4}, {:.4})",
-                            notation, gq.x, gq.y, gq.z, gq.w);
-                    } else {
-                        debug!("[raw-move] {} | no gyro yet", notation);
-                    }
                     st.inner.feed_ble_move(*face, *direction, timestamp, wall_ms);
                 }
                 CubeEvent::Gyro { quaternion, .. } => {
-                    let (action, putdown_actions, cal_started) = st.inner.feed_ble_gyro(
+                    st.inner.feed_ble_gyro(
                         quaternion.x, quaternion.y, quaternion.z, quaternion.w,
-                        timestamp, wall_ms, &mut || js_sys::Math::random(),
+                        timestamp, wall_ms,
                     );
-                    if !action.is_empty() {
-                        if action.contains("Pickup") {
-                            debug!("[gyro] pickup detected | last_gyro_raw={}", st.last_gyro_hex);
-                        } else if action.contains("Putdown") {
-                            let (putdown_t, last_pickup, solve_pickup, stable_since) =
-                                st.inner.session.debug_putdown_timing();
-                            let pickup_ref = solve_pickup.or(last_pickup).unwrap_or(0.0);
-                            let calc_time_ms = if pickup_ref > 0.0 { (putdown_t - pickup_ref) * 1000.0 } else { 0.0 };
-                            debug!(
-                                "[gyro] putdown detected | stable_since={:.3}s last_putdown={:.3}s pickup={:.3}s solve_pickup={:?} calc_time={:.0}ms now={:.3}s",
-                                stable_since, putdown_t, last_pickup.unwrap_or(0.0), solve_pickup, calc_time_ms, timestamp
-                            );
-                            let gyro_dbg = st.inner.session.drain_gyro_debug();
-                            if !gyro_dbg.is_empty() {
-                                let first_ts = gyro_dbg[0].0;
-                                let lines: Vec<String> = gyro_dbg.iter().map(|(ts, delta, dx, dy, dz, dw)| {
-                                    format!("+{:.0}ms d={:.10} | dx={:.7} dy={:.7} dz={:.7} dw={:.7}",
-                                        (ts - first_ts) * 1000.0, delta, dx, dy, dz, dw)
-                                }).collect();
-                                debug!("[gyro-debug] {} samples from solve→putdown:\n{}", lines.len(), lines.join("\n"));
-                            }
-                        }
-                        actions.push(action);
-                    }
-                    if cal_started { st.debug_home_logged = false; }
-                    actions.extend(putdown_actions);
-
-                    // Debug: log "after" gyro for pending moves
-                    let q = rouxflow_core::cube::Quaternion {
-                        x: quaternion.x, y: quaternion.y, z: quaternion.z, w: quaternion.w,
-                    };
-                    if !st.debug_moves_pending_gyro.is_empty() {
-                        for mv in st.debug_moves_pending_gyro.drain(..) {
-                            debug!("[move-gyro] {} AFTER  gyro=({:.4}, {:.4}, {:.4}, {:.4})",
-                                mv, q.x, q.y, q.z, q.w);
-                        }
-                    }
-                    st.debug_last_gyro = Some(q);
                 }
                 CubeEvent::Battery { level } => {
                     st.inner.bluetooth.update_battery(*level);
@@ -669,54 +534,38 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
                         name, sw_version, hw_version, gyro_supported
                     ));
                 }
+                CubeEvent::RawFacelets { facelet_string } => {
+                    st.inner.handle_raw_facelets(facelet_string);
+                    actions.push(format!(r#"{{"type":"RawFacelets","data":"{}"}}"#, facelet_string));
+                }
                 CubeEvent::Facelets { cp, co, ep, eo, .. } => {
                     actions.push(format!(
                         r#"{{"type":"Facelets","data":{{"cp":{:?},"co":{:?},"ep":{:?},"eo":{:?}}}}}"#,
                         cp, co, ep, eo
                     ));
                 }
-                CubeEvent::RawFacelets { facelet_string } => {
-                    st.inner.handle_raw_facelets(facelet_string);
-                    actions.push(format!(r#"{{"type":"RawFacelets","data":"{}"}}"#, facelet_string));
+                CubeEvent::Disconnect => {
+                    actions.push(r#"{"type":"Disconnect"}"#.to_string());
                 }
-                _ => {
-                    let action = handle_cube_event(event, &mut st.inner.session);
-                    if !action.is_empty() {
-                        actions.push(action);
+                CubeEvent::WriteBack { data } => {
+                    let bytes: Vec<String> = data.iter().map(|b| b.to_string()).collect();
+                    actions.push(format!(r#"{{"type":"WriteBack","data":[{}]}}"#, bytes.join(",")));
+                }
+                CubeEvent::MoveHistory { moves } => {
+                    for m in moves {
+                        if let CubeEvent::Move { face, direction, .. } = m {
+                            st.inner.feed_ble_move(*face, *direction, timestamp, wall_ms);
+                        }
                     }
                 }
             }
         }
 
-        // ===== Flush + Dispatch phase (core) =====
+        // Flush interpreter + dispatch interpreted moves (core)
         let dispatch = st.inner.flush_and_dispatch(timestamp, wall_ms, &mut || js_sys::Math::random());
-
-        // Debug logging for interpreted moves
-        for info in &dispatch.interpreted_info {
-            if info.remapped != info.notation {
-                debug!("[move] {} -> {} ({:?})", info.notation, info.remapped, info.kind);
-            } else {
-                debug!("[move] {} ({:?})", info.notation, info.kind);
-            }
-            if let Some(ref gq) = st.debug_last_gyro {
-                if !st.debug_home_logged {
-                    if let Some(home) = st.inner.calibrator.home() {
-                        debug!("[move-gyro] HOME gyro=({:.4}, {:.4}, {:.4}, {:.4})",
-                            home.x, home.y, home.z, home.w);
-                    }
-                    st.debug_home_logged = true;
-                }
-                debug!("[move-gyro] {} BEFORE gyro=({:.4}, {:.4}, {:.4}, {:.4}) | {:?}{}",
-                    info.notation, gq.x, gq.y, gq.z, gq.w, info.kind,
-                    if info.remapped != info.notation { format!(" -> {}", info.remapped) } else { String::new() });
-                st.debug_moves_pending_gyro.push(info.remapped.clone());
-            }
-        }
-
-        if dispatch.calibration_started { st.debug_home_logged = false; }
         actions.extend(dispatch.actions);
 
-        // Animate moves via renderer
+        // Renderer: animate face/slice moves + apply gyro offset
         for (notation, _kind) in &dispatch.animations {
             rouxflow_render::queue_move_anim(notation.clone(), 0.15);
         }
@@ -724,13 +573,7 @@ pub fn cm_process_ble_packet(raw_data: &[u8], timestamp: f64) -> String {
             rouxflow_render::set_gyro_offset(ox, oy, oz, ow);
         }
 
-        if actions.is_empty() {
-            String::new()
-        } else if actions.len() == 1 {
-            actions.into_iter().next().unwrap()
-        } else {
-            format!("[{}]", actions.join(","))
-        }
+        format_actions(&actions)
     });
     exit_wasm();
     result
@@ -887,19 +730,10 @@ pub fn cm_stop_timer(timestamp: f64) {
 #[wasm_bindgen]
 pub fn cm_update_timer(timestamp: f64) -> String {
     APP_STATE.with(|s| {
-        let mut state = s.borrow_mut();
-        let st = match state.as_mut() {
-            Some(st) => st,
-            None => return String::new(),
-        };
-        let actions = st.inner.update_timer(timestamp, &mut || js_sys::Math::random());
-        if actions.is_empty() {
-            String::new()
-        } else if actions.len() == 1 {
-            actions.into_iter().next().unwrap()
-        } else {
-            format!("[{}]", actions.join(","))
-        }
+        s.borrow_mut().as_mut().map_or_else(String::new, |st| {
+            let actions = st.inner.update_timer(timestamp, &mut || js_sys::Math::random());
+            format_actions(&actions)
+        })
     })
 }
 
@@ -955,9 +789,7 @@ pub fn cm_create_session(session_json: &str) {
 pub fn cm_start_scramble(scramble: &str) -> String {
     APP_STATE.with(|s| {
         s.borrow_mut().as_mut().map_or_else(String::new, |st| {
-            debug!("[flow] cm_start_scramble called");
             let now = js_sys::Date::now() / 1000.0;
-            st.debug_home_logged = false;
             st.inner.start_scramble_with(scramble, now)
         })
     })
@@ -1052,17 +884,9 @@ pub fn cm_is_cube_solved() -> bool {
 pub fn cm_reset_flow() -> String {
     APP_STATE.with(|s| {
         s.borrow_mut().as_mut().map_or_else(String::new, |st| {
-            debug!("[flow] cm_reset_flow called");
             let cube_solved = st.inner.cube_logic.is_solved();
-            let (actions, cal_started) = st.inner.reset_flow(cube_solved, &mut || js_sys::Math::random());
-            if cal_started {
-                st.debug_home_logged = false;
-            }
-            if actions.is_empty() {
-                String::new()
-            } else {
-                actions.into_iter().last().unwrap()
-            }
+            let (actions, _cal_started) = st.inner.reset_flow(cube_solved, &mut || js_sys::Math::random());
+            format_actions(&actions)
         })
     })
 }
@@ -1097,59 +921,14 @@ pub fn cm_get_inspection_duration() -> f64 {
     })
 }
 
-/// Get pickup mode of the active session: "None", "Fixed", or "Gyro".
-#[wasm_bindgen]
-pub fn cm_get_pickup_mode() -> String {
-    APP_STATE.with(|s| {
-        s.borrow().as_ref().map_or_else(
-            || "None".to_string(),
-            |st| match st.inner.session.get_pickup_mode() {
-                rouxflow_core::session::PickupMode::None => "None".to_string(),
-                rouxflow_core::session::PickupMode::Fixed => "Fixed".to_string(),
-                rouxflow_core::session::PickupMode::Gyro => "Gyro".to_string(),
-            },
-        )
-    })
-}
-
-/// Returns true if the cube is detected as stable (on table).
-#[wasm_bindgen]
-pub fn cm_is_cube_stable() -> bool {
-    APP_STATE.with(|s| {
-        s.borrow().as_ref().map_or(true, |st| st.inner.session.is_cube_stable())
-    })
-}
-
-/// Set pickup mode on the active session (Free mode only).
-/// Accepts "None", "Fixed", or "Gyro".
-#[wasm_bindgen]
-pub fn cm_set_pickup_mode(mode: &str) {
-    let pickup_mode = match mode {
-        "Fixed" => rouxflow_core::session::PickupMode::Fixed,
-        "Gyro" => rouxflow_core::session::PickupMode::Gyro,
-        _ => rouxflow_core::session::PickupMode::None,
-    };
-    APP_STATE.with(|s| {
-        if let Some(st) = s.borrow_mut().as_mut() {
-            st.inner.session.set_pickup_mode(pickup_mode);
-        }
-    })
-}
-
 #[wasm_bindgen]
 pub fn cm_generate_new_scramble() -> String {
     APP_STATE.with(|s| {
         s.borrow_mut().as_mut().map_or_else(String::new, |st| {
             if st.inner.session.is_wca_full() {
-                debug!("[flow] cm_generate_new_scramble: WCA session full, skipping");
                 return String::new();
             }
-            debug!("[flow] cm_generate_new_scramble called");
-            let (_actions, cal_started) = st.inner.generate_new_scramble(&mut || js_sys::Math::random());
-            if cal_started {
-                st.debug_home_logged = false;
-            }
-            // Return the scramble string from the session
+            st.inner.generate_new_scramble(&mut || js_sys::Math::random());
             st.inner.session.get_pending_scramble().unwrap_or("").to_string()
         })
     })
@@ -1161,64 +940,6 @@ pub fn cm_get_pending_scramble() -> String {
         s.borrow().as_ref().map_or_else(String::new, |st| {
             st.inner.session.get_pending_scramble().unwrap_or("").to_string()
         })
-    })
-}
-
-/// Get gyro packet interval statistics as JSON.
-/// Returns: { count, hz, min_ms, max_ms, median_ms, p5_ms, p95_ms, intervals: [...] }
-#[wasm_bindgen]
-pub fn cm_get_gyro_stats() -> String {
-    APP_STATE.with(|s| {
-        let state = s.borrow();
-        let st = match state.as_ref() {
-            Some(st) => st,
-            None => return "{}".to_string(),
-        };
-
-        let ts = &st.gyro_timestamps;
-        if ts.len() < 2 {
-            return "{}".to_string();
-        }
-
-        // Compute all intervals in ms
-        let mut intervals: Vec<f64> = Vec::with_capacity(ts.len() - 1);
-        for i in 1..ts.len() {
-            intervals.push((ts[i] - ts[i - 1]) * 1000.0);
-        }
-        intervals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-        let count = intervals.len();
-        let total_ms: f64 = intervals.iter().sum();
-        let avg_ms = total_ms / count as f64;
-        let hz = 1000.0 / avg_ms;
-        let min_ms = intervals[0];
-        let max_ms = intervals[count - 1];
-        let median_ms = intervals[count / 2];
-        let p5_ms = intervals[(count as f64 * 0.05) as usize];
-        let p95_ms = intervals[(count as f64 * 0.95).min((count - 1) as f64) as usize];
-
-        // Build histogram buckets: 0-10, 10-20, 20-30, ..., 90-100, 100+
-        let mut buckets = [0u32; 11];
-        for &iv in &intervals {
-            let idx = (iv / 10.0) as usize;
-            if idx >= 10 { buckets[10] += 1; } else { buckets[idx] += 1; }
-        }
-
-        format!(
-            r#"{{"count":{},"hz":{:.1},"avg_ms":{:.1},"min_ms":{:.1},"max_ms":{:.1},"median_ms":{:.1},"p5_ms":{:.1},"p95_ms":{:.1},"buckets":[{}],"bucket_labels":["0-10","10-20","20-30","30-40","40-50","50-60","60-70","70-80","80-90","90-100","100+"]}}"#,
-            count, hz, avg_ms, min_ms, max_ms, median_ms, p5_ms, p95_ms,
-            buckets.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(","),
-        )
-    })
-}
-
-/// Reset gyro stats (clear recorded timestamps).
-#[wasm_bindgen]
-pub fn cm_reset_gyro_stats() {
-    APP_STATE.with(|s| {
-        if let Some(st) = s.borrow_mut().as_mut() {
-            st.gyro_timestamps.clear();
-        }
     })
 }
 
@@ -1245,24 +966,6 @@ pub fn cm_handshake_data() -> Vec<u8> {
             .and_then(|st| st.protocol.as_ref())
             .and_then(|p| p.handshake_data())
             .unwrap_or_default()
-    })
-}
-
-// ========== Debug: gyro raw hex ==========
-
-#[wasm_bindgen]
-pub fn cm_get_last_gyro_hex() -> String {
-    APP_STATE.with(|s| {
-        s.borrow().as_ref().map_or_else(
-            || "No state".to_string(),
-            |st| {
-                if st.last_gyro_hex.is_empty() {
-                    "No gyro packet received yet".to_string()
-                } else {
-                    st.last_gyro_hex.clone()
-                }
-            },
-        )
     })
 }
 

@@ -38,7 +38,6 @@ import init, {
     cm_handshake_data,
     cm_decrypt_hex,
     cm_encrypt_hex,
-    cm_get_last_gyro_hex,
     cm_persist_solve,
     cm_create_session_persist,
     cm_load_active_session_solves,
@@ -60,12 +59,7 @@ import init, {
     cm_delete_solve,
     cm_set_inspection_duration,
     cm_get_inspection_duration,
-    cm_get_pickup_mode,
-    cm_set_pickup_mode,
     cm_save_active_session,
-    cm_get_gyro_stats,
-    cm_reset_gyro_stats,
-    cm_is_cube_stable,
     cm_drain_solve_telemetry,
 } from '../../wasm/rouxflow/rouxflow_wasm'
 import { logger } from '../../utils/logger'
@@ -96,31 +90,6 @@ export async function ensureWasm(userId?: string | null) {
 
     wasmReady = true
     logger.info('WASM + storage initialized', userId ? `(user: ${userId.slice(0, 8)}...)` : '(guest)')
-
-        // Expose gyro debug on window for console use
-        ; (window as any).gyroDebug = {
-            /** Print last decrypted gyro packet hex: gyroDebug.show() */
-            show: () => {
-                const hex = cm_get_last_gyro_hex()
-                console.log('Last gyro hex:', hex)
-                if (hex && !hex.startsWith('No') && !hex.startsWith('ERROR')) {
-                    const b = hex.split(' ').map(h => parseInt(h, 16)) as number[]
-                    // LE int16 helper
-                    const i16 = (lo: number, hi: number) => { const v = lo | (hi << 8); return v > 32767 ? v - 65536 : v }
-                    // Accelerometer: bytes 1-2, 5-6, 9-10, 13-14 (LE int16)
-                    const ax = i16(b[1]!, b[2]!), ay = i16(b[5]!, b[6]!), az = i16(b[9]!, b[10]!), a4 = i16(b[13]!, b[14]!)
-                    // Quaternion: bytes 3-4, 7-8, 11-12, 15-16 (LE int16 / 16384)
-                    const qw = i16(b[3]!, b[4]!) / 16384, qx = i16(b[7]!, b[8]!) / 16384
-                    const qy = i16(b[11]!, b[12]!) / 16384, qz = i16(b[15]!, b[16]!) / 16384
-                    const norm = Math.sqrt(qw * qw + qx * qx + qy * qy + qz * qz)
-                    console.log(`  Quaternion: w=${qw.toFixed(4)} x=${qx.toFixed(4)} y=${qy.toFixed(4)} z=${qz.toFixed(4)}  norm=${norm.toFixed(4)}`)
-                    console.log(`  Accel raw:  a1=${ax}  a2=${ay}  a3=${az}  a4=${a4}`)
-                    console.log(`  Accel /1000: a1=${(ax / 1000).toFixed(2)}g  a2=${(ay / 1000).toFixed(2)}g  a3=${(az / 1000).toFixed(2)}g  a4=${(a4 / 1000).toFixed(2)}g`)
-                    console.log(`  Padding: ${b.slice(17).map(v => v.toString(16).padStart(2, '0')).join(' ')}`)
-                }
-                return hex
-            },
-        }
 
         // Expose debug tools on window for console use
         ; (window as any).cubeDebug = {
@@ -242,12 +211,7 @@ export {
     cm_delete_solve,
     cm_set_inspection_duration,
     cm_get_inspection_duration,
-    cm_get_pickup_mode,
-    cm_set_pickup_mode,
     cm_save_active_session,
-    cm_get_gyro_stats,
-    cm_reset_gyro_stats,
-    cm_is_cube_stable,
 }
 
 // Wrapper functions that parse JSON from WASM (avoids wasm_bindgen alloc churn)
@@ -365,9 +329,6 @@ async function handleCoreAction(action: any) {
             break
         case 'RawFacelets':
             logger.info(`Facelets: ${action.data}`)
-            break
-        case 'Pickup':
-            logger.info('Cube picked up')
             break
         case 'GyroRaw': {
             const now = performance.now()

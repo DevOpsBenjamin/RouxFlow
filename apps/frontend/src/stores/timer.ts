@@ -12,7 +12,6 @@ import {
     cm_get_pending_scramble,
     cm_reset_flow,
     cm_generate_new_scramble,
-    cm_is_cube_stable,
     updateTimer,
     onWasmStateChanged,
 } from '../services/cube/bridge'
@@ -94,11 +93,6 @@ export const useTimerStore = defineStore('timer', () => {
         return cm_get_pending_scramble()
     })
 
-    const isCubeStable = computed(() => {
-        _wasmTick.value
-        return cm_is_cube_stable()
-    })
-
     // ========== Actions ==========
 
     function reset() {
@@ -162,7 +156,6 @@ export const useTimerStore = defineStore('timer', () => {
         inspectionRemaining,
         scrambleState,
         pendingScramble,
-        isCubeStable,
         reset,
         generateScramble,
     }

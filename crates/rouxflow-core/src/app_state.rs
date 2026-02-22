@@ -4,7 +4,7 @@ use crate::cube::facelet::Color as FaceletColor;
 use crate::gyro_calibrator::GyroCalibrator;
 use crate::move_interpreter::{InterpretedMove, InterpreterConfig, MoveInterpreter, MoveKind};
 use crate::scramble::generate_scramble;
-use crate::session::{CoreAction, FlowState, PickupMode, SessionManager, FIXED_PICKUP_MS, FIXED_PUTDOWN_MS};
+use crate::session::{CoreAction, FlowState, SessionManager};
 use crate::telemetry::{GyroSample, RawMove, SolveTelemetry};
 use crate::timer_manager::TimerManager;
 
@@ -71,30 +71,17 @@ impl AppState {
     // ========== Cross-domain coordination ==========
 
     /// Begin solving: starts timer and transitions session flow state.
-    /// For WCA+gyro: timer starts at frozen pickup time (not first move).
-    /// set_solving() freezes the pickup time first, then we read it.
     pub fn start_solving(&mut self, timestamp: f64) -> String {
         let action = self.session.set_solving();
-        let timer_start = if self.session.requires_putdown_confirm() {
-            self.session.solve_pickup_time().unwrap_or(timestamp)
-        } else {
-            timestamp
-        };
-        self.timer.start(timer_start);
+        self.timer.start(timestamp);
         action
     }
 
     /// Record a completed solve: stops timer and saves solve via session.
-    /// Fixed pickup mode: adds FIXED_PICKUP_MS + FIXED_PUTDOWN_MS to account for both.
     pub fn record_solve(&mut self, timestamp: f64, time_ms: u32, moves_json: &str) -> String {
         let timed_moves_json = self.timer.get_timed_moves_json();
         self.timer.stop(timestamp);
-        let adjusted_time = if matches!(self.session.effective_pickup_mode(), PickupMode::Fixed) {
-            time_ms + FIXED_PICKUP_MS + FIXED_PUTDOWN_MS
-        } else {
-            time_ms
-        };
-        self.session.record_solve(adjusted_time, moves_json, &timed_moves_json)
+        self.session.record_solve(time_ms, moves_json, &timed_moves_json)
     }
 
     /// Record a move: tracks in timer (if running) and returns notation.
@@ -105,15 +92,6 @@ impl AppState {
     /// Record an interpreted move in the timer.
     pub fn record_interpreted_move(&mut self, m: &InterpretedMove) {
         self.timer.record_interpreted_move(m);
-    }
-
-    /// Hold a solve pending putdown confirmation (WCA+gyro).
-    /// Stops timer, stores moves/scramble, but does not save yet.
-    /// Solve time will be computed at putdown as (putdown_moment - last_pickup).
-    pub fn hold_solve(&mut self, timestamp: f64, moves_json: &str) {
-        let timed_moves_json = self.timer.get_timed_moves_json();
-        self.timer.stop(timestamp);
-        self.session.hold_pending_solve(moves_json, &timed_moves_json, timestamp);
     }
 
     /// Record a DNF (inspection timeout): stops timer and saves DNF solve.
@@ -178,42 +156,27 @@ impl AppState {
                     let time_ms = self.timer.get_current_time_ms() as u32;
                     let moves_json = self.timer.get_moves_json();
 
-                    if self.session.requires_putdown_confirm() {
-                        if let Some(ref mut tel) = self.telemetry {
-                            tel.solve_end_t = timestamp;
+                    if let Some(ref mut tel) = self.telemetry {
+                        tel.solve_end_t = timestamp;
+                    }
+                    self.telemetry_recording = false;
+                    let action = self.record_solve(timestamp, time_ms, &moves_json);
+                    if !action.is_empty() { actions.push(action); }
+                    if !self.session.is_wca_full() {
+                        let next = generate_scramble(rng);
+                        let action2 = self.session.start_scramble(&next);
+                        if !action2.is_empty() {
+                            self.calibrator.start();
+                            calibration_started = true;
+                            actions.push(action2);
                         }
-                        self.telemetry_recording = false;
-                        self.hold_solve(timestamp, &moves_json);
-                        let action = serde_json::to_string(
-                            &CoreAction::FlowStateChanged(FlowState::Summary)
-                        ).unwrap_or_default();
-                        if !action.is_empty() { actions.push(action); }
                     } else {
-                        if let Some(ref mut tel) = self.telemetry {
-                            tel.solve_end_t = timestamp;
-                        }
-                        self.telemetry_recording = false;
-                        let action = self.record_solve(timestamp, time_ms, &moves_json);
-                        if !action.is_empty() { actions.push(action); }
-                        if !self.session.is_wca_full() {
-                            let next = generate_scramble(rng);
-                            let action2 = self.session.start_scramble(&next);
-                            if !action2.is_empty() {
-                                self.calibrator.start();
-                                calibration_started = true;
-                                actions.push(action2);
-                            }
-                        } else {
-                            let action2 = self.session.reset_flow();
-                            if !action2.is_empty() { actions.push(action2); }
-                        }
+                        let action2 = self.session.reset_flow();
+                        if !action2.is_empty() { actions.push(action2); }
                     }
                 }
             }
             FlowState::Summary => {
-                if self.session.has_pending_solve() {
-                    return FlowCoordinateResult { actions, calibration_started };
-                }
                 if !self.session.is_wca_full() {
                     let next = generate_scramble(rng);
                     let action = self.session.start_scramble(&next);
@@ -250,17 +213,15 @@ impl AppState {
         self.interpreter.feed_face_move(face, direction, wall_ms);
     }
 
-    /// Feed a raw BLE gyro event: update orientation, record telemetry, process
-    /// pickup/putdown, handle pending-solve confirm on putdown, feed interpreter
-    /// and calibrator.
-    /// Returns (orientation_action, putdown_actions, calibration_started).
+    /// Feed a raw BLE gyro event: update orientation, record telemetry,
+    /// feed interpreter and calibrator.
+    /// Returns whether calibration was started.
     pub fn feed_ble_gyro(
         &mut self,
         qx: f32, qy: f32, qz: f32, qw: f32,
         timestamp: f64,
         wall_ms: f64,
-        rng: &mut impl FnMut() -> f64,
-    ) -> (String, Vec<String>, bool) {
+    ) -> bool {
         let q = Quaternion { x: qx, y: qy, z: qz, w: qw };
         self.cube_logic.orientation = Some(q);
 
@@ -276,17 +237,6 @@ impl AppState {
             }
         }
 
-        // Process orientation for pickup/putdown detection
-        let action = self.session.process_orientation(qx, qy, qz, qw, timestamp);
-        let mut putdown_actions = Vec::new();
-        let mut calibration_started = false;
-
-        if !action.is_empty() && action.contains("Putdown") && self.session.has_pending_solve() {
-            let (pa, cs) = self.handle_putdown_confirm(rng);
-            putdown_actions = pa;
-            calibration_started = cs;
-        }
-
         // Feed gyro to interpreter for rotation detection
         self.interpreter.feed_gyro(&q, wall_ms);
 
@@ -295,34 +245,7 @@ impl AppState {
             self.calibrator.feed(&q);
         }
 
-        (action, putdown_actions, calibration_started)
-    }
-
-    /// Handle putdown confirmation: confirm pending solve and chain to next scramble.
-    pub fn handle_putdown_confirm(
-        &mut self,
-        rng: &mut impl FnMut() -> f64,
-    ) -> (Vec<String>, bool) {
-        let mut actions = Vec::new();
-        let mut calibration_started = false;
-
-        let save_action = self.session.confirm_pending_solve();
-        if !save_action.is_empty() { actions.push(save_action); }
-
-        if !self.session.is_wca_full() {
-            let next = generate_scramble(rng);
-            let action2 = self.session.start_scramble(&next);
-            if !action2.is_empty() {
-                self.calibrator.start();
-                calibration_started = true;
-                actions.push(action2);
-            }
-        } else {
-            let action2 = self.session.reset_flow();
-            if !action2.is_empty() { actions.push(action2); }
-        }
-
-        (actions, calibration_started)
+        false
     }
 
     /// Feed a raw facelet string (54 chars) into cube_logic.

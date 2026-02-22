@@ -1,5 +1,4 @@
 use serde::{Serialize, Deserialize};
-use crate::cube::Quaternion;
 use crate::move_interpreter::MoveKind;
 
 pub const DEFAULT_SESSION_ID: &str = "default";
@@ -9,22 +8,6 @@ pub const DEFAULT_SESSION_NAME: &str = "Default Session";
 pub enum SessionType {
     Free,
     WCA,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-pub enum PickupMode {
-    /// Timer starts at first move, no pickup/putdown tracking (default)
-    None,
-    /// Add a fixed duration for pickup/putdown (user-defined, future)
-    Fixed,
-    /// Use gyro-based pickup/putdown detection
-    Gyro,
-}
-
-impl Default for PickupMode {
-    fn default() -> Self {
-        PickupMode::None
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -53,12 +36,6 @@ pub struct Solve {
     pub deleted_at: Option<i64>,
     #[serde(default)]
     pub integrity: Option<String>,
-    /// ms from pickup to first move (reaction time, WCA+gyro only)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reaction_ms: Option<u32>,
-    /// ms from last move (cube solved) to putdown (WCA+gyro only)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub putdown_delay_ms: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -70,8 +47,6 @@ pub struct Session {
     pub first_solve_at: Option<i64>,
     #[serde(default)]
     pub user_id: Option<String>,
-    #[serde(default)]
-    pub pickup_mode: PickupMode,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -111,8 +86,6 @@ pub enum CoreAction {
     DemoteSession(String), // Session ID
     FlowStateChanged(FlowState),
     NotifyReady,
-    Pickup,
-    Putdown,
     Move(String), // Move notation
     Error(String),
 }
@@ -344,21 +317,6 @@ pub fn consolidate_moves(moves: &[String]) -> Vec<String> {
 /// WCA scramble move timeout: 3 seconds per move.
 pub const WCA_SCRAMBLE_MOVE_TIMEOUT_MS: u32 = 3_000;
 
-/// Fixed overhead: time from hands-leave-timer to grabbing cube (ms).
-pub const FIXED_PICKUP_MS: u32 = 200;
-/// Fixed overhead: time from cube-solved to hands-on-timer (ms).
-pub const FIXED_PUTDOWN_MS: u32 = 200;
-/// Number of consecutive stable gyro packets required to confirm putdown.
-/// At ~17Hz (60ms intervals), 5 packets ≈ 240-300ms real stability.
-/// Handles burst pairs naturally: a burst counts as 2 packets but real
-/// hardware stability spans the full interval before the burst.
-pub const PUTDOWN_WINDOW: usize = 8;
-// After solve (Summary): 7 of 8 — stricter, avoids false trigger while holding
-pub const PUTDOWN_MIN_STABLE: usize = 7;
-// Before solve (Idle/Scrambling/Inspection): 4 of 5 — faster, reliable pickup depends on it
-pub const PUTDOWN_FAST_WINDOW: usize = 5;
-pub const PUTDOWN_FAST_MIN_STABLE: usize = 4;
-
 pub struct SessionManager {
     sessions: Vec<Session>,
     active_session: Option<Session>,
@@ -366,16 +324,6 @@ pub struct SessionManager {
 
     // Current user (None = guest)
     current_user_id: Option<String>,
-
-    // Motion fields
-    last_orientation: Option<Quaternion>,
-    is_stable: bool,
-    stable_since: f64,
-    /// Ring buffer of last N xyz deltas for putdown detection (ao8 style)
-    putdown_deltas: [f32; PUTDOWN_WINDOW],
-    putdown_timestamps: [f64; PUTDOWN_WINDOW],
-    putdown_pos: usize,
-    putdown_filled: bool,
 
     // Flow management
     flow_state: FlowState,
@@ -387,21 +335,7 @@ pub struct SessionManager {
     // Chaining: next scramble for Summary → Scrambling transition
     pending_scramble: Option<String>,
 
-    // Pickup/putdown tracking (WCA+gyro)
-    pickup_times: Vec<f64>,
     has_gyro: bool,
-    /// Frozen pickup time when solving starts (not updated by mid-solve grip noise)
-    solve_pickup_time: Option<f64>,
-    /// Solve waiting for putdown confirmation (WCA+gyro only)
-    pending_solve: Option<Solve>,
-    /// Timestamp when gyro first became stable (= actual putdown moment, before 0.3s confirm)
-    last_putdown_time: f64,
-    /// Absolute timestamp when solve completed (hold_pending_solve called)
-    solve_complete_time: f64,
-    /// Debug: gyro deltas recorded from solve complete until putdown
-    /// (timestamp, delta, dx, dy, dz, dw)
-    gyro_debug_buffer: Vec<(f64, f64, f32, f32, f32, f32)>,
-    gyro_debug_active: bool,
 }
 
 impl SessionManager {
@@ -411,25 +345,11 @@ impl SessionManager {
             active_session: None,
             scramble_validator: None,
             current_user_id: None,
-            last_orientation: None,
-            is_stable: true,
-            stable_since: 0.0,
-            putdown_deltas: [f32::MAX; PUTDOWN_WINDOW],
-            putdown_timestamps: [0.0; PUTDOWN_WINDOW],
-            putdown_pos: 0,
-            putdown_filled: false,
             flow_state: FlowState::Idle,
             inspection_start: None,
             inspection_duration: 15.0,
             pending_scramble: None,
-            pickup_times: Vec::new(),
             has_gyro: false,
-            solve_pickup_time: None,
-            pending_solve: None,
-            last_putdown_time: 0.0,
-            solve_complete_time: 0.0,
-            gyro_debug_buffer: Vec::new(),
-            gyro_debug_active: false,
         }
     }
 
@@ -472,7 +392,6 @@ impl SessionManager {
             solves: Vec::new(),
             first_solve_at: None,
             user_id: self.current_user_id.clone(),
-            pickup_mode: PickupMode::default(),
         };
         self.sessions.push(session.clone());
         Some(session)
@@ -583,68 +502,6 @@ impl SessionManager {
         }
     }
 
-    pub fn process_orientation(&mut self, x: f32, y: f32, z: f32, w: f32, timestamp: f64) -> String {
-        let q = Quaternion { x, y, z, w };
-        if let Some(last) = self.last_orientation {
-            let dx = q.x - last.x;
-            let dy = q.y - last.y;
-            let dz = q.z - last.z;
-            let dw = q.w - last.w;
-            // Putdown uses xyz only — w drifts due to MEMS gravity-alignment
-            let delta_xyz = dx.powi(2) + dy.powi(2) + dz.powi(2);
-            // Pickup uses full quaternion for maximum sensitivity
-            let delta_full = delta_xyz + dw.powi(2);
-            let pickup_threshold = 0.001;
-            let putdown_threshold: f32 = 1e-7;
-            let _moving = delta_xyz > putdown_threshold;
-
-            // Record gyro deltas for debug (from solve complete until putdown)
-            if self.gyro_debug_active {
-                self.gyro_debug_buffer.push((timestamp, delta_xyz as f64, dx, dy, dz, dw));
-            }
-
-            // During Solving: user is holding the cube, ignore grip noise.
-            // Only detect pickup/putdown in non-Solving states.
-            // Summary with pending solve: detect putdown only (to confirm solve).
-            let suppress_pickup = matches!(self.flow_state, FlowState::Solving);
-            let suppress_putdown = matches!(self.flow_state, FlowState::Solving);
-
-            if delta_full > pickup_threshold && self.is_stable && !suppress_pickup {
-                self.is_stable = false;
-                self.putdown_deltas = [f32::MAX; PUTDOWN_WINDOW];
-                self.putdown_timestamps = [0.0; PUTDOWN_WINDOW];
-                self.putdown_pos = 0;
-                self.putdown_filled = false;
-                self.stable_since = 0.0;
-                self.pickup_times.push(timestamp);
-                return serde_json::to_string(&CoreAction::Pickup).unwrap_or_default();
-            } else if !self.is_stable && !suppress_putdown {
-                // Two consecutive near-zero packets = putdown confirmed.
-                // At 1e-7 threshold, only Q14 near-identical readings pass.
-                // In hand: rare single lucky zero, but never two in a row.
-                // On table: consistent near-zeros, triggers in ~120ms (2 × 60ms).
-                if delta_xyz <= putdown_threshold {
-                    if self.putdown_pos == 0 {
-                        // First near-zero = actual putdown moment
-                        self.last_putdown_time = timestamp;
-                    }
-                    self.putdown_pos += 1;
-                    if self.putdown_pos >= 2 {
-                        // Confirmed — last_putdown_time already set to first hit
-                        self.is_stable = true;
-                        self.putdown_pos = 0;
-                        self.stable_since = 0.0;
-                        return serde_json::to_string(&CoreAction::Putdown).unwrap_or_default();
-                    }
-                } else {
-                    self.putdown_pos = 0;
-                }
-            }
-        }
-        self.last_orientation = Some(q);
-        "".into()
-    }
-
     pub fn create_session(&mut self, name: String, session_type: SessionType) -> String {
         let session = Session {
             id: uuid::Uuid::new_v4().to_string(),
@@ -653,7 +510,6 @@ impl SessionManager {
             solves: Vec::new(),
             first_solve_at: None,
             user_id: self.current_user_id.clone(),
-            pickup_mode: PickupMode::default(),
         };
         self.sessions.push(session.clone());
         self.active_session = Some(session.clone());
@@ -665,18 +521,12 @@ impl SessionManager {
             .is_some_and(|s| matches!(s.session_type, SessionType::WCA));
         self.scramble_validator = Some(ScrambleValidator::new(scramble, wca));
         self.flow_state = FlowState::Scrambling;
-        // Reset pickup tracking for new solve cycle
-        self.pickup_times.clear();
-        self.solve_pickup_time = None;
-        self.pending_solve = None;
         serde_json::to_string(&CoreAction::FlowStateChanged(self.flow_state)).unwrap_or_default()
     }
 
     pub fn reset_flow(&mut self) -> String {
         self.flow_state = FlowState::Idle;
         self.scramble_validator = None;
-        self.solve_pickup_time = None;
-        self.pending_solve = None;
         serde_json::to_string(&CoreAction::FlowStateChanged(self.flow_state)).unwrap_or_default()
     }
 
@@ -716,8 +566,6 @@ impl SessionManager {
             penalty: None,
             deleted_at: None,
             integrity: None,
-            reaction_ms: None,
-            putdown_delay_ms: None,
         };
 
         self.flow_state = FlowState::Summary;
@@ -739,8 +587,6 @@ impl SessionManager {
             penalty: Some("DNF".to_string()),
             deleted_at: None,
             integrity: None,
-            reaction_ms: None,
-            putdown_delay_ms: None,
         };
 
         self.flow_state = FlowState::Summary;
@@ -749,8 +595,6 @@ impl SessionManager {
 
     pub fn set_solving(&mut self) -> String {
         self.flow_state = FlowState::Solving;
-        // Freeze pickup time — mid-solve grip noise won't corrupt it
-        self.solve_pickup_time = self.pickup_times.last().copied();
         serde_json::to_string(&CoreAction::FlowStateChanged(self.flow_state)).unwrap_or_default()
     }
 
@@ -843,28 +687,6 @@ impl SessionManager {
 
     pub fn get_inspection_duration(&self) -> f64 {
         self.inspection_duration
-    }
-
-    /// Set pickup mode on the active session (Free mode only).
-    pub fn set_pickup_mode(&mut self, mode: PickupMode) {
-        if let Some(session) = &mut self.active_session {
-            session.pickup_mode = mode;
-            // Sync to sessions list
-            let session_id = session.id.clone();
-            if let Some(s) = self.sessions.iter_mut().find(|s| s.id == session_id) {
-                s.pickup_mode = mode;
-            }
-        }
-    }
-
-    /// Get pickup mode of the active session.
-    pub fn get_pickup_mode(&self) -> PickupMode {
-        self.active_session.as_ref().map_or(PickupMode::None, |s| s.pickup_mode)
-    }
-
-    /// Returns true if the cube is detected as stable (on table / not moving).
-    pub fn is_cube_stable(&self) -> bool {
-        self.is_stable
     }
 
     // ========== Scramble State ==========
@@ -1002,7 +824,7 @@ impl SessionManager {
         self.flow_state
     }
 
-    // ========== Pickup/Putdown + WCA Gyro Flow ==========
+    // ========== Gyro ==========
 
     pub fn set_has_gyro(&mut self, has_gyro: bool) {
         self.has_gyro = has_gyro;
@@ -1010,108 +832,5 @@ impl SessionManager {
 
     pub fn has_gyro(&self) -> bool {
         self.has_gyro
-    }
-
-    pub fn last_pickup_time(&self) -> Option<f64> {
-        self.pickup_times.last().copied()
-    }
-
-    /// Get the frozen pickup time (set when solving starts).
-    pub fn solve_pickup_time(&self) -> Option<f64> {
-        self.solve_pickup_time
-    }
-
-    /// Debug: get raw putdown timing data (stable_since, last_pickup, solve_pickup, last_putdown).
-    /// All values in seconds (performance.now/1000 scale).
-    pub fn debug_putdown_timing(&self) -> (f64, Option<f64>, Option<f64>, f64) {
-        (
-            self.last_putdown_time,
-            self.pickup_times.last().copied(),
-            self.solve_pickup_time,
-            self.stable_since,
-        )
-    }
-
-    /// Drain the gyro debug buffer and stop recording.
-    pub fn drain_gyro_debug(&mut self) -> Vec<(f64, f64, f32, f32, f32, f32)> {
-        self.gyro_debug_active = false;
-        std::mem::take(&mut self.gyro_debug_buffer)
-    }
-
-    /// Resolve the effective pickup mode based on session type + hardware.
-    /// WCA: always Gyro if cube has gyro, otherwise Fixed.
-    /// Free: uses the session's pickup_mode setting.
-    pub fn effective_pickup_mode(&self) -> PickupMode {
-        match self.active_session.as_ref() {
-            Some(s) => match s.session_type {
-                SessionType::WCA => {
-                    if self.has_gyro { PickupMode::Gyro } else { PickupMode::Fixed }
-                }
-                SessionType::Free => s.pickup_mode,
-            },
-            None => PickupMode::None,
-        }
-    }
-
-    /// Whether the current mode requires gyro-based putdown to confirm solve.
-    pub fn requires_putdown_confirm(&self) -> bool {
-        matches!(self.effective_pickup_mode(), PickupMode::Gyro)
-    }
-
-    /// Hold a solve pending putdown confirmation (WCA+gyro).
-    /// Time is NOT set here — it's computed at putdown as (putdown_moment - last_pickup).
-    pub fn hold_pending_solve(&mut self, moves_json: &str, timed_moves_json: &str, timestamp: f64) {
-        let moves: Vec<String> = serde_json::from_str(moves_json).unwrap_or_default();
-        let timed_moves: Option<Vec<TimedMove>> = serde_json::from_str(timed_moves_json).ok()
-            .filter(|v: &Vec<TimedMove>| !v.is_empty());
-        let scramble = self.scramble_validator.as_ref()
-            .map(|v| v.scramble.join(" "));
-        // Compute reaction_ms: pickup → first move (timer starts at pickup for WCA+gyro)
-        let reaction_ms = timed_moves.as_ref()
-            .and_then(|tm| tm.first().map(|m| m.t));
-        let solve = Solve {
-            id: uuid::Uuid::new_v4().to_string(),
-            time: 0, // placeholder — computed at putdown
-            moves,
-            date: chrono::Utc::now().timestamp_millis(),
-            is_valid: true,
-            scramble,
-            timed_moves,
-            penalty: None,
-            deleted_at: None,
-            integrity: None,
-            reaction_ms,
-            putdown_delay_ms: None, // computed at putdown
-        };
-        self.pending_solve = Some(solve);
-        self.solve_complete_time = timestamp;
-        self.flow_state = FlowState::Summary;
-        // Start recording gyro deltas for debug
-        self.gyro_debug_buffer.clear();
-        self.gyro_debug_active = true;
-    }
-
-    pub fn has_pending_solve(&self) -> bool {
-        self.pending_solve.is_some()
-    }
-
-    /// Confirm and save the pending solve (called on putdown).
-    /// Computes solve time as putdown_moment - frozen_pickup (no detection delay added).
-    /// Returns the SaveSolve CoreAction JSON if successful.
-    pub fn confirm_pending_solve(&mut self) -> String {
-        if let Some(mut solve) = self.pending_solve.take() {
-            // Compute solve time: putdown moment (when gyro first went stable)
-            // minus frozen pickup (captured at solve start, immune to mid-solve noise)
-            if let Some(pickup_time) = self.solve_pickup_time {
-                solve.time = ((self.last_putdown_time - pickup_time) * 1000.0).max(0.0) as u32;
-            }
-            // Compute putdown delay: solve complete → stable_since (direct timestamps)
-            if self.solve_complete_time > 0.0 && self.last_putdown_time > self.solve_complete_time {
-                solve.putdown_delay_ms = Some(((self.last_putdown_time - self.solve_complete_time) * 1000.0) as u32);
-            }
-            self.save_solve_internal(solve)
-        } else {
-            String::new()
-        }
     }
 }

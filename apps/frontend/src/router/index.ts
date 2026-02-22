@@ -102,12 +102,6 @@ const routes = [
     component: () => import('../components/cube/BluetoothRequired.vue')
   },
   {
-    path: '/timing-test',
-    name: 'TimingTest',
-    component: () => import('../components/layout/TimingTestView.vue'),
-    meta: { requiresCube: true }
-  },
-  {
     path: '/gyro-debug',
     name: 'GyroDebug',
     component: () => import('../components/layout/GyroDebugView.vue'),

@@ -16,8 +16,6 @@ fn make_solve_at(id: &str, time: u32, moves: usize, date: i64) -> Solve {
         penalty: None,
         deleted_at: None,
         integrity: None,
-        reaction_ms: None,
-        putdown_delay_ms: None,
     }
 }
 
@@ -33,8 +31,6 @@ fn make_dnf_at(id: &str, date: i64) -> Solve {
         penalty: Some("DNF".to_string()),
         deleted_at: None,
         integrity: None,
-        reaction_ms: None,
-        putdown_delay_ms: None,
     }
 }
 
