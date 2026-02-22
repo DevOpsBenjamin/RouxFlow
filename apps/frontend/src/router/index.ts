@@ -106,6 +106,12 @@ const routes = [
     name: 'TimingTest',
     component: () => import('../components/layout/TimingTestView.vue'),
     meta: { requiresCube: true }
+  },
+  {
+    path: '/gyro-debug',
+    name: 'GyroDebug',
+    component: () => import('../components/layout/GyroDebugView.vue'),
+    meta: { requiresCube: true }
   }
 ]
 

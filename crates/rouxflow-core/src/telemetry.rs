@@ -130,15 +130,15 @@ impl ParsedSolve {
         let timeline = self
             .timeline
             .iter()
-            .map(|event| match event {
+            .filter_map(|event| match event {
                 SolveEvent::Move {
                     t, relative_move, ..
-                } => SimpleSolveEvent::Move {
+                } => Some(SimpleSolveEvent::Move {
                     t: *t,
                     m: *relative_move,
-                },
+                }),
                 SolveEvent::Rotation { t, axis, .. } => {
-                    SimpleSolveEvent::Rotation { t: *t, axis: *axis }
+                    Some(SimpleSolveEvent::Rotation { t: *t, axis: *axis })
                 }
             })
             .collect();
@@ -152,4 +152,47 @@ impl ParsedSolve {
             timeline,
         }
     }
+}
+
+// ========== Structured Debug Tracing ==========
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DebugPass1Move {
+    pub t: f64,
+    pub original_moves: Vec<String>,
+    pub merged_move: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DebugGyroRun {
+    pub t: f64,
+    pub label: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DebugPass2State {
+    pub t: f64,
+    pub body_move: String, // Keep string for easy JSON parsing
+    pub active_gyro_window: String,
+    pub gyro_runs: Vec<DebugGyroRun>,
+    pub cube_state: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DebugPass3Rotation {
+    pub t: f64,
+    pub before_move_idx: usize,
+    pub rotation_label: String,
+    pub from_orient: String,
+    pub to_orient: String,
+    pub is_inspection: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct DebugTrace {
+    pub scramble: String,
+    pub pass1_moves: Vec<DebugPass1Move>,
+    pub pass2_states: Vec<DebugPass2State>,
+    pub pass3_rotations: Vec<DebugPass3Rotation>,
+    pub clean_replay: Option<CleanParsedSolve>,
 }

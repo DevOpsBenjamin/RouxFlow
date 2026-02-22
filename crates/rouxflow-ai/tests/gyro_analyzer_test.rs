@@ -1,3 +1,4 @@
+use rouxflow_core::telemetry::DebugTrace;
 mod test_data;
 
 #[test]
@@ -18,13 +19,12 @@ fn test_analyze_solve_1_debug() {
         "solve moves should not be empty"
     );
 
-    // Parse PRINT_OUTPUT from env: whether to print cube states/logging
-    // Usage: PRINT_OUTPUT=1 cargo test --test gyro_analyzer_test -- --nocapture
-    let print_output: bool = std::env::var("PRINT_OUTPUT")
-        .map(|v| v != "0" && v != "false")
-        .unwrap_or(true);
+    let mut debug_trace = DebugTrace::default();
+    let parsed = rouxflow_ai::analyze_solve(&telemetry, Some(&mut debug_trace));
 
-    let parsed = rouxflow_ai::analyze_solve(&telemetry, print_output);
+    let trace_json = serde_json::to_string_pretty(&debug_trace).unwrap();
+    std::fs::write("solve1_trace.json", trace_json).unwrap();
+
     let json = serde_json::to_string_pretty(&parsed).unwrap();
     std::fs::write("solve1.json", json).unwrap();
 
@@ -54,11 +54,12 @@ fn test_analyze_solve_2_debug() {
         "scramble should not be empty"
     );
 
-    let print_output: bool = std::env::var("PRINT_OUTPUT")
-        .map(|v| v != "0" && v != "false")
-        .unwrap_or(true);
+    let mut debug_trace = DebugTrace::default();
+    let parsed = rouxflow_ai::analyze_solve(&telemetry, Some(&mut debug_trace));
 
-    let parsed = rouxflow_ai::analyze_solve(&telemetry, print_output);
+    let trace_json = serde_json::to_string_pretty(&debug_trace).unwrap();
+    std::fs::write("solve2_trace.json", trace_json).unwrap();
+
     let json = serde_json::to_string_pretty(&parsed).unwrap();
     std::fs::write("solve2.json", json).unwrap();
 

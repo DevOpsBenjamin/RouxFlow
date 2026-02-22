@@ -229,17 +229,54 @@ pub fn to_double(notation: &str) -> String {
 /// Used for orientation bookkeeping (merged_orient tracking), NOT for remap.
 /// BitCube M: centers cycle U→F→D→B (same direction as x').
 /// BitCube M': centers cycle U→B→D→F (same direction as x).
+/// Mathematical core rotation caused by a home-frame slice move.
+/// Used for orientation bookkeeping (tracked centers), NOT for remap.
+/// All core rotations are in global/home frame.
 pub fn slice_core_rotation(notation: &str) -> Option<&'static str> {
     match notation {
-        "M" => Some("x'"), // M centers: U→F (same as x')
-        "M'" => Some("x"), // M' centers: U→B (same as x)
+        "M" => Some("x'"), // M follows L (x')
+        "M'" => Some("x"), // M' follows R (x)
         "M2" => Some("x2"),
-        "S" => Some("z"),
-        "S'" => Some("z'"),
+        "S" => Some("z"),   // S follows F (z)
+        "S'" => Some("z'"), // S' follows B (z')
         "S2" => Some("z2"),
-        "E" => Some("y'"),
-        "E'" => Some("y"),
+        "E" => Some("y'"), // E follows D (y')
+        "E'" => Some("y"), // E' follows U (y)
         "E2" => Some("y2"),
+        _ => None,
+    }
+}
+
+/// Core rotation caused by a wide move.
+pub fn wide_core_rotation(notation: &str) -> Option<&'static str> {
+    let (prefix, suffix) = parse_notation(notation);
+    let rot = match prefix {
+        "Rw" => "x",
+        "Lw" => "x'",
+        "Uw" => "y",
+        "Dw" => "y'",
+        "Fw" => "z",
+        "Bw" => "z'",
+        _ => return None,
+    };
+
+    match suffix {
+        "" => Some(rot),
+        "'" => match rot {
+            "x" => Some("x'"),
+            "x'" => Some("x"),
+            "y" => Some("y'"),
+            "y'" => Some("y"),
+            "z" => Some("z'"),
+            "z'" => Some("z"),
+            _ => None,
+        },
+        "2" => match rot {
+            "x" | "x'" => Some("x2"),
+            "y" | "y'" => Some("y2"),
+            "z" | "z'" => Some("z2"),
+            _ => None,
+        },
         _ => None,
     }
 }

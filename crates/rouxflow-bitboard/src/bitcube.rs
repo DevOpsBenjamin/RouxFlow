@@ -36,6 +36,44 @@ impl BitCube {
         }
         0
     }
+
+    pub fn to_html_string(&self) -> String {
+        use std::fmt::Write;
+        let mut s = String::with_capacity(400);
+        let colors = ['W', 'Y', 'G', 'B', 'R', 'O'];
+
+        let sticker = |bit_idx: usize| -> char {
+            let c = self.get_color_at(bit_idx);
+            colors[c]
+        };
+
+        let mut print_row = |face_offset: usize, row: usize, out: &mut String| {
+            for col in 0..3 {
+                let ch = sticker(face_offset + row * 3 + col);
+                write!(out, "<span class=\"c{}\">{}</span> ", ch, ch).unwrap();
+            }
+        };
+
+        let pad = "      ";
+        for row in 0..3 {
+            s.push_str(pad);
+            print_row(0, row, &mut s);
+            s.push('\n');
+        }
+        for row in 0..3 {
+            print_row(36, row, &mut s); // L
+            print_row(18, row, &mut s); // F
+            print_row(9, row, &mut s); // R
+            print_row(45, row, &mut s); // B
+            s.push('\n');
+        }
+        for row in 0..3 {
+            s.push_str(pad);
+            print_row(27, row, &mut s); // D
+            s.push('\n');
+        }
+        s
+    }
 }
 
 impl fmt::Display for BitCube {

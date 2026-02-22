@@ -1,6 +1,9 @@
 use rouxflow_bitboard::move_indices::Rotation;
 use rouxflow_bitboard::BitCube;
-use rouxflow_core::telemetry::{GyroSample, ParsedSolve, SolveEvent, SolveTelemetry};
+use rouxflow_core::telemetry::{
+    DebugPass1Move, DebugPass2State, DebugPass3Rotation, DebugTrace, GyroSample, ParsedSolve,
+    SolveEvent, SolveTelemetry,
+};
 
 pub mod math;
 pub mod moves;
@@ -21,31 +24,21 @@ mod tests;
 /// Multi-pass approach:
 /// - Pass 1: Slice detection (body frame, no orientation)
 /// - Pass 2: Gyro orientation table (all samples, majority vote)
-pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSolve {
-    let duration = telemetry.solve_end_t - telemetry.solve_start_t;
+pub fn analyze_solve(
+    telemetry: &SolveTelemetry,
+    mut debug: Option<&mut DebugTrace>,
+) -> ParsedSolve {
+    let _start_instant = std::time::Instant::now();
 
-    if print_output {
-        println!("=== SOLVE ANALYSIS (multi-pass) ===");
-        println!(
-            "Scramble: {}",
-            if telemetry.scramble.is_empty() {
-                "(not recorded)"
-            } else {
-                &telemetry.scramble
-            }
-        );
-        println!(
-            "Duration: {:.2}s (solve_start={:.3}, solve_end={:.3})",
-            duration, telemetry.solve_start_t, telemetry.solve_end_t
-        );
-        println!(
-            "Scramble gyro: {} samples, Solve gyro: {} samples, Raw moves: {}",
-            telemetry.scramble_gyro.len(),
-            telemetry.solve_gyro.len(),
-            telemetry.solve_moves.len()
-        );
-        println!();
-    }
+    // Stage 0: Correct solve start if first move happened earlier (latency/BLE buffer)
+    let first_move_t = telemetry.solve_moves.first().map(|m| m.t);
+    let effective_start = match first_move_t {
+        Some(t) if t < telemetry.solve_start_t => t,
+        _ => telemetry.solve_start_t,
+    };
+
+    let duration = telemetry.solve_end_t - effective_start;
+    let solve_start = effective_start; // for relative printing
 
     // Compute home orientation from scramble gyro
     let home = compute_home(&telemetry.scramble_gyro);
@@ -61,6 +54,10 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
         initial_orientation: home_orient,
         timeline: Vec::new(),
     };
+
+    if let Some(ref mut d) = debug {
+        d.scramble = telemetry.scramble.clone();
+    }
 
     // Combine scramble + solve gyro for lookups
     let mut all_gyro: Vec<&GyroSample> =
@@ -82,13 +79,6 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
         }
         for m in &telemetry.solve_moves {
             cube_ble.apply_move(&m.n);
-        }
-        if print_output {
-            println!(
-                "BLE sanity check (scramble + all raw moves): solved = {}",
-                cube_ble.is_solved()
-            );
-            println!();
         }
     }
 
@@ -155,13 +145,14 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
         }
     }
 
-    if print_output {
-        println!(
-            "=== PASS 1: Slice detection ({} raw -> {} moves) ===",
-            raw.len(),
-            p1.len()
-        );
-        println!();
+    if let Some(ref mut d) = debug {
+        for m in &p1 {
+            d.pass1_moves.push(DebugPass1Move {
+                t: m.t - solve_start,
+                original_moves: m.body_raw.clone(),
+                merged_move: m.body_label.clone(),
+            });
+        }
     }
 
     // ========== PASS 2: Gyro orientation table ==========
@@ -170,7 +161,7 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
 
     // Compute N+1 windows between consecutive moves.
     let mut boundaries: Vec<f64> = Vec::with_capacity(p1.len() + 2);
-    boundaries.push(telemetry.solve_start_t);
+    boundaries.push(solve_start);
     for m in &p1 {
         boundaries.push(m.t);
     }
@@ -181,55 +172,7 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
         .collect();
 
     // Print interleaved MOVE / GYRO timeline
-    const YELLOW: &str = "\x1b[33m";
-    const CYAN: &str = "\x1b[36m";
-    const DIM: &str = "\x1b[2m";
-    const RESET: &str = "\x1b[0m";
-
-    if print_output {
-        println!("=== PASS 2: Gyro / Move Timeline ===");
-        println!();
-    }
-
-    let solve_start = telemetry.solve_start_t;
-
-    let print_gyro_runs =
-        |runs: &[GyroRun], solve_start: f64, prev_ctx: Option<&str>, next_ctx: Option<&str>| {
-            if !print_output {
-                return;
-            }
-            if runs.is_empty() {
-                return;
-            }
-            let mut last_stable: Option<&str> = None;
-            for (i, run) in runs.iter().enumerate() {
-                let noise = is_noise(runs, i, 1, prev_ctx, next_ctx);
-                if noise {
-                    println!(
-                        "       GYRO | {}({} x{}) << noise{}",
-                        DIM, run.label, run.count, RESET
-                    );
-                } else {
-                    // Detect rotation: non-noise run differs from previous non-noise run
-                    if let Some(prev) = last_stable {
-                        if prev != run.label {
-                            if let (Some(from), Some(to)) =
-                                (parse_orient_label(prev), parse_orient_label(&run.label))
-                            {
-                                let rot = detect_rotation(from, to);
-                                let rel_t = run.t_start - solve_start;
-                                println!(
-                                    "       {}~~~~ {} ({} -> {}) at {:+.2}s ~~~~{}",
-                                    CYAN, rot, prev, run.label, rel_t, RESET
-                                );
-                            }
-                        }
-                    }
-                    println!("       GYRO | {} (x{})", run.label, run.count);
-                    last_stable = Some(&run.label);
-                }
-            }
-        };
+    // (print_gyro_runs closure removed in favor of structured trace)
 
     // Compute context for noise detection at window w, respecting slice boundaries.
     // window_runs[w] is between move w (p1[w-1]) and move w+1 (p1[w]).
@@ -274,9 +217,36 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
         cube_detect.apply_move(token);
     }
 
-    // Window before first move
     let (pc0, nc0) = window_ctx(0);
-    print_gyro_runs(&window_runs[0], solve_start, pc0.as_deref(), nc0.as_deref());
+    // Initial state before move 1 could be recorded here if desired
+    let initial_raw = window_effective_orient(&window_runs[0], pc0.as_deref(), nc0.as_deref());
+
+    // Track centers for compensated orientation in Pass 2
+    let mut centers_orient = home_orient;
+
+    let mut debug_runs0: Vec<rouxflow_core::telemetry::DebugGyroRun> = Vec::new();
+    for (i, run) in window_runs[0].iter().enumerate() {
+        let noise = is_noise(&window_runs[0], i, 1, pc0.as_deref(), nc0.as_deref());
+        let label = if noise {
+            format!("{} (x{}) << noise", run.label, run.count)
+        } else {
+            format!("{} (x{})", run.label, run.count)
+        };
+        debug_runs0.push(rouxflow_core::telemetry::DebugGyroRun {
+            t: run.t_start - solve_start,
+            label,
+        });
+    }
+
+    if let Some(ref mut d) = debug {
+        d.pass2_states.push(DebugPass2State {
+            t: 0.0,
+            body_move: "START".to_string(),
+            active_gyro_window: initial_raw, // Initial doesn't have center shifts yet
+            gyro_runs: debug_runs0,
+            cube_state: cube_body.to_html_string(),
+        });
+    }
 
     for (idx, m) in p1.iter().enumerate() {
         // Apply raw moves to display cube
@@ -293,512 +263,297 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
                 .next()
                 .unwrap_or(&m.body_label);
             cube_detect.apply_move(slice_move);
+
+            // Track center shifts in Pass 2 just for debug display
+            if let Some(rot) = slice_core_rotation(slice_move) {
+                centers_orient = apply_rotation(centers_orient, rot);
+            }
         } else {
-            cube_detect.apply_move(&m.body_raw[0]);
-        }
+            let m_str = &m.body_raw[0];
+            cube_detect.apply_move(m_str);
 
-        let rel_t = m.t - solve_start;
-        let is_slice = m.body_raw.len() == 2;
-        let _move_marker = if is_slice {
-            format!("{}S{}", YELLOW, RESET)
-        } else {
-            " ".to_string()
-        };
-
-        // Check Roux steps on detection cube
-        let green_v = format!("{}V{}", GREEN, RESET);
-        let red_x = format!("{}X{}", "\x1b[31m", RESET);
-
-        let mut f_stat = red_x.clone();
-        let mut s_stat = red_x.clone();
-        let mut c_stat = red_x.clone();
-        let mut u_stat = red_x.clone();
-        let mut e_stat = "?".to_string();
-
-        let opp = |c: usize| -> usize {
-            match c {
-                0 => 1, // W <-> Y
-                1 => 0,
-                2 => 3, // G <-> B
-                3 => 2,
-                4 => 5, // R <-> O
-                5 => 4,
-                _ => c,
-            }
-        };
-
-        // Search for an orientation where FB (L-block) is formed
-        let mut aligned_cube = None;
-        let mut temp = cube_body.clone();
-
-        // 1. Ring y scan
-        'search: for _ in 0..4 {
-            for _ in 0..4 {
-                if temp.is_l_block_formed() {
-                    aligned_cube = Some(temp.clone());
-                    break 'search;
-                }
-                temp.rot_x();
-            }
-            temp.rot_y();
-        }
-
-        if aligned_cube.is_none() {
-            // 2. U to L
-            temp = cube_body.clone();
-            temp.rot_z_prime();
-            'search2: for _ in 0..4 {
-                if temp.is_l_block_formed() {
-                    aligned_cube = Some(temp.clone());
-                    break 'search2;
-                }
-                temp.rot_x();
+            // Track center shifts for wide moves in Pass 2
+            if let Some(rot) = wide_core_rotation(m_str) {
+                centers_orient = apply_rotation(centers_orient, rot);
             }
         }
 
-        if aligned_cube.is_none() {
-            // 3. D to L
-            temp = cube_body.clone();
-            temp.rot_z();
-            'search3: for _ in 0..4 {
-                if temp.is_l_block_formed() {
-                    aligned_cube = Some(temp.clone());
-                    break 'search3;
-                }
-                temp.rot_x();
-            }
-        }
-
-        if let Some(ref aligned) = aligned_cube {
-            f_stat = green_v.clone();
-
-            // Extract colors from the aligned block
-            let find_color = |mask: u64| -> Option<usize> {
-                aligned.boards.iter().position(|&b| (b & mask) == mask)
-            };
-
-            if let (Some(l), Some(d), Some(f), Some(b)) = (
-                find_color(BitCube::L_BLOCK),
-                find_color(BitCube::D_BAR_L),
-                find_color(BitCube::F_BAR_L),
-                find_color(BitCube::B_BAR_L),
-            ) {
-                // Check SB (opposite to FB)
-                let r = opp(l);
-
-                // SB Check: Use BitCube constants.
-                // R strict (no center, no top row - R_BLOCK already excludes them)
-                let sb_r_ok = (aligned.boards[r] & BitCube::R_BLOCK) == BitCube::R_BLOCK;
-
-                // D strict (Right bar of D)
-                let sb_d_ok = (aligned.boards[d] & BitCube::D_BAR_R) == BitCube::D_BAR_R;
-
-                // F strict (Right bar of F)
-                // Note: F_BAR_R in BitCube (23|26) already excludes top row (20).
-                let sb_f_ok = (aligned.boards[f] & BitCube::F_BAR_R) == BitCube::F_BAR_R;
-
-                // B strict (Left bar of B)
-                // Note: B_BAR_R in BitCube (48|51) already excludes top row (45).
-                let sb_b_ok = (aligned.boards[b] & BitCube::B_BAR_R) == BitCube::B_BAR_R;
-
-                if sb_r_ok && sb_d_ok && sb_f_ok && sb_b_ok {
-                    s_stat = green_v.clone();
-                }
-
-                // CMLL (Corners on U, permutation)
-                if aligned.is_cmll_solved() {
-                    c_stat = green_v.clone();
-                }
-
-                // UL/UR
-                if aligned.is_ul_ur_placed() {
-                    u_stat = green_v.clone();
-                }
-
-                e_stat = format!("{}", aligned.count_bad_edges());
-            }
-        }
-
-        println!(
-            "{:>4}  MOVE | {:<20} {:+7.2}s  FB: {} SB: {} CMLL: {} UL/UR: {} EdgeCount: {}",
-            idx + 1,
-            m.body_label,
-            rel_t,
-            f_stat,
-            s_stat,
-            c_stat,
-            u_stat,
-            e_stat
-        );
-
-        // Map the string moves into `Move` enum to save in ParsedSolve
-        let parse_move_str = |s: &str| -> Option<rouxflow_bitboard::move_indices::Move> {
-            for m in &rouxflow_bitboard::move_indices::Move::ALL {
-                if m.as_str() == s {
-                    return Some(*m);
-                }
-            }
-            None
-        };
-
-        let body_move_str = canonical_label(&m.body_label);
-
-        let body_move =
-            parse_move_str(body_move_str).unwrap_or(rouxflow_bitboard::move_indices::Move::Face(
-                rouxflow_bitboard::move_indices::FaceMove::U,
-            )); // fallback
-
-        // Note: relative move remapping based on orientation is tricky here due to Pass 3
-        // happening AFTER Pass 1 & 2. We will just compute it if we can, or fallback to body_move
-        // For a full implementation, we need the `current_orient` from Pass 3 here.
-        // We will just do a placeholder for now since the original code didn't do it inline.
-        let relative_move = body_move;
-
-        // Step logic Tracking
-        let is_fb = f_stat == green_v;
-        let is_sb = s_stat == green_v;
-        let is_cmll = c_stat == green_v;
-        let is_ur_lr = u_stat == green_v;
-        let bad_edges_count = aligned_cube
-            .as_ref()
-            .map(|c| c.count_bad_edges())
-            .unwrap_or(0);
-
-        let move_idx = (idx + 1) as isize;
-        if is_fb && parsed_solve.step_details.fb == -1 {
-            parsed_solve.step_details.fb = move_idx;
-        }
-        if is_sb && parsed_solve.step_details.sb == -1 {
-            parsed_solve.step_details.sb = move_idx;
-        }
-        if is_cmll && parsed_solve.step_details.cmll == -1 {
-            parsed_solve.step_details.cmll = move_idx;
-        }
-        // Count bad_edges == 0 as EO being solved, ONLY if FB+SB are solved
-        if is_fb && is_sb && bad_edges_count == 0 && parsed_solve.step_details.eo == -1 {
-            parsed_solve.step_details.eo = move_idx;
-        }
-        if is_ur_lr && parsed_solve.step_details.ur_lr == -1 {
-            parsed_solve.step_details.ur_lr = move_idx;
-        }
-
-        parsed_solve.timeline.push(SolveEvent::Move {
-            t: m.t,
-            original: m.body_raw.clone(),
-            body_move,
-            relative_move,
-        });
-
-        // Print cube state if logging is enabled
-        if print_output {
-            let label = format!("#{} {}", idx + 1, m.body_label);
-            print_cubes_side_by_side(&[(&cube_body, &label)]);
-        }
-
-        let w = idx + 1;
-        let (pc, nc) = window_ctx(w);
-        print_gyro_runs(&window_runs[w], solve_start, pc.as_deref(), nc.as_deref());
+        let mut f_stat = "X".to_string();
     }
 
-    if print_output {
-        println!("Body cube solved: {}", cube_body.is_solved());
-        println!();
+    // Removed console prints for step stats, these are captured in ParsedSolve anyway
+
+    // Map the string moves into `Move` enum to save in ParsedSolve
+    let parse_move_str = |s: &str| -> Option<rouxflow_bitboard::move_indices::Move> {
+        for m in &rouxflow_bitboard::move_indices::Move::ALL {
+            if m.as_str() == s {
+                return Some(*m);
+            }
+        }
+        None
+    };
+
+    let body_move_str = canonical_label(&m.body_label);
+
+    let body_move = parse_move_str(body_move_str).unwrap_or(
+        rouxflow_bitboard::move_indices::Move::Face(rouxflow_bitboard::move_indices::FaceMove::U),
+    ); // fallback
+
+    // Note: relative move remapping based on orientation is tricky here due to Pass 3
+    // happening AFTER Pass 1 & 2. We will just compute it if we can, or fallback to body_move
+    // For a full implementation, we need the `current_orient` from Pass 3 here.
+    // We will just do a placeholder for now since the original code didn't do it inline.
+    let relative_move = body_move;
+
+    // Step logic Tracking
+    let is_fb = f_stat == "V";
+    let is_sb = s_stat == "V";
+    let is_cmll = c_stat == "V";
+    let is_ur_lr = u_stat == "V";
+    let bad_edges_count = aligned_cube
+        .as_ref()
+        .map(|c| c.count_bad_edges())
+        .unwrap_or(0);
+
+    let move_idx = (idx + 1) as isize;
+    if is_fb && parsed_solve.step_details.fb == -1 {
+        parsed_solve.step_details.fb = move_idx;
+    }
+    if is_sb && parsed_solve.step_details.sb == -1 {
+        parsed_solve.step_details.sb = move_idx;
+    }
+    if is_cmll && parsed_solve.step_details.cmll == -1 {
+        parsed_solve.step_details.cmll = move_idx;
+    }
+    // Count bad_edges == 0 as EO being solved, ONLY if FB+SB are solved
+    if is_fb && is_sb && bad_edges_count == 0 && parsed_solve.step_details.eo == -1 {
+        parsed_solve.step_details.eo = move_idx;
+    }
+    if is_ur_lr && parsed_solve.step_details.ur_lr == -1 {
+        parsed_solve.step_details.ur_lr = move_idx;
+    }
+
+    parsed_solve.timeline.push(SolveEvent::Move {
+        t: m.t - solve_start,
+        original: m.body_raw.clone(),
+        body_move,
+        relative_move,
+    });
+
+    let w = idx + 1;
+    let (pc, nc) = window_ctx(w);
+    let raw_eff = window_effective_orient(&window_runs[w], pc.as_deref(), nc.as_deref());
+
+    // Compensate the debug display so it shows PERSPECTIVAL orientation
+    let eff = if let Some(shell) = parse_orient_label(&raw_eff) {
+        orientation_label(combine_orientations(shell, centers_orient))
+    } else {
+        raw_eff
+    };
+
+    let rel_t = m.t - solve_start;
+
+    let mut debug_runs: Vec<rouxflow_core::telemetry::DebugGyroRun> = Vec::new();
+    for (i, run) in window_runs[w].iter().enumerate() {
+        let noise = is_noise(&window_runs[w], i, 1, pc.as_deref(), nc.as_deref());
+        let label = if noise {
+            format!("{} (x{}) << noise", run.label, run.count)
+        } else {
+            format!("{} (x{})", run.label, run.count)
+        };
+        debug_runs.push(rouxflow_core::telemetry::DebugGyroRun {
+            t: run.t_start - solve_start,
+            label,
+        });
+    }
+
+    if let Some(ref mut d) = debug {
+        d.pass2_states.push(DebugPass2State {
+            t: rel_t,
+            body_move: m.body_label.clone(),
+            active_gyro_window: eff,
+            gyro_runs: debug_runs,
+            cube_state: cube_body.to_html_string(),
+        });
     }
 
     println!();
 
     // ========== PASS 3: Rotation detection ==========
-    // Walk through effective orientations (last stable run per window).
-    // A rotation requires 2 consecutive windows to agree on the new orientation.
-    // Also detects round-trip rotations (inspection: rotate → peek → rotate back).
+    // We use a "flattened stable runs" approach.
+    // 1. Collect all non-noise runs across all windows.
+    // 2. Identify transitions between different stable orientations.
+    // 3. Mark transitions as "baseline shifts" if they cross a slice move boundary.
+    // 4. Everything else is a user rotation (persistent or inspection peek).
 
-    const MIN_ROTATION_SAMPLES: usize = 3;
+    let str_to_rot_enum = |s: &str| -> Option<Rotation> {
+        match s {
+            "x" => Some(Rotation::X),
+            "x'" => Some(Rotation::Xp),
+            "x2" => Some(Rotation::X2),
+            "y" => Some(Rotation::Y),
+            "y'" => Some(Rotation::Yp),
+            "y2" => Some(Rotation::Y2),
+            "z" => Some(Rotation::Z),
+            "z'" => Some(Rotation::Zp),
+            "z2" => Some(Rotation::Z2),
+            _ => None,
+        }
+    };
 
-    struct DetectedRotation {
-        before_move: usize, // 1-indexed
-        rotation: String,
-        from: String,
-        to: String,
+    struct StableRun {
+        t: f64,
+        label: String,
+        window_idx: usize,
+    }
+
+    let mut stable_sequence: Vec<StableRun> = Vec::new();
+    for (w, runs) in window_runs.iter().enumerate() {
+        let (pc, nc) = window_ctx(w);
+        for (i, run) in runs.iter().enumerate() {
+            if !is_noise(runs, i, 1, pc.as_deref(), nc.as_deref()) {
+                stable_sequence.push(StableRun {
+                    t: run.t_start,
+                    label: run.label.clone(),
+                    window_idx: w,
+                });
+            }
+        }
     }
 
     let mut current_orient = orientation_label(home_orient);
-    let mut detected_rotations: Vec<DetectedRotation> = Vec::new();
-    let mut move_orients: Vec<String> = Vec::with_capacity(p1.len());
 
-    // Emit an initial Rotation at t = first_move - 0.001 if the solver is already
-    // holding a different orientation than home when the solve begins.
-    // Scan window_runs starting from w=1 (after first move) to find the first
-    // reliable gyro window — that gives the true starting orientation.
-    {
-        let mut initial_orient: Option<String> = None;
-        'find_init: for w in 1..window_runs.len().min(6) {
-            let runs = &window_runs[w];
-            let total: usize = runs.iter().map(|r| r.count).sum();
-            if total < 1 {
-                continue;
-            }
-            let (pc, nc) = window_ctx(w);
-            let eff = window_effective_orient(runs, pc.as_deref(), nc.as_deref());
-            if eff != "?/?" && eff != current_orient {
-                initial_orient = Some(eff);
-                break 'find_init;
-            }
-        }
-
-        if let Some(solve_start_orient) = initial_orient {
+    if !stable_sequence.is_empty() {
+        // Handle initial orientation if it differs from home
+        let first_stable = &stable_sequence[0];
+        if first_stable.label != current_orient && first_stable.window_idx <= 2 {
             if let (Some(from), Some(to)) = (
                 parse_orient_label(&current_orient),
-                parse_orient_label(&solve_start_orient),
+                parse_orient_label(&first_stable.label),
             ) {
                 let rot_str = detect_rotation(from, to);
                 let parts: Vec<&str> = rot_str.split_whitespace().collect();
+                let mut temp_orient = from;
                 let mut t_offset = 0.0;
 
                 for part in parts {
-                    let rot_enum = match part {
-                        "x" => Some(Rotation::X),
-                        "x'" => Some(Rotation::Xp),
-                        "x2" => Some(Rotation::X2),
-                        "y" => Some(Rotation::Y),
-                        "y'" => Some(Rotation::Yp),
-                        "y2" => Some(Rotation::Y2),
-                        "z" => Some(Rotation::Z),
-                        "z'" => Some(Rotation::Zp),
-                        "z2" => Some(Rotation::Z2),
-                        _ => None,
-                    };
+                    if let Some(r) = str_to_rot_enum(part) {
+                        // Intermediate orientation for this step
+                        let step_to_orient = apply_rotation(temp_orient, part);
 
-                    if let Some(r) = rot_enum {
-                        let t_initial = p1
-                            .first()
-                            .map(|m| m.t - 0.001 + t_offset)
-                            .unwrap_or(telemetry.solve_start_t + t_offset);
+                        // Force initial rotation to -0.01s relative to solve_start
+                        let t_rot = solve_start - 0.01 + t_offset;
                         parsed_solve.timeline.push(SolveEvent::Rotation {
-                            t: t_initial,
+                            t: t_rot - solve_start,
                             axis: r,
-                            from_orientation: from, // Note: intermediate orientations not tracked here
-                            to_orientation: to,     // but this is the final goal
+                            from_orientation: temp_orient,
+                            to_orientation: step_to_orient,
                             is_inspection: false,
                         });
-                        t_offset += 0.0001;
+                        if let Some(ref mut d) = debug {
+                            d.pass3_rotations.push(DebugPass3Rotation {
+                                t: t_rot - solve_start,
+                                before_move_idx: 1, // Start of the solve
+                                rotation_label: part.to_string(),
+                                from_orient: orientation_label(temp_orient),
+                                to_orient: orientation_label(step_to_orient),
+                                is_inspection: false,
+                            });
+                        }
+                        temp_orient = step_to_orient;
+                        t_offset += 0.001; // Spaced by 1ms to avoid HTML grouping collisions
+                    }
+                }
+                current_orient = first_stable.label.clone();
+            }
+        }
+
+        // Process transitions in the stable sequence
+        let mut i = 0;
+        while i + 1 < stable_sequence.len() {
+            let cur = &stable_sequence[i];
+            let next = &stable_sequence[i + 1];
+
+            if cur.label != next.label {
+                // Determine if this is a baseline shift (slice move between them)
+                let mut has_slice = false;
+                for w_idx in cur.window_idx..next.window_idx {
+                    if w_idx < p1.len() && p1[w_idx].body_raw.len() == 2 {
+                        has_slice = true;
+                        break;
                     }
                 }
 
-                detected_rotations.push(DetectedRotation {
-                    before_move: 1,
-                    rotation: rot_str,
-                    from: current_orient.clone(),
-                    to: solve_start_orient.clone(),
-                });
-            }
-            current_orient = solve_start_orient;
-        }
-    }
-
-    const SLICE_LOOKBACK: usize = 2; // skip rotation detection if a slice is within this many moves
-
-    // Reuse window_ctx for Pass 3 context (same slice-boundary awareness)
-
-    for (idx, _m) in p1.iter().enumerate() {
-        let runs = &window_runs[idx];
-        let total: usize = runs.iter().map(|r| r.count).sum();
-        let (pc, nc) = window_ctx(idx);
-        let effective = window_effective_orient(runs, pc.as_deref(), nc.as_deref());
-
-        // Check if any of the PREVIOUS SLICE_LOOKBACK moves is a slice.
-        // Note: d starts at 1 — the current move's BEFORE window is pre-slice, still clean.
-        let near_slice = (1..=SLICE_LOOKBACK).any(|d| {
-            if d > idx {
-                return false;
-            }
-            p1[idx - d].body_raw.len() == 2
-        });
-
-        if total < MIN_ROTATION_SAMPLES || near_slice {
-            // Not enough samples or near a slice — carry forward
-            if near_slice && total > 0 && current_orient != "?/?" {
-                // Silently update baseline after slice (gyro shifted, not a user rotation).
-                current_orient = effective.clone();
-            }
-            move_orients.push(current_orient.clone());
-            continue;
-        }
-
-        if current_orient == "?/?" {
-            current_orient = effective.clone();
-        } else if effective != current_orient {
-            // Potential rotation — immediately accept if window is reliable
-            if let (Some(from), Some(to)) = (
-                parse_orient_label(&current_orient),
-                parse_orient_label(&effective),
-            ) {
-                let rot_str = detect_rotation(from, to);
-                let parts: Vec<&str> = rot_str.split_whitespace().collect();
-                let mut t_offset = 0.0;
-
-                for part in parts {
-                    let rot_enum = match part {
-                        "x" => Some(Rotation::X),
-                        "x'" => Some(Rotation::Xp),
-                        "x2" => Some(Rotation::X2),
-                        "y" => Some(Rotation::Y),
-                        "y'" => Some(Rotation::Yp),
-                        "y2" => Some(Rotation::Y2),
-                        "z" => Some(Rotation::Z),
-                        "z'" => Some(Rotation::Zp),
-                        "z2" => Some(Rotation::Z2),
-                        _ => None,
-                    };
-
-                    if let Some(r) = rot_enum {
-                        let t_rot =
-                            if (idx + 1) < window_runs.len() && !window_runs[idx + 1].is_empty() {
-                                window_runs[idx + 1][0].t_start
-                            } else if !runs.is_empty() {
-                                runs[0].t_start
-                            } else {
-                                telemetry.solve_start_t
-                            };
-
-                        parsed_solve.timeline.push(SolveEvent::Rotation {
-                            t: t_rot + t_offset,
-                            axis: r,
-                            from_orientation: from,
-                            to_orientation: to,
-                            is_inspection: false,
-                        });
-                        t_offset += 0.0001;
+                if has_slice {
+                    // Silently update baseline
+                    current_orient = next.label.clone();
+                } else {
+                    // This is a user rotation.
+                    // Is it an inspection peek? Check if we eventually return to cur.label
+                    // before any other persistent rotation or slice move.
+                    let mut is_peek = false;
+                    for j in (i + 2)..stable_sequence.len() {
+                        let fwd = &stable_sequence[j];
+                        // If we see a slice move before returning, it's not a simple peek.
+                        let mut slice_interrupt = false;
+                        for w_idx in next.window_idx..fwd.window_idx {
+                            if w_idx < p1.len() && p1[w_idx].body_raw.len() == 2 {
+                                slice_interrupt = true;
+                                break;
+                            }
+                        }
+                        if slice_interrupt {
+                            break;
+                        }
+                        if fwd.label == cur.label {
+                            is_peek = true;
+                            break;
+                        }
+                        if fwd.label != next.label {
+                            // Another rotation happened
+                            break;
+                        }
                     }
-                }
 
-                detected_rotations.push(DetectedRotation {
-                    before_move: idx + 1,
-                    rotation: rot_str,
-                    from: current_orient.clone(),
-                    to: effective.clone(),
-                });
-                current_orient = effective.clone();
-            }
-        }
+                    if let (Some(from), Some(to)) = (
+                        parse_orient_label(&current_orient),
+                        parse_orient_label(&next.label),
+                    ) {
+                        let rot_str = detect_rotation(from, to);
+                        let parts: Vec<&str> = rot_str.split_whitespace().collect();
+                        let mut temp_orient = from;
+                        let mut t_offset = 0.0;
 
-        move_orients.push(current_orient.clone());
-    }
-
-    if print_output {
-        println!("=== PASS 3: Rotation Detection ===");
-        if detected_rotations.is_empty() {
-            println!("  No rotations detected.");
-        } else {
-            for r in &detected_rotations {
-                println!(
-                    "  Before move {:>3}: {:>4}  ({} -> {})",
-                    r.before_move, r.rotation, r.from, r.to
-                );
-            }
-        }
-        println!();
-    }
-
-    // ========== Inspection detection ==========
-    // A window where stable gyro labels form a round-trip (A -> B -> A) is an inspection:
-    // the solver peeked at another face and rotated back. Each transition is stored as a
-    // SolveEvent::Rotation with is_inspection = true. These never affect move_count / tps.
-    {
-        let str_to_rot_enum = |s: &str| -> Option<Rotation> {
-            match s {
-                "x" => Some(Rotation::X),
-                "x'" => Some(Rotation::Xp),
-                "x2" => Some(Rotation::X2),
-                "y" => Some(Rotation::Y),
-                "y'" => Some(Rotation::Yp),
-                "y2" => Some(Rotation::Y2),
-                "z" => Some(Rotation::Z),
-                "z'" => Some(Rotation::Zp),
-                "z2" => Some(Rotation::Z2),
-                _ => None,
-            }
-        };
-
-        let mut inspections_found = false;
-        for (w, runs) in window_runs.iter().enumerate() {
-            let (pc, nc) = window_ctx(w);
-            // Collect non-noise run labels for this window
-            let stable: Vec<&str> = runs
-                .iter()
-                .enumerate()
-                .filter(|(i, _)| !is_noise(runs, *i, 1, pc.as_deref(), nc.as_deref()))
-                .map(|(_, r)| r.label.as_str())
-                .collect();
-
-            if stable.len() < 3 {
-                continue; // need at least: start -> peek -> back
-            }
-            let first = stable[0];
-            let last = stable[stable.len() - 1];
-            if first != last {
-                continue; // not a round-trip
-            }
-            let has_different = stable[1..stable.len() - 1].iter().any(|s| *s != first);
-            if !has_different {
-                continue;
-            }
-
-            // Build deduplicated sequence of visited orientations
-            let mut visited: Vec<&str> = vec![first];
-            for s in &stable[1..] {
-                if *s != *visited.last().unwrap() {
-                    visited.push(s);
-                }
-            }
-
-            // Distribute the window's time equally across each rotation step
-            let t_win_start = boundaries[w];
-            let t_win_end = boundaries[w + 1];
-            let n_steps = visited.len().saturating_sub(1).max(1);
-            let step_dt = (t_win_end - t_win_start) / n_steps as f64;
-
-            // Emit one SolveEvent::Rotation(is_inspection=true) per consecutive pair
-            for pair_idx in 0..visited.len().saturating_sub(1) {
-                let from_str = visited[pair_idx];
-                let to_str = visited[pair_idx + 1];
-                if let (Some(from_o), Some(to_o)) =
-                    (parse_orient_label(from_str), parse_orient_label(to_str))
-                {
-                    let rot_str = detect_rotation(from_o, to_o);
-                    if let Some(r) = str_to_rot_enum(&rot_str) {
-                        let t_step = t_win_start + step_dt * pair_idx as f64;
-                        parsed_solve.timeline.push(SolveEvent::Rotation {
-                            t: t_step,
-                            axis: r,
-                            from_orientation: from_o,
-                            to_orientation: to_o,
-                            is_inspection: true,
-                        });
+                        for part in parts {
+                            if let Some(r) = str_to_rot_enum(part) {
+                                let step_to_orient = apply_rotation(temp_orient, part);
+                                let t_rot = next.t + t_offset;
+                                parsed_solve.timeline.push(SolveEvent::Rotation {
+                                    t: t_rot - solve_start,
+                                    axis: r,
+                                    from_orientation: temp_orient,
+                                    to_orientation: step_to_orient,
+                                    is_inspection: is_peek,
+                                });
+                                if let Some(ref mut d) = debug {
+                                    d.pass3_rotations.push(DebugPass3Rotation {
+                                        t: t_rot - solve_start,
+                                        before_move_idx: next.window_idx.max(1),
+                                        rotation_label: part.to_string(),
+                                        from_orient: orientation_label(temp_orient),
+                                        to_orient: orientation_label(step_to_orient),
+                                        is_inspection: is_peek,
+                                    });
+                                }
+                                temp_orient = step_to_orient;
+                                t_offset += 0.001;
+                            }
+                        }
+                        current_orient = next.label.clone();
                     }
                 }
             }
-
-            if print_output {
-                let after_move = if w > 0 { w } else { 0 };
-                let before_move = if w < p1.len() { w + 1 } else { w };
-                let duration_ms = (t_win_end - t_win_start) * 1000.0;
-                println!(
-                    "  Between moves {:>3}-{:>3} ({:.0}ms): {}",
-                    after_move,
-                    before_move,
-                    duration_ms,
-                    visited.join(" -> "),
-                );
-                inspections_found = true;
-            }
-        }
-
-        if print_output {
-            if !inspections_found {
-                println!("Inspections (in-window round-trips):");
-                println!("  None detected.");
-            }
-            println!();
+            i += 1;
         }
     }
 
@@ -822,21 +577,45 @@ pub fn analyze_solve(telemetry: &SolveTelemetry, print_output: bool) -> ParsedSo
     // ========== Perspectival Move Mapping ==========
     // Re-map hardware moves to relative moves based on the current orientation at the time of the move.
     {
-        let mut active_orient = home_orient;
+        let mut centers_orient = home_orient;
+        let mut last_gyro_shell_orient = home_orient;
+
         for event in &mut parsed_solve.timeline {
             match event {
-                SolveEvent::Rotation { to_orientation, .. } => {
-                    active_orient = *to_orientation;
+                SolveEvent::Rotation {
+                    to_orientation,
+                    is_inspection,
+                    ..
+                } => {
+                    // Update physical shell orientation from gyro
+                    if !*is_inspection {
+                        last_gyro_shell_orient = *to_orientation;
+                    }
                 }
                 SolveEvent::Move {
                     body_move,
                     relative_move,
                     ..
                 } => {
+                    // Combine shell orientation and center shifts for net perspectival mapping
+                    let active_orient =
+                        combine_orientations(last_gyro_shell_orient, centers_orient);
                     *relative_move = map_move_to_orientation(*body_move, active_orient);
+
+                    // Track center shifts caused by core-rotating moves
+                    let rel_str = relative_move.as_str();
+                    if let Some(rot) = slice_core_rotation(rel_str) {
+                        centers_orient = apply_rotation(centers_orient, rot);
+                    } else if let Some(rot) = wide_core_rotation(rel_str) {
+                        centers_orient = apply_rotation(centers_orient, rot);
+                    }
                 }
             }
         }
+    }
+
+    if let Some(ref mut d) = debug {
+        d.clean_replay = Some(parsed_solve.to_clean());
     }
 
     parsed_solve

@@ -87,6 +87,13 @@ onMounted(() => {
       >
         Timing Test
       </button>
+      <button
+        @click="router.push({ name: 'GyroDebug' })"
+        class="hover:text-white transition-colors"
+        :class="{ 'text-indigo-400': $route.name === 'GyroDebug' }"
+      >
+        Gyro Debug
+      </button>
     </nav>
 
     <div class="flex items-center gap-4">

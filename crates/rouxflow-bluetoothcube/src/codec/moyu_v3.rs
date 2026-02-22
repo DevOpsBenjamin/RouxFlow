@@ -9,8 +9,8 @@
 //! Ref: cstimer moyu32cube.js
 
 use super::{
-    AngularVelocity, BitView, CubeCommand, CubeEvent, CubeProtocol,
-    derive_gan_keys, gan_decrypt, gan_encrypt,
+    derive_gan_keys, gan_decrypt, gan_encrypt, AngularVelocity, BitView, CubeCommand, CubeEvent,
+    CubeProtocol,
 };
 use crate::protocol::moyu_v3::ENCRYPTION_KEYS;
 use rouxflow_core::cube::{Face, Quaternion};
@@ -26,8 +26,7 @@ const MOYU_FACES: [Face; 6] = [Face::F, Face::B, Face::U, Face::D, Face::L, Face
 /// Reset command: 0xA2 (Write Facelets) + solved state in FBUDLR order (3 bits/sticker).
 /// F=000x8, B=001x8, U=010x8, D=011x8, L=100x8, R=101x8, trailing 0x02.
 const SOLVED_STATE_CMD: [u8; 20] = [
-    0xA2, 0x00, 0x00, 0x00,
-    0x24, 0x92, 0x49, // B face (001 x8)
+    0xA2, 0x00, 0x00, 0x00, 0x24, 0x92, 0x49, // B face (001 x8)
     0x49, 0x24, 0x92, // U face (010 x8)
     0x6D, 0xB6, 0xDB, // D face (011 x8)
     0x92, 0x49, 0x24, // L face (100 x8)
@@ -104,9 +103,18 @@ impl MoYuV3Codec {
     /// Format a 5-bit move code for debug logging.
     fn format_move(m: u32) -> &'static str {
         match m {
-            0 => "F",  1 => "F'",  2 => "B",  3 => "B'",
-            4 => "U",  5 => "U'",  6 => "D",  7 => "D'",
-            8 => "L",  9 => "L'", 10 => "R", 11 => "R'",
+            0 => "F",
+            1 => "F'",
+            2 => "B",
+            3 => "B'",
+            4 => "U",
+            5 => "U'",
+            6 => "D",
+            7 => "D'",
+            8 => "L",
+            9 => "L'",
+            10 => "R",
+            11 => "R'",
             _ => "??",
         }
     }
@@ -124,7 +132,9 @@ impl MoYuV3Codec {
 }
 
 impl CubeProtocol for MoYuV3Codec {
-    fn name(&self) -> &str { "MoYu V3" }
+    fn name(&self) -> &str {
+        "MoYu V3"
+    }
 
     fn decrypt(&self, data: &[u8]) -> Vec<u8> {
         gan_decrypt(&self.key, &self.iv, data)
@@ -182,7 +192,9 @@ impl CubeProtocol for MoYuV3Codec {
             164 => {
                 // 0xA4 — Battery level
                 let level = view.get(8, 8) as u8;
-                vec![CubeEvent::Battery { level: level.min(100) }]
+                vec![CubeEvent::Battery {
+                    level: level.min(100),
+                }]
             }
             165 => {
                 // 0xA5 — Move event
@@ -204,10 +216,23 @@ impl CubeProtocol for MoYuV3Codec {
                     "[MoYu V3 MOVE] raw_hex={} | timestamps=[{}, {}, {}, {}, {}] \
                      | counter={} (prev={}) | move_codes=[{}, {}, {}, {}, {}] \
                      | decoded=[{}, {}, {}, {}, {}] | remaining_bits=0b{:08b}",
-                    decrypted.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "),
-                    time_offsets[0], time_offsets[1], time_offsets[2], time_offsets[3], time_offsets[4],
-                    mc, self.prev_move_count,
-                    moves[0], moves[1], moves[2], moves[3], moves[4],
+                    decrypted
+                        .iter()
+                        .map(|b| format!("{:02x}", b))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    time_offsets[0],
+                    time_offsets[1],
+                    time_offsets[2],
+                    time_offsets[3],
+                    time_offsets[4],
+                    mc,
+                    self.prev_move_count,
+                    moves[0],
+                    moves[1],
+                    moves[2],
+                    moves[3],
+                    moves[4],
                     Self::format_move(moves[0]),
                     Self::format_move(moves[1]),
                     Self::format_move(moves[2]),
@@ -220,7 +245,11 @@ impl CubeProtocol for MoYuV3Codec {
                 self.move_count = mc;
 
                 if self.prev_move_count == -1 || mc == self.prev_move_count {
-                    log::debug!("[MoYu V3 MOVE] skipped: prev_move_count={}, mc={}", self.prev_move_count, mc);
+                    log::debug!(
+                        "[MoYu V3 MOVE] skipped: prev_move_count={}, mc={}",
+                        self.prev_move_count,
+                        mc
+                    );
                     return vec![];
                 }
 
@@ -234,7 +263,10 @@ impl CubeProtocol for MoYuV3Codec {
 
                 let mut move_diff = ((mc - self.prev_move_count) & 0xFF) as usize;
                 if move_diff > 5 {
-                    log::debug!("[MoYu V3 MOVE] lost moves! diff={}, clamping to 5", move_diff);
+                    log::debug!(
+                        "[MoYu V3 MOVE] lost moves! diff={}, clamping to 5",
+                        move_diff
+                    );
                     move_diff = 5;
                 }
                 self.prev_move_count = mc;
@@ -245,7 +277,9 @@ impl CubeProtocol for MoYuV3Codec {
                     if let Some((face, direction)) = Self::decode_move(moves[i]) {
                         log::debug!(
                             "[MoYu V3 MOVE] emit: slot={} code={} → {:?} {} (ts={}ms)",
-                            i, moves[i], face,
+                            i,
+                            moves[i],
+                            face,
                             if direction == 1 { "CW" } else { "CCW" },
                             time_offsets[i],
                         );
@@ -303,8 +337,8 @@ impl CubeProtocol for MoYuV3Codec {
                     quaternion: Quaternion {
                         w: qw as f32 / QUAT_SCALE,
                         x: qx as f32 / QUAT_SCALE,
-                        y: qz as f32 / QUAT_SCALE,  // gyro Z (up) → renderer Y (up)
-                        z: -(qy as f32) / QUAT_SCALE,  // gyro -Y → renderer Z (roll)
+                        y: qz as f32 / QUAT_SCALE, // gyro Z (up) → renderer Y (up)
+                        z: -(qy as f32) / QUAT_SCALE, // gyro -Y → renderer Z (roll)
                     },
                     velocity: Some(AngularVelocity {
                         x: vx_raw as f32,
@@ -320,9 +354,15 @@ impl CubeProtocol for MoYuV3Codec {
     fn create_command(&self, cmd: CubeCommand) -> Option<Vec<u8>> {
         let mut msg = vec![0u8; 20];
         match cmd {
-            CubeCommand::RequestHardware => { msg[0] = 0xA1; }
-            CubeCommand::RequestFacelets => { msg[0] = 0xA3; }
-            CubeCommand::RequestBattery  => { msg[0] = 0xA4; }
+            CubeCommand::RequestHardware => {
+                msg[0] = 0xA1;
+            }
+            CubeCommand::RequestFacelets => {
+                msg[0] = 0xA3;
+            }
+            CubeCommand::RequestBattery => {
+                msg[0] = 0xA4;
+            }
             CubeCommand::RequestReset => {
                 // 0xA2 = Write Facelets — send solved state (FBUDLR, 3 bits/sticker)
                 msg.copy_from_slice(&SOLVED_STATE_CMD);
@@ -331,9 +371,13 @@ impl CubeProtocol for MoYuV3Codec {
         Some(msg)
     }
 
-    fn has_gyro(&self) -> bool { true }
+    fn has_gyro(&self) -> bool {
+        true
+    }
 
-    fn requires_handshake(&self) -> bool { false }
+    fn requires_handshake(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]
@@ -342,11 +386,11 @@ mod tests {
 
     #[test]
     fn test_decode_move() {
-        assert_eq!(MoYuV3Codec::decode_move(0), Some((Face::F, 1)));   // F CW
-        assert_eq!(MoYuV3Codec::decode_move(1), Some((Face::F, -1)));  // F CCW
-        assert_eq!(MoYuV3Codec::decode_move(2), Some((Face::B, 1)));   // B CW
-        assert_eq!(MoYuV3Codec::decode_move(4), Some((Face::U, 1)));   // U CW
+        assert_eq!(MoYuV3Codec::decode_move(0), Some((Face::F, 1))); // F CW
+        assert_eq!(MoYuV3Codec::decode_move(1), Some((Face::F, -1))); // F CCW
+        assert_eq!(MoYuV3Codec::decode_move(2), Some((Face::B, 1))); // B CW
+        assert_eq!(MoYuV3Codec::decode_move(4), Some((Face::U, 1))); // U CW
         assert_eq!(MoYuV3Codec::decode_move(11), Some((Face::R, -1))); // R CCW
-        assert_eq!(MoYuV3Codec::decode_move(12), None);                // invalid
+        assert_eq!(MoYuV3Codec::decode_move(12), None); // invalid
     }
 }

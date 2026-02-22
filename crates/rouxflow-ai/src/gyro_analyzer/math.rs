@@ -16,14 +16,14 @@ pub fn color_to_char(c: Color) -> char {
 }
 
 /// The 6 axis directions and their corresponding colors.
-/// MoYu V10: +Y=White, -Y=Yellow, +Z=Green, -Z=Blue, +X=Red, -X=Orange.
+/// Aligned with RouxFlow standard: +Y=White, -Y=Yellow, +Z=Green, -Z=Blue, +X=Red, -X=Orange.
 pub const AXIS_COLORS: [([f32; 3], Color); 6] = [
-    ([0.0, 1.0, 0.0], Color::White),   // +Y
-    ([0.0, -1.0, 0.0], Color::Yellow), // -Y
-    ([0.0, 0.0, 1.0], Color::Green),   // +Z
-    ([0.0, 0.0, -1.0], Color::Blue),   // -Z
-    ([1.0, 0.0, 0.0], Color::Red),     // +X
-    ([-1.0, 0.0, 0.0], Color::Orange), // -X
+    ([0.0, 1.0, 0.0], Color::White),   // +Y (Up)
+    ([0.0, -1.0, 0.0], Color::Yellow), // -Y (Down)
+    ([0.0, 0.0, 1.0], Color::Green),   // +Z (Front)
+    ([0.0, 0.0, -1.0], Color::Blue),   // -Z (Back)
+    ([1.0, 0.0, 0.0], Color::Red),     // +X (Right)
+    ([-1.0, 0.0, 0.0], Color::Orange), // -X (Left)
 ];
 
 // ========== Quaternion math ==========
@@ -385,6 +385,23 @@ pub fn detect_rotation(from: Orientation, to: Orientation) -> String {
     "?".to_string()
 }
 
+/// Combine shell orientation (from gyro) and centers orientation (from slices).
+pub fn combine_orientations(shell: Orientation, centers: Orientation) -> Orientation {
+    let home = Orientation {
+        top: Color::White,
+        front: Color::Green,
+    };
+    if centers == home {
+        return shell;
+    }
+    let rot = detect_rotation(home, centers);
+    let mut result = shell;
+    for part in rot.split_whitespace() {
+        result = apply_rotation(result, part);
+    }
+    result
+}
+
 // ========== Gyro Timeline Analysis ==========
 
 pub struct GyroRun {
@@ -470,8 +487,8 @@ pub fn window_effective_orient(
     prev_ctx: Option<&str>,
     next_ctx: Option<&str>,
 ) -> String {
-    // Walk backwards to find last non-noise run
-    for i in (0..runs.len()).rev() {
+    // Walk forward to find first non-noise run
+    for i in 0..runs.len() {
         if !is_noise(runs, i, 1, prev_ctx, next_ctx) {
             return runs[i].label.clone();
         }

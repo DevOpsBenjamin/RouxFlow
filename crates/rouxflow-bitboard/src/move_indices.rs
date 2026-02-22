@@ -122,18 +122,37 @@ impl SliceMove {
     }
 
     pub fn with_face(self, face: &str) -> Option<Self> {
-        let suffix = match self {
-            SliceMove::M | SliceMove::E | SliceMove::S => "",
-            SliceMove::Mp | SliceMove::Ep | SliceMove::Sp => "'",
-            SliceMove::M2 | SliceMove::E2 | SliceMove::S2 => "2",
-        };
-        let prefix = match face {
-            "L" | "R" => "M",
-            "U" | "D" => "E",
-            "F" | "B" => "S",
+        let is_prime = matches!(self, SliceMove::Mp | SliceMove::Ep | SliceMove::Sp);
+        let is_double = matches!(self, SliceMove::M2 | SliceMove::E2 | SliceMove::S2);
+
+        // Each slice has a "canonical" reference face (M→L, E→D, S→F).
+        // When the target face is the OPPOSITE of that reference, invert direction.
+        let (prefix, invert) = match face {
+            "L" => ("M", false),
+            "R" => ("M", true),
+            "D" => ("E", false),
+            "U" => ("E", true),
+            "F" => ("S", false),
+            "B" => ("S", true),
             _ => return None,
         };
-        let target = format!("{}{}", prefix, suffix);
+
+        let effective_prime = if is_double {
+            false // doubles are symmetric
+        } else if invert {
+            !is_prime
+        } else {
+            is_prime
+        };
+
+        let target = if is_double {
+            format!("{}2", prefix)
+        } else if effective_prime {
+            format!("{}'", prefix)
+        } else {
+            prefix.to_string()
+        };
+
         for m in [
             SliceMove::M,
             SliceMove::Mp,
@@ -251,7 +270,7 @@ impl WideMove {
 }
 
 /// Global cube rotations: x, y, z
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Rotation {
     X,
     Xp,
@@ -262,6 +281,51 @@ pub enum Rotation {
     Z,
     Zp,
     Z2,
+}
+
+impl Rotation {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Rotation::X => "x",
+            Rotation::Xp => "x'",
+            Rotation::X2 => "x2",
+            Rotation::Y => "y",
+            Rotation::Yp => "y'",
+            Rotation::Y2 => "y2",
+            Rotation::Z => "z",
+            Rotation::Zp => "z'",
+            Rotation::Z2 => "z2",
+        }
+    }
+
+    pub const ALL: [Rotation; 9] = [
+        Rotation::X,
+        Rotation::Xp,
+        Rotation::X2,
+        Rotation::Y,
+        Rotation::Yp,
+        Rotation::Y2,
+        Rotation::Z,
+        Rotation::Zp,
+        Rotation::Z2,
+    ];
+}
+
+impl Serialize for Rotation {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for Rotation {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(d)?;
+        Rotation::ALL
+            .iter()
+            .find(|m| m.as_str() == raw)
+            .copied()
+            .ok_or_else(|| serde::de::Error::unknown_variant(&raw, &[]))
+    }
 }
 
 /// Unified Move enum that wraps all categories
