@@ -1,0 +1,1099 @@
+{
+  "solve_duration_ms": 45119.29999995231,
+  "is_solved": true,
+  "move_count": 115,
+  "tps": 2.5487984077794104,
+  "step_details": {
+    "fb": 21,
+    "sb": 54,
+    "cmll": 88,
+    "eo": 102,
+    "ur_lr": 110,
+    "l4e": 115
+  },
+  "initial_orientation": {
+    "top": "White",
+    "front": "Green"
+  },
+  "timeline": [
+    {
+      "type": "Move",
+      "t": 34.022599999904635,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 34.08709999990463,
+      "original": [
+        "L'"
+      ],
+      "body_move": "L'",
+      "relative_move": "L'"
+    },
+    {
+      "type": "Move",
+      "t": 34.562199999928474,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 35.705599999904635,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 36.18289999997616,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    },
+    {
+      "type": "Move",
+      "t": 36.66409999990464,
+      "original": [
+        "R"
+      ],
+      "body_move": "R",
+      "relative_move": "R"
+    },
+    {
+      "type": "Move",
+      "t": 37.444699999928474,
+      "original": [
+        "R'"
+      ],
+      "body_move": "R'",
+      "relative_move": "R'"
+    },
+    {
+      "type": "Move",
+      "t": 37.804,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    },
+    {
+      "type": "Move",
+      "t": 38.162199999928475,
+      "original": [
+        "B"
+      ],
+      "body_move": "B",
+      "relative_move": "B"
+    },
+    {
+      "type": "Move",
+      "t": 38.28409999990463,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    },
+    {
+      "type": "Move",
+      "t": 38.3455,
+      "original": [
+        "B'"
+      ],
+      "body_move": "B'",
+      "relative_move": "B'"
+    },
+    {
+      "type": "Move",
+      "t": 39.242,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 39.367199999928474,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 39.66239999997616,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 40.08519999992848,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    },
+    {
+      "type": "Move",
+      "t": 40.50219999992847,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 40.804,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 41.04519999992847,
+      "original": [
+        "R"
+      ],
+      "body_move": "R",
+      "relative_move": "R"
+    },
+    {
+      "type": "Move",
+      "t": 41.525199999928475,
+      "original": [
+        "B",
+        "F'"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 41.882199999928474,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 42.48219999992848,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 43.56189999997616,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 43.56769999992847,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 44.22189999997616,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 44.282,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 44.70569999992848,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 45.12189999997616,
+      "original": [
+        "L"
+      ],
+      "body_move": "L",
+      "relative_move": "L"
+    },
+    {
+      "type": "Move",
+      "t": 46.024799999952315,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 47.04469999992848,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 47.40479999995232,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 47.76379999995232,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 48.004199999928474,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 48.24379999995232,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 48.60179999995232,
+      "original": [
+        "F",
+        "B'"
+      ],
+      "body_move": "S'",
+      "relative_move": "S'"
+    },
+    {
+      "type": "Move",
+      "t": 49.025199999928475,
+      "original": [
+        "B'"
+      ],
+      "body_move": "B'",
+      "relative_move": "B'"
+    },
+    {
+      "type": "Move",
+      "t": 49.144199999928475,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 49.264,
+      "original": [
+        "B"
+      ],
+      "body_move": "B",
+      "relative_move": "B"
+    },
+    {
+      "type": "Move",
+      "t": 49.862,
+      "original": [
+        "R'"
+      ],
+      "body_move": "R'",
+      "relative_move": "R'"
+    },
+    {
+      "type": "Rotation",
+      "t": 49.86509999990463,
+      "axis": "Zp",
+      "from_orientation": {
+        "top": "Yellow",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "Green",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 50.462299999952315,
+      "original": [
+        "R'"
+      ],
+      "body_move": "R'",
+      "relative_move": "R'"
+    },
+    {
+      "type": "Move",
+      "t": 51.184599999904634,
+      "original": [
+        "R'"
+      ],
+      "body_move": "R'",
+      "relative_move": "R'"
+    },
+    {
+      "type": "Move",
+      "t": 51.8445,
+      "original": [
+        "R"
+      ],
+      "body_move": "R",
+      "relative_move": "R"
+    },
+    {
+      "type": "Move",
+      "t": 52.14179999995232,
+      "original": [
+        "R"
+      ],
+      "body_move": "R",
+      "relative_move": "R"
+    },
+    {
+      "type": "Move",
+      "t": 52.26419999992847,
+      "original": [
+        "B",
+        "F'"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 52.68469999992848,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 53.22459999990463,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 54.36469999992848,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 54.66379999995232,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 54.78389999997616,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 55.32259999990463,
+      "original": [
+        "B'",
+        "F"
+      ],
+      "body_move": "S'",
+      "relative_move": "S'"
+    },
+    {
+      "type": "Move",
+      "t": 55.621699999928474,
+      "original": [
+        "R'"
+      ],
+      "body_move": "R'",
+      "relative_move": "R'"
+    },
+    {
+      "type": "Move",
+      "t": 56.10369999992847,
+      "original": [
+        "B",
+        "F'"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 56.583599999904635,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 56.70169999992847,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 56.94159999990463,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 57.50389999997616,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 57.8425,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 58.204799999952314,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 58.623599999904634,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 58.98669999992848,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 59.22209999990464,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 59.34419999992848,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 59.644,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 59.705199999928475,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 59.88169999992847,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 59.944299999952314,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 60.00509999990463,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 60.30169999992847,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 60.42169999992847,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 60.42769999992847,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 60.724699999928475,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 60.9015,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 60.964599999904635,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 61.56159999990463,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 61.8615,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 62.2215,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 62.34189999997616,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 62.4015,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 62.76339999997616,
+      "original": [
+        "L'"
+      ],
+      "body_move": "L'",
+      "relative_move": "L'"
+    },
+    {
+      "type": "Move",
+      "t": 63.002,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 63.182399999976155,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 63.2415,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 63.36169999992848,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 63.54159999990463,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 63.60419999992848,
+      "original": [
+        "L"
+      ],
+      "body_move": "L",
+      "relative_move": "L"
+    },
+    {
+      "type": "Move",
+      "t": 63.84229999995232,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 63.90569999992847,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 63.964199999928475,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 64.20139999997616,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 64.98379999995231,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 65.10379999995232,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 68.82369999992848,
+      "original": [
+        "B'",
+        "F"
+      ],
+      "body_move": "S'",
+      "relative_move": "S'"
+    },
+    {
+      "type": "Move",
+      "t": 69.6015,
+      "original": [
+        "R'"
+      ],
+      "body_move": "R'",
+      "relative_move": "R'"
+    },
+    {
+      "type": "Move",
+      "t": 69.90459999990463,
+      "original": [
+        "R'"
+      ],
+      "body_move": "R'",
+      "relative_move": "R'"
+    },
+    {
+      "type": "Move",
+      "t": 70.14389999997616,
+      "original": [
+        "F",
+        "B'"
+      ],
+      "body_move": "S'",
+      "relative_move": "S'"
+    },
+    {
+      "type": "Move",
+      "t": 70.5645,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 70.86259999990463,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 71.10369999992848,
+      "original": [
+        "B"
+      ],
+      "body_move": "B",
+      "relative_move": "B"
+    },
+    {
+      "type": "Move",
+      "t": 71.16419999992847,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 71.52239999997616,
+      "original": [
+        "R'"
+      ],
+      "body_move": "R'",
+      "relative_move": "R'"
+    },
+    {
+      "type": "Rotation",
+      "t": 71.52489999997616,
+      "axis": "Zp",
+      "from_orientation": {
+        "top": "Yellow",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "Green",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 72.12119999992848,
+      "original": [
+        "R'"
+      ],
+      "body_move": "R'",
+      "relative_move": "R'"
+    },
+    {
+      "type": "Move",
+      "t": 72.3645,
+      "original": [
+        "R'"
+      ],
+      "body_move": "R'",
+      "relative_move": "R'"
+    },
+    {
+      "type": "Move",
+      "t": 72.66419999992847,
+      "original": [
+        "B'",
+        "F"
+      ],
+      "body_move": "S'",
+      "relative_move": "S'"
+    },
+    {
+      "type": "Move",
+      "t": 73.50229999995231,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 73.74129999995232,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 74.52229999995231,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 74.6435,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 74.94139999997616,
+      "original": [
+        "B"
+      ],
+      "body_move": "B",
+      "relative_move": "B"
+    },
+    {
+      "type": "Move",
+      "t": 74.9465,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 75.42129999995231,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 77.94339999997615,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 78.12309999990464,
+      "original": [
+        "R"
+      ],
+      "body_move": "R",
+      "relative_move": "R"
+    },
+    {
+      "type": "Move",
+      "t": 78.42229999995232,
+      "original": [
+        "R"
+      ],
+      "body_move": "R",
+      "relative_move": "R"
+    },
+    {
+      "type": "Move",
+      "t": 78.78109999990463,
+      "original": [
+        "F",
+        "B'"
+      ],
+      "body_move": "S'",
+      "relative_move": "S'"
+    },
+    {
+      "type": "Move",
+      "t": 79.02429999995232,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    },
+    {
+      "type": "Move",
+      "t": 79.14339999997615,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    }
+  ]
+}

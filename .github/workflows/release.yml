@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+# Required for creating GitHub releases
+permissions:
+  contents: write
+
+jobs:
+  # Build Web Frontend and Deploy to Cloudflare
+  deploy-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build Frontend
+        run: pnpm --filter frontend build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          HMAC_SECRET: ${{ secrets.HMAC_SECRET }}
+
+      - name: Install Wrangler
+        run: pnpm add -g wrangler
+
+      - name: Set Pages project name
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == *preview* ]]; then
+            echo "CF_PAGES_PROJECT=rouxflowapp-dev" >> $GITHUB_ENV
+          else
+            echo "CF_PAGES_PROJECT=rouxflowapp" >> $GITHUB_ENV
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy apps/frontend/dist --project-name=${{ env.CF_PAGES_PROJECT }} --branch=main
+

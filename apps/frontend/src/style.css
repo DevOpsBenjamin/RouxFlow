@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+:root {
+  /* Fluid typography: 1rem = 1% of viewport width in landscape, 2% in portrait */
+  font-size: 1vw;
+  font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: #f8fafc;
+  background-color: #020617;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Mobile Portrait Adjustment */
+@media (max-width: 1024px) and (orientation: portrait) {
+  :root {
+    font-size: 2.5vw;
+    /* Scale up everything for mobile portrait */
+  }
+}
+
+body {
+  margin: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}

@@ -1,0 +1,1296 @@
+{
+  "solve_duration_ms": 43618.39999997616,
+  "is_solved": true,
+  "move_count": 121,
+  "tps": 2.774058654147473,
+  "step_details": {
+    "fb": 17,
+    "sb": 43,
+    "cmll": 83,
+    "eo": 95,
+    "ur_lr": 96,
+    "l4e": 121
+  },
+  "initial_orientation": {
+    "top": "White",
+    "front": "Green"
+  },
+  "timeline": [
+    {
+      "type": "Move",
+      "t": 44.76029999995232,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 45.6565,
+      "original": [
+        "L"
+      ],
+      "body_move": "L",
+      "relative_move": "L"
+    },
+    {
+      "type": "Move",
+      "t": 46.258299999952314,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 47.45639999997616,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 47.51910000002384,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 47.81829999995232,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 47.87989999997616,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    },
+    {
+      "type": "Move",
+      "t": 48.118399999976155,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    },
+    {
+      "type": "Move",
+      "t": 48.539,
+      "original": [
+        "R"
+      ],
+      "body_move": "R",
+      "relative_move": "R"
+    },
+    {
+      "type": "Move",
+      "t": 48.838200000047685,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    },
+    {
+      "type": "Move",
+      "t": 49.19870000004769,
+      "original": [
+        "R'"
+      ],
+      "body_move": "R'",
+      "relative_move": "R'"
+    },
+    {
+      "type": "Move",
+      "t": 50.81870000004768,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 51.118399999976155,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 51.18060000002384,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    },
+    {
+      "type": "Move",
+      "t": 51.4165,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 51.65810000002384,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 52.016700000047685,
+      "original": [
+        "L"
+      ],
+      "body_move": "L",
+      "relative_move": "L"
+    },
+    {
+      "type": "Move",
+      "t": 53.579200000047685,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 54.23960000002384,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 54.59839999997616,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    },
+    {
+      "type": "Move",
+      "t": 55.076200000047685,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    },
+    {
+      "type": "Move",
+      "t": 55.262600000023845,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 55.55629999995232,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 56.69670000004768,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 56.99829999995232,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 57.77810000002384,
+      "original": [
+        "L"
+      ],
+      "body_move": "L",
+      "relative_move": "L"
+    },
+    {
+      "type": "Rotation",
+      "t": 57.836,
+      "axis": "Z2",
+      "from_orientation": {
+        "top": "Yellow",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "White",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 58.07910000002384,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 58.37710000002384,
+      "original": [
+        "L'"
+      ],
+      "body_move": "L'",
+      "relative_move": "L'"
+    },
+    {
+      "type": "Move",
+      "t": 58.56210000002384,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 58.97620000004768,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 59.03929999995232,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 59.456100000023845,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 59.57910000002384,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 60.71739999997616,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 61.859399999976155,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 61.916299999952315,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 62.15860000002384,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 62.21939999997616,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 62.45820000004768,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 62.69670000004768,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 62.87889999997616,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 62.94720000004769,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 63.11610000002384,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 64.07929999995231,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 64.256,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 64.49860000002384,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 64.798,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 65.1015,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 65.33860000002385,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 65.63620000004768,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 65.87689999997616,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 66.296,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 66.59579999995232,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 66.95810000002385,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 67.13920000004768,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 67.37889999997616,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 67.559,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 67.91610000002385,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 67.97870000004768,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 68.09929999995232,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 68.21920000004768,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 68.27839999997616,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 68.57579999995231,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 68.69989999997615,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 68.75979999995232,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 69.118,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 69.23960000002384,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 69.35620000004768,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 70.197,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 70.49810000002384,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 70.61860000002385,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 70.67870000004768,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 70.976,
+      "original": [
+        "L'"
+      ],
+      "body_move": "L'",
+      "relative_move": "L'"
+    },
+    {
+      "type": "Move",
+      "t": 71.0395,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 71.27589999997616,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 71.28170000004768,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 71.399,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 71.63610000002384,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 71.70170000004768,
+      "original": [
+        "L"
+      ],
+      "body_move": "L",
+      "relative_move": "L"
+    },
+    {
+      "type": "Move",
+      "t": 71.93789999997615,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 71.99829999995232,
+      "original": [
+        "F"
+      ],
+      "body_move": "F",
+      "relative_move": "F"
+    },
+    {
+      "type": "Move",
+      "t": 72.23589999997616,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 72.41939999997616,
+      "original": [
+        "F'"
+      ],
+      "body_move": "F'",
+      "relative_move": "F'"
+    },
+    {
+      "type": "Move",
+      "t": 72.95589999997615,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 73.49789999997616,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 75.35779999995232,
+      "original": [
+        "B",
+        "F'"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 75.53929999995232,
+      "original": [
+        "L'"
+      ],
+      "body_move": "L'",
+      "relative_move": "L'"
+    },
+    {
+      "type": "Rotation",
+      "t": 75.59589999997615,
+      "axis": "Zp",
+      "from_orientation": {
+        "top": "White",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "Blue",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 75.89589999997615,
+      "original": [
+        "F",
+        "B'"
+      ],
+      "body_move": "S'",
+      "relative_move": "S'"
+    },
+    {
+      "type": "Move",
+      "t": 77.33579999995231,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Rotation",
+      "t": 77.338,
+      "axis": "Z",
+      "from_orientation": {
+        "top": "Blue",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "White",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 77.63760000002384,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Move",
+      "t": 77.93570000004769,
+      "original": [
+        "F",
+        "B'"
+      ],
+      "body_move": "S'",
+      "relative_move": "S'"
+    },
+    {
+      "type": "Move",
+      "t": 78.11770000004768,
+      "original": [
+        "R'"
+      ],
+      "body_move": "R'",
+      "relative_move": "R'"
+    },
+    {
+      "type": "Rotation",
+      "t": 78.12170000004768,
+      "axis": "Z",
+      "from_orientation": {
+        "top": "White",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "Green",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 78.358,
+      "original": [
+        "B",
+        "F'"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 78.53889999997615,
+      "original": [
+        "U'"
+      ],
+      "body_move": "U'",
+      "relative_move": "U'"
+    },
+    {
+      "type": "Rotation",
+      "t": 78.59589999997615,
+      "axis": "Zp",
+      "from_orientation": {
+        "top": "Green",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "White",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 78.778,
+      "original": [
+        "B'",
+        "F"
+      ],
+      "body_move": "S'",
+      "relative_move": "S'"
+    },
+    {
+      "type": "Move",
+      "t": 79.13579999995231,
+      "original": [
+        "R'"
+      ],
+      "body_move": "R'",
+      "relative_move": "R'"
+    },
+    {
+      "type": "Rotation",
+      "t": 79.138,
+      "axis": "Z",
+      "from_orientation": {
+        "top": "White",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "Green",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 79.61760000002384,
+      "original": [
+        "F",
+        "B'"
+      ],
+      "body_move": "S'",
+      "relative_move": "S'"
+    },
+    {
+      "type": "Move",
+      "t": 79.97760000002384,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Rotation",
+      "t": 80.03620000004769,
+      "axis": "Z",
+      "from_orientation": {
+        "top": "Green",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "Yellow",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 80.15570000004769,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 80.45789999997616,
+      "original": [
+        "B",
+        "F'"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 80.69829999995231,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Rotation",
+      "t": 80.75570000004768,
+      "axis": "Z2",
+      "from_orientation": {
+        "top": "Yellow",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "White",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 80.81560000002384,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 81.17579999995232,
+      "original": [
+        "B",
+        "F'"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 81.419,
+      "original": [
+        "B",
+        "F'"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 81.83579999995231,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    },
+    {
+      "type": "Rotation",
+      "t": 81.839,
+      "axis": "Z2",
+      "from_orientation": {
+        "top": "White",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "Yellow",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 83.69789999997616,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 83.99770000004769,
+      "original": [
+        "R"
+      ],
+      "body_move": "R",
+      "relative_move": "R"
+    },
+    {
+      "type": "Rotation",
+      "t": 84.05889999997616,
+      "axis": "Zp",
+      "from_orientation": {
+        "top": "Yellow",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "Green",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 84.29560000002384,
+      "original": [
+        "R'"
+      ],
+      "body_move": "R'",
+      "relative_move": "R'"
+    },
+    {
+      "type": "Move",
+      "t": 84.53610000002384,
+      "original": [
+        "B'",
+        "F"
+      ],
+      "body_move": "S'",
+      "relative_move": "S'"
+    },
+    {
+      "type": "Move",
+      "t": 84.77939999997616,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    },
+    {
+      "type": "Rotation",
+      "t": 84.83639999997615,
+      "axis": "Z",
+      "from_orientation": {
+        "top": "Green",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "Yellow",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 84.9575,
+      "original": [
+        "D"
+      ],
+      "body_move": "D",
+      "relative_move": "D"
+    },
+    {
+      "type": "Move",
+      "t": 85.55679999995232,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 85.79560000002384,
+      "original": [
+        "D'"
+      ],
+      "body_move": "D'",
+      "relative_move": "D'"
+    },
+    {
+      "type": "Move",
+      "t": 86.101,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 86.63579999995231,
+      "original": [
+        "R"
+      ],
+      "body_move": "R",
+      "relative_move": "R"
+    },
+    {
+      "type": "Rotation",
+      "t": 86.63820000004769,
+      "axis": "Zp",
+      "from_orientation": {
+        "top": "Yellow",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "Green",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 86.87639999997616,
+      "original": [
+        "R"
+      ],
+      "body_move": "R",
+      "relative_move": "R"
+    },
+    {
+      "type": "Move",
+      "t": 86.99770000004769,
+      "original": [
+        "B",
+        "F'"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 87.29760000002385,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Rotation",
+      "t": 87.35570000004769,
+      "axis": "Zp",
+      "from_orientation": {
+        "top": "Green",
+        "front": "Red"
+      },
+      "to_orientation": {
+        "top": "White",
+        "front": "Red"
+      }
+    },
+    {
+      "type": "Move",
+      "t": 87.41870000004768,
+      "original": [
+        "U"
+      ],
+      "body_move": "U",
+      "relative_move": "U"
+    },
+    {
+      "type": "Move",
+      "t": 88.19779999995231,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    },
+    {
+      "type": "Move",
+      "t": 88.49560000002384,
+      "original": [
+        "F'",
+        "B"
+      ],
+      "body_move": "S",
+      "relative_move": "S"
+    }
+  ]
+}

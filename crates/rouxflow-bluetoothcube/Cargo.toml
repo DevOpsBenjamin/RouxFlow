@@ -1,0 +1,18 @@
+[package]
+name = "rouxflow-bluetoothcube"
+version = "0.0.24"
+edition = "2024"
+description = "Bluetooth smart cube definitions - models, protocols, and BLE UUIDs for RouxFlow"
+authors = ["DevOpsBen"]
+license = "MIT"
+repository = "https://github.com/DevOpsBenjamin/RouxFlow"
+
+[dependencies]
+rouxflow-core = { path = "../rouxflow-core" }
+serde = { version = "1.0", features = ["derive"] }
+
+log = "0.4"
+
+# Use RustCrypto AES with explicit features for WASM compatibility
+aes = { version = "0.8", default-features = false }
+cipher = { version = "0.4", default-features = false }

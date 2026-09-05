@@ -1,0 +1,644 @@
+import init, {
+    WasmStorageManager,
+    init_renderer,
+    set_gyro_enabled,
+    update_render_state,
+    reset_gyro,
+    find_cube_by_ble_name,
+    all_scan_service_uuids,
+    all_scan_name_prefixes,
+    cm_init,
+    cm_init_storage,
+    cm_connect,
+    cm_disconnect,
+    cm_is_connected,
+    cm_get_device_info,
+    cm_process_ble_packet,
+    cm_encode_command,
+    cm_get_cube_state,
+    cm_get_orientation,
+    cm_get_orientation_debug,
+    cm_force_home,
+    cm_get_facelets,
+    cm_start_timer,
+    cm_stop_timer,
+    cm_update_timer,
+    cm_get_timer_state,
+    cm_is_timer_running,
+    cm_get_current_time_ms,
+    cm_get_flow_state,
+    cm_set_active_session,
+    cm_create_session,
+    cm_start_scramble,
+    cm_handle_scramble_move,
+    cm_set_solving,
+    cm_record_solve,
+    cm_needs_mac_input,
+    cm_requires_handshake,
+    cm_handshake_data,
+    cm_decrypt_hex,
+    cm_encrypt_hex,
+    cm_persist_solve,
+    cm_create_session_persist,
+    cm_load_active_session_solves,
+    cm_get_sessions_json,
+    cm_get_active_session_json,
+    cm_get_active_session_solves_json,
+    cm_get_active_session_id,
+    cm_switch_session,
+    cm_is_cube_solved,
+    cm_is_wca_session_full,
+    cm_reset_flow,
+    cm_get_scramble_state,
+    cm_get_inspection_remaining,
+    cm_generate_new_scramble,
+    cm_get_pending_scramble,
+    cm_get_session_stats_json,
+    cm_get_solve_list_json,
+    cm_get_solve_by_id_json,
+    cm_delete_solve,
+    cm_set_inspection_duration,
+    cm_get_inspection_duration,
+    cm_save_active_session,
+    cm_drain_solve_telemetry,
+} from '../../wasm/rouxflow/rouxflow_wasm'
+import { logger } from '../../utils/logger'
+import type { SavedCube } from '../../stores/bluetooth'
+
+// Callbacks to notify Vue stores that WASM state changed (triggers computed re-evaluation)
+const _wasmStateListeners: (() => void)[] = []
+export function onWasmStateChanged(cb: () => void) { _wasmStateListeners.push(cb) }
+function _notifyWasmStateChanged() { for (const cb of _wasmStateListeners) cb() }
+
+let wasmReady = false
+let storageManager: WasmStorageManager | null = null
+let storageInitPromise: Promise<WasmStorageManager> | null = null
+let bleCharacteristic: BluetoothRemoteGATTCharacteristic | null = null
+let commandCharacteristic: BluetoothRemoteGATTCharacteristic | null = null
+let batteryPollInterval: ReturnType<typeof setInterval> | null = null
+let connectedDevice: BluetoothDevice | null = null
+
+export async function ensureWasm(userId?: string | null) {
+    if (wasmReady) return
+    await init()
+    cm_init()
+
+    // Initialize storage (IndexedDB), load sessions filtered by user
+    const url = import.meta.env.VITE_SUPABASE_URL || ''
+    const key = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+    await cm_init_storage(url || undefined, key || undefined, userId || undefined)
+
+    wasmReady = true
+    logger.info('WASM + storage initialized', userId ? `(user: ${userId.slice(0, 8)}...)` : '(guest)')
+
+        // Expose debug tools on window for console use
+        ; (window as any).cubeDebug = {
+            /** Decrypt encrypted hex: cubeDebug.decode("90 5c 36 ...") */
+            decode: (hex: string) => {
+                const result = cm_decrypt_hex(hex)
+                console.log('Decrypted:', result)
+                return result
+            },
+            /** Encrypt plaintext hex: cubeDebug.encode("a4 00 00 ...") */
+            encode: (hex: string) => {
+                const result = cm_encrypt_hex(hex)
+                console.log('Encrypted:', result)
+                return result
+            },
+            /** Send raw encrypted hex to cube: cubeDebug.send("90 5c 36 ...") */
+            send: async (hex: string) => {
+                if (!commandCharacteristic) {
+                    console.error('No command characteristic — cube not connected')
+                    return
+                }
+                const bytes = new Uint8Array(hex.trim().split(/\s+/).map(h => parseInt(h, 16)))
+                logBleSend('console', bytes)
+                await commandCharacteristic.writeValue(bytes)
+                console.log('Sent', bytes.length, 'bytes')
+            },
+        }
+}
+
+async function getStorage(): Promise<WasmStorageManager> {
+    await ensureWasm()
+
+    if (storageManager) {
+        return storageManager
+    }
+
+    if (storageInitPromise) {
+        return storageInitPromise
+    }
+
+    storageInitPromise = (async () => {
+        const url = import.meta.env.VITE_SUPABASE_URL || ''
+        const key = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+        storageManager = await new WasmStorageManager(
+            url || undefined,
+            key || undefined
+        )
+        return storageManager
+    })()
+
+    return storageInitPromise
+}
+
+// Re-export WASM functions directly — WASM is guaranteed loaded before Vue mounts
+/// Wrapper for cm_update_timer that also processes returned actions (e.g. DNF on inspection timeout).
+export function updateTimer(timestamp: number): void {
+    const actionsJson = cm_update_timer(timestamp)
+    if (actionsJson) {
+        try {
+            const actions = actionsJson.startsWith('[') ? JSON.parse(actionsJson) : [JSON.parse(actionsJson)]
+            for (const action of actions) {
+                handleCoreAction(action)
+            }
+        } catch (e) {
+            logger.error('Failed to parse timer actions', e)
+        }
+        _notifyWasmStateChanged()
+    }
+}
+
+export {
+    init_renderer,
+    set_gyro_enabled,
+    update_render_state,
+    reset_gyro,
+    cm_is_connected,
+    cm_get_device_info,
+    cm_get_orientation,
+    cm_get_orientation_debug,
+    cm_force_home,
+    cm_get_facelets,
+    cm_get_cube_state,
+    cm_get_timer_state,
+    cm_is_timer_running,
+    cm_get_current_time_ms,
+    cm_get_flow_state,
+    cm_needs_mac_input,
+    cm_connect,
+    cm_disconnect,
+    cm_process_ble_packet,
+    cm_encode_command,
+    cm_start_timer,
+    cm_stop_timer,
+    cm_update_timer,
+    cm_set_active_session,
+    cm_create_session,
+    cm_start_scramble,
+    cm_handle_scramble_move,
+    cm_set_solving,
+    cm_record_solve,
+    // New session query functions
+    cm_get_sessions_json,
+    cm_get_active_session_json,
+    cm_get_active_session_solves_json,
+    cm_get_active_session_id,
+    cm_switch_session,
+    cm_create_session_persist,
+    cm_load_active_session_solves,
+    cm_is_cube_solved,
+    cm_is_wca_session_full,
+    cm_reset_flow,
+    cm_get_scramble_state,
+    cm_get_inspection_remaining,
+    cm_generate_new_scramble,
+    cm_get_pending_scramble,
+    cm_get_session_stats_json,
+    cm_get_solve_list_json,
+    cm_get_solve_by_id_json,
+    cm_delete_solve,
+    cm_set_inspection_duration,
+    cm_get_inspection_duration,
+    cm_save_active_session,
+}
+
+// Wrapper functions that parse JSON from WASM (avoids wasm_bindgen alloc churn)
+export function findCubeByBleName(deviceName: string): any | null {
+    const json = find_cube_by_ble_name(deviceName)
+    if (!json) return null
+    try { return JSON.parse(json) } catch { return null }
+}
+
+export function getScanServiceUuids(): string[] {
+    return JSON.parse(all_scan_service_uuids())
+}
+
+export function getScanNamePrefixes(): string[] {
+    return JSON.parse(all_scan_name_prefixes())
+}
+
+/// Send a reset command to the cube (MoYu V3: 0xAC 0x00 0x01)
+export async function resetCube(): Promise<void> {
+    if (!commandCharacteristic) {
+        logger.warn('Cannot reset: no command characteristic')
+        return
+    }
+    try {
+        const bytesJson = cm_encode_command('reset')
+        const bytes = new Uint8Array(JSON.parse(bytesJson))
+        logBleSend('reset', bytes)
+        await commandCharacteristic.writeValue(bytes)
+        logger.info('Reset command sent')
+    } catch (e) {
+        logger.error('Reset command failed:', e)
+    }
+}
+
+/// Single BLE event listener that forwards packets to WASM
+function blePacketHandler(event: Event) {
+    const target = event.target as unknown as BluetoothRemoteGATTCharacteristic
+    const value = target.value
+    if (!value) return
+
+    const bytes = new Uint8Array(value.buffer)
+    const timestamp = performance.now() / 1000.0
+
+    // Forward to WASM AppState (free function, no struct)
+    const actionsJson = cm_process_ble_packet(bytes, timestamp)
+
+    // Notify Vue that WASM state changed (facelets, orientation, device info, etc.)
+    _notifyWasmStateChanged()
+
+    if (actionsJson) {
+        logger.info(`Core Actions: ${actionsJson}`)
+        try {
+            const actions = actionsJson.startsWith('[') ? JSON.parse(actionsJson) : [JSON.parse(actionsJson)]
+            for (const action of actions) {
+                handleCoreAction(action)
+            }
+        } catch (e) {
+            logger.error('Failed to parse Core actions', e)
+        }
+    }
+}
+
+let _lastGyroLog = 0
+
+/// Log every BLE TX as hex (for comparing with CubeEast)
+function logBleSend(label: string, bytes: Uint8Array) {
+    const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ')
+    logger.info(`BLE SEND [${label}] → ${hex}`)
+}
+
+/// Handle side effects from Core actions (storage writes only)
+async function handleCoreAction(action: any) {
+    switch (action.type) {
+        case 'SaveSolve': {
+            logger.debug('SaveSolve action received', action.data)
+            // Persist solve to IndexedDB
+            const sessionId = cm_get_active_session_id()
+            if (sessionId) {
+                try {
+                    await cm_persist_solve(sessionId, JSON.stringify(action.data))
+                    logger.info('Solve persisted to IndexedDB')
+                } catch (e) {
+                    logger.error('Failed to persist solve:', e)
+                }
+            }
+            // Drain raw solve telemetry for future analyzer
+            const telemetryJson = cm_drain_solve_telemetry()
+            if (telemetryJson && telemetryJson !== 'null') {
+                const telemetry = JSON.parse(telemetryJson)
+                logger.info(`Telemetry: ${telemetry.scramble_gyro.length} scramble gyro, ${telemetry.solve_gyro.length} solve gyro, ${telemetry.solve_moves.length} moves`)
+                    ; (window as any).__solveTelemetry = telemetry
+            }
+            _notifyWasmStateChanged()
+            break
+        }
+        case 'DemoteSession': {
+            const storage = await getStorage()
+            await storage.demote_session(action.data)
+            logger.debug('Session demoted', action.data)
+            break
+        }
+        case 'WriteBack': {
+            if (commandCharacteristic) {
+                const wbBytes = new Uint8Array(action.data)
+                logBleSend('WriteBack', wbBytes)
+                await commandCharacteristic.writeValue(wbBytes)
+            }
+            break
+        }
+        case 'Battery':
+            logger.info(`Battery: ${action.data}%`)
+            break
+        case 'Hardware':
+            logger.info(`Hardware: ${action.data.name} fw=${action.data.swVersion} hw=${action.data.hwVersion} gyro=${action.data.gyroSupported}`)
+            break
+        case 'RawFacelets':
+            logger.info(`Facelets: ${action.data}`)
+            break
+        case 'GyroRaw': {
+            const now = performance.now()
+            if (now - _lastGyroLog > 1000) {
+                _lastGyroLog = now
+                const d = action.data
+                logger.info(`GyroRaw hex=[${d.hex}] x=${d.x.toFixed(4)} y=${d.y.toFixed(4)} z=${d.z.toFixed(4)} w=${d.w.toFixed(4)} norm=${d.norm.toFixed(4)}`)
+            }
+            break
+        }
+        case 'Error':
+            logger.error('Core logic error:', action.data)
+            break
+        default:
+            break
+    }
+}
+
+/// Connect to a cube via Web Bluetooth
+export async function connect(): Promise<{ device: BluetoothDevice; cubeDef: any }> {
+    await ensureWasm()
+    const serviceUuids = getScanServiceUuids()
+    const prefixes = getScanNamePrefixes()
+    const nameFilters = prefixes.map((p: string) => ({ namePrefix: p }))
+
+    logger.debug('Scanning with prefixes:', prefixes)
+
+    const device = await (navigator as any).bluetooth.requestDevice({
+        filters: nameFilters.length > 0 ? nameFilters : [{ services: [serviceUuids[0]] }],
+        optionalServices: serviceUuids
+    })
+
+    logger.info(`Selected device: ${device.name} (${device.id})`)
+
+    const cubeDef = device.name ? findCubeByBleName(device.name) : null
+
+    if (!cubeDef) {
+        throw new Error(`Unknown cube: ${device.name}. Please ensure your cube is supported.`)
+    }
+
+    logger.debug('Cube definition:', cubeDef)
+    return { device, cubeDef }
+}
+
+/// Finalize connection and set up BLE listener
+export async function finalizeConnection(device: BluetoothDevice, cubeDef: any, macAddress: string): Promise<void> {
+    const serviceUuid = cubeDef.serviceUuid
+    const charUuid = cubeDef.stateCharacteristic
+    const cmdCharUuid = cubeDef.commandCharacteristic
+    const protocolName = cubeDef.protocol
+
+    logger.debug(`MAC Address: ${macAddress}`)
+
+    // Step 1: Set up protocol in WASM FIRST (before any GATT/BLE operations)
+    cm_connect(device.name || 'Unknown Cube', macAddress, protocolName)
+    logger.info(`WASM protocol ready: ${protocolName}`)
+
+    // Step 2: Connect GATT and start BLE notifications
+    logger.debug(`Connecting to GATT service ${serviceUuid}, characteristic ${charUuid}`)
+
+    try {
+        const server = await device.gatt?.connect()
+        if (!server) {
+            throw new Error('Failed to connect to GATT server')
+        }
+        logger.debug('GATT server connected')
+
+        const service = await server.getPrimaryService(serviceUuid)
+        logger.debug('GATT service obtained')
+
+        const characteristic = await service.getCharacteristic(charUuid)
+        logger.debug('GATT characteristic obtained')
+
+        if (!characteristic) {
+            throw new Error('Failed to get BLE characteristic')
+        }
+
+        // Get command characteristic for WriteBack and handshake
+        if (cmdCharUuid) {
+            try {
+                commandCharacteristic = await service.getCharacteristic(cmdCharUuid)
+                logger.debug('Command characteristic obtained')
+            } catch (e) {
+                logger.warn('Command characteristic not available:', e)
+                commandCharacteristic = null
+            }
+        }
+
+        // Remove old listener if exists
+        if (bleCharacteristic) {
+            bleCharacteristic.removeEventListener('characteristicvaluechanged', blePacketHandler)
+        }
+
+        // Start notifications and register handler
+        await characteristic.startNotifications()
+        logger.debug('Notifications started')
+
+        characteristic.addEventListener('characteristicvaluechanged', blePacketHandler)
+        bleCharacteristic = characteristic
+
+        // Send handshake if protocol requires it (e.g. QiYi)
+        if (cm_requires_handshake()) {
+            const handshakeData = cm_handshake_data()
+            if (handshakeData.length > 0 && commandCharacteristic) {
+                const encrypted = new Uint8Array(JSON.parse(cm_encode_command('handshake')))
+                logBleSend('handshake', encrypted)
+                await commandCharacteristic.writeValue(encrypted)
+                logger.info(`Handshake sent for ${protocolName}`)
+            }
+        }
+
+        // Send initial request commands to activate the cube's notification stream
+        if (commandCharacteristic) {
+            const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
+            await delay(400)
+            for (const cmd of ['battery', 'hardware', 'facelets']) {
+                try {
+                    const bytesJson = cm_encode_command(cmd)
+                    const bytes = new Uint8Array(JSON.parse(bytesJson))
+                    logBleSend(cmd, bytes)
+                    await commandCharacteristic.writeValue(bytes)
+                    await delay(200)
+                } catch (e) {
+                    logger.debug(`Init command ${cmd} not supported: ${e}`)
+                }
+            }
+        }
+
+        // Listen for unexpected disconnection (cube in charging box, out of range, etc.)
+        if (connectedDevice) {
+            connectedDevice.removeEventListener('gattserverdisconnected', onGattDisconnected)
+        }
+        connectedDevice = device
+        device.addEventListener('gattserverdisconnected', onGattDisconnected)
+
+        // Start periodic battery polling (cube won't push battery on its own)
+        startBatteryPoll()
+
+        logger.info(`Connected to ${device.name} (${protocolName})`)
+    } catch (error) {
+        // GATT failed — disconnect WASM state so we're not in a half-connected state
+        cm_disconnect()
+        commandCharacteristic = null
+        logger.error('GATT connection error:', error)
+        logger.error(`Device: ${device.name}, Service: ${serviceUuid}, Char: ${charUuid}`)
+        throw error
+    }
+}
+
+/// Reconnect to a previously paired saved cube via getDevices() (no BLE picker)
+export async function reconnectSavedCube(savedCube: SavedCube): Promise<{ device: BluetoothDevice; cubeDef: any }> {
+    await ensureWasm()
+
+    const bt = (navigator as any).bluetooth
+    if (!bt?.getDevices) {
+        throw new Error('getDevices() not supported in this browser')
+    }
+
+    const devices: BluetoothDevice[] = await bt.getDevices()
+    const device = devices.find((d: BluetoothDevice) => d.name === savedCube.name)
+    if (!device) {
+        throw new Error('Device not found — needs fresh BLE scan')
+    }
+
+    // Connect GATT
+    if (!device.gatt) {
+        throw new Error('GATT not available on device')
+    }
+    await device.gatt.connect()
+
+    const cubeDef = findCubeByBleName(device.name || '')
+    if (!cubeDef) {
+        throw new Error(`Unknown cube: ${device.name}`)
+    }
+
+    return { device, cubeDef }
+}
+
+async function sendBatteryRequest() {
+    if (!commandCharacteristic) return
+    try {
+        const bytesJson = cm_encode_command('battery')
+        const bytes = new Uint8Array(JSON.parse(bytesJson))
+        logBleSend('battery-poll', bytes)
+        await commandCharacteristic.writeValue(bytes)
+    } catch (e) {
+        logger.debug('Battery poll failed:', e)
+    }
+}
+
+function startBatteryPoll() {
+    stopBatteryPoll()
+    // Request immediately, then every 30s
+    sendBatteryRequest()
+    batteryPollInterval = setInterval(sendBatteryRequest, 30_000)
+}
+
+function stopBatteryPoll() {
+    if (batteryPollInterval) {
+        clearInterval(batteryPollInterval)
+        batteryPollInterval = null
+    }
+}
+
+/// Handle unexpected GATT disconnection (cube in charging box, out of range, powered off)
+function onGattDisconnected() {
+    logger.warn('GATT disconnected unexpectedly — cleaning up')
+    stopBatteryPoll()
+
+    // Clean up BLE references (don't try to stopNotifications — GATT is already gone)
+    if (bleCharacteristic) {
+        bleCharacteristic.removeEventListener('characteristicvaluechanged', blePacketHandler)
+        bleCharacteristic = null
+    }
+    commandCharacteristic = null
+
+    if (connectedDevice) {
+        connectedDevice.removeEventListener('gattserverdisconnected', onGattDisconnected)
+        connectedDevice = null
+    }
+
+    // Update WASM state so cm_is_connected() returns false
+    cm_disconnect()
+
+    // Notify Vue stores so UI updates immediately
+    _notifyWasmStateChanged()
+}
+
+/// Disconnect from cube
+export async function disconnect(): Promise<void> {
+    stopBatteryPoll()
+
+    if (connectedDevice) {
+        connectedDevice.removeEventListener('gattserverdisconnected', onGattDisconnected)
+        connectedDevice = null
+    }
+
+    if (bleCharacteristic) {
+        try {
+            bleCharacteristic.removeEventListener('characteristicvaluechanged', blePacketHandler)
+            await bleCharacteristic.stopNotifications()
+        } catch (e) {
+            logger.warn('Error stopping BLE notifications', e)
+        }
+        bleCharacteristic = null
+    }
+
+    commandCharacteristic = null
+    cm_disconnect()
+
+    logger.info('Disconnected from cube')
+}
+
+// --- Solve analysis ---
+// Will be powered by rouxflow-wasm-analyzer (lazy-loaded Web Worker) in the future.
+
+export interface StepSegment {
+    step: 'FB' | 'SB' | 'CMLL' | 'LSE'
+    start_move: number
+    end_move: number
+    move_count: number
+    time_ms: number | null
+}
+
+export interface SolveAnalysis {
+    steps: StepSegment[]
+    orientation: string | null
+    total_moves: number
+}
+
+/// Placeholder: will call the analyzer WASM worker when available.
+export function analyzeSolve(_solve: { scramble?: string | null; moves: string[]; timed_moves?: any[] | null }): SolveAnalysis | null {
+    // TODO: call rouxflow-wasm-analyzer Web Worker
+    return null
+}
+
+// --- Solve operations ---
+
+export async function deleteSolve(solveId: string): Promise<void> {
+    const actionJson = cm_delete_solve(solveId)
+    if (actionJson) {
+        try {
+            const action = JSON.parse(actionJson)
+            await handleCoreAction(action)
+        } catch (e) {
+            logger.error('Failed to delete solve:', e)
+        }
+    }
+    _notifyWasmStateChanged()
+}
+
+// --- Storage operations (delegated to WASM StorageManager) ---
+
+export async function getCubes(userId: string | null = null): Promise<SavedCube[]> {
+    const storage = await getStorage()
+    const json = await storage.get_cubes_json(userId ?? undefined)
+    return JSON.parse(json)
+}
+
+export async function saveCube(cube: SavedCube) {
+    const storage = await getStorage()
+    await storage.save_cube_json(JSON.stringify(cube))
+}
+
+export async function deleteCube(id: string, userId: string | null = null) {
+    const storage = await getStorage()
+    await storage.delete_cube(id, userId || '')
+}
+
+export async function syncCubes(userId: string) {
+    const storage = await getStorage()
+    await storage.sync_cubes(userId)
+}

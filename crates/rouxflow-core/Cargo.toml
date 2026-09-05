@@ -1,0 +1,24 @@
+[package]
+name = "rouxflow-core"
+version = "0.0.24"
+edition = "2024"
+description = "Core logic for RouxFlow - Roux method speedcubing trainer"
+authors = ["DevOpsBen"]
+license = "MIT"
+repository = "https://github.com/DevOpsBenjamin/RouxFlow"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+getrandom = { version = "0.2", features = ["js"] }
+futures = "0.3"
+uuid = { version = "1.0", features = ["v4", "serde", "js"] }
+chrono = { version = "0.4", features = ["serde", "wasmbind"] }
+async-trait = "0.1.89"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+rouxflow-bitboard = { path = "../rouxflow-bitboard" }
