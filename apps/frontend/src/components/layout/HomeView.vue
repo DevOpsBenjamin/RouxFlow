@@ -296,6 +296,24 @@ const features = [
       <p class="text-sm text-slate-500">No solves yet. Connect your cube and start a session!</p>
     </div>
 
+    <!-- Community & Feedback Banner -->
+    <div class="bg-gradient-to-r from-indigo-500/10 via-slate-900/40 to-cyan-500/10 border border-white/5 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+      <div class="space-y-0.5">
+        <p class="text-sm font-semibold text-white">Using RouxFlow? We'd love your feedback!</p>
+        <p class="text-xs text-slate-400">Found a bug or want support for a new cube? Open an issue on GitHub.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <a
+          href="https://github.com/DevOpsBenjamin/RouxFlow/issues"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+        >
+          💬 Feedback & Bug Report
+        </a>
+      </div>
+    </div>
+
     <!-- Data Ownership Modal -->
     <Teleport to="body">
       <Transition
