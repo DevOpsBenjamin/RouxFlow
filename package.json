@@ -6,5 +6,10 @@
     "build:wasm": "pnpm --filter frontend run build:wasm",
     "admin": "pnpm --filter admin dev",
     "build:table": "cd crates/rouxflow-ai && cargo run --bin gen-tables"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
