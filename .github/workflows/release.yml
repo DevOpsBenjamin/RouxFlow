@@ -27,7 +27,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -48,9 +48,6 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           HMAC_SECRET: ${{ secrets.HMAC_SECRET }}
 
-      - name: Install Wrangler
-        run: pnpm add -g wrangler
-
       - name: Set Pages project name
         run: |
           if [[ "${GITHUB_REF_NAME}" == *preview* ]]; then
@@ -60,9 +57,8 @@ jobs:
           fi
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy apps/frontend/dist --project-name=${{ env.CF_PAGES_PROJECT }} --branch=main
+        run: npx wrangler pages deploy apps/frontend/dist --project-name=${{ env.CF_PAGES_PROJECT }} --branch=main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
