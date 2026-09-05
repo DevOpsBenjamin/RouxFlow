@@ -187,9 +187,33 @@ async function handleEmailAuth() {
       </template>
     </div>
 
+    <!-- Project Status & Community Notice -->
+    <div class="w-full max-w-md bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-left space-y-2 backdrop-blur-sm">
+      <div class="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider">
+        <span>📢</span>
+        <span>Project Status: Paused ATM — Are you a real user?</span>
+      </div>
+      <p class="text-xs text-slate-300 leading-relaxed">
+        RouxFlow is currently on pause while I focus on other priorities. However, Cloudflare analytics show regular recurring visits and connections!
+      </p>
+      <p class="text-xs text-slate-300 leading-relaxed">
+        If you are a <strong>real human cuber</strong> using RouxFlow (and not a web scraper or bot), please let me know! Open an issue on GitHub or drop an email to <a href="mailto:contact@rouxflow.app" class="text-indigo-400 underline font-semibold">contact@rouxflow.app</a>. If there is genuine community interest, I will gladly reprioritize and continue developing this project in my spare time!
+      </p>
+      <div class="pt-1 flex items-center gap-3 text-xs">
+        <a 
+          href="https://github.com/DevOpsBenjamin/RouxFlow/issues" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          class="text-amber-400 hover:text-amber-300 font-medium underline flex items-center gap-1"
+        >
+          Open GitHub Issue / Feedback →
+        </a>
+      </div>
+    </div>
+
     <!-- Footer -->
     <footer class="text-center mt-auto pt-8 w-full max-w-lg space-y-3">
-      <div class="flex items-center justify-center gap-4 text-xs text-slate-400">
+      <div class="flex flex-wrap items-center justify-center gap-4 text-xs text-slate-400">
         <a 
           href="https://github.com/DevOpsBenjamin/RouxFlow" 
           target="_blank" 
@@ -208,7 +232,14 @@ async function handleEmailAuth() {
           rel="noopener noreferrer" 
           class="hover:text-indigo-400 transition-colors"
         >
-          💬 Feedback & Bug Report
+          💬 Feedback & Issues
+        </a>
+        <span>•</span>
+        <a 
+          href="mailto:contact@rouxflow.app" 
+          class="hover:text-indigo-400 transition-colors flex items-center gap-1"
+        >
+          ✉️ contact@rouxflow.app
         </a>
       </div>
       <p class="text-[10px] text-slate-600 uppercase tracking-widest font-bold">

@@ -4,8 +4,8 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  TAURI (offline)              SUPABASE (cloud)          │
-│  SQLite                       PostgreSQL                │
+│  FRONTEND (offline-first)     SUPABASE (cloud)          │
+│  IndexedDB                    PostgreSQL                │
 │                                                         │
 │  users (local_only)     ←→    users (auth.users)        │
 │  sessions               ←→    sessions                  │
@@ -18,12 +18,12 @@
 
 ## Tables
 
-### `users` (Supabase uniquement, via Auth)
+### `users` (Supabase only, via Auth)
 
-Géré automatiquement par Supabase Auth. Table `auth.users`.
+Managed automatically by Supabase Auth (`auth.users` table).
 
 ```sql
--- Table publique pour les infos additionnelles
+-- Public profiles table for additional user info
 CREATE TABLE public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username TEXT UNIQUE NOT NULL,
@@ -41,17 +41,17 @@ CREATE POLICY "Own update" ON profiles FOR UPDATE USING (auth.uid() = id);
 
 ### `sessions`
 
-| Colonne | SQLite | Supabase | Description |
-|---------|--------|----------|-------------|
-| `id` | TEXT PK | UUID PK | Identifiant unique |
-| `user_id` | TEXT | UUID FK → auth.users | Propriétaire |
-| `name` | TEXT | TEXT | Nom de la session |
+| Column | Local (IDB/SQLite) | Supabase | Description |
+|---|---|---|---|
+| `id` | TEXT PK | UUID PK | Unique identifier |
+| `user_id` | TEXT | UUID FK → auth.users | Owner |
+| `name` | TEXT | TEXT | Session name |
 | `session_type` | TEXT | TEXT ('WCA', 'Free') | Type |
-| `created_at` | INTEGER | TIMESTAMPTZ | Date création |
-| `synced_at` | INTEGER | — | Dernière sync (local only) |
+| `created_at` | INTEGER | TIMESTAMPTZ | Creation timestamp |
+| `synced_at` | INTEGER | — | Last sync timestamp (local only) |
 
 ```sql
--- SQLite
+-- Local schema
 CREATE TABLE sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT,
@@ -79,22 +79,22 @@ CREATE POLICY "Own data" ON sessions FOR ALL USING (auth.uid() = user_id);
 
 ### `solves`
 
-| Colonne | SQLite | Supabase | Description |
-|---------|--------|----------|-------------|
-| `id` | TEXT PK | UUID PK | Identifiant unique |
-| `session_id` | TEXT FK | UUID FK | Session parent |
-| `user_id` | TEXT | UUID FK | Propriétaire (dénormalisé) |
-| `scramble` | TEXT | TEXT | Scramble WCA |
-| `moves` | TEXT (JSON) | JSONB | Liste des moves |
-| `time_ms` | INTEGER | INTEGER | Temps total en ms |
-| `phases` | TEXT (JSON) | JSONB | Temps par phase Roux |
-| `is_valid` | INTEGER | BOOLEAN | Solve valide |
-| `created_at` | INTEGER | TIMESTAMPTZ | Date du solve |
-| `signature` | TEXT | TEXT | HMAC signature |
-| `synced_at` | INTEGER | — | Local only |
+| Column | Local (IDB/SQLite) | Supabase | Description |
+|---|---|---|---|
+| `id` | TEXT PK | UUID PK | Unique identifier |
+| `session_id` | TEXT FK | UUID FK | Parent session |
+| `user_id` | TEXT | UUID FK | Owner (denormalized) |
+| `scramble` | TEXT | TEXT | WCA scramble sequence |
+| `moves` | TEXT (JSON) | JSONB | Move array with timestamps |
+| `time_ms` | INTEGER | INTEGER | Total time in milliseconds |
+| `phases` | TEXT (JSON) | JSONB | Roux split times {fb, sb, cmll, lse} |
+| `is_valid` | INTEGER | BOOLEAN | Valid solve flag |
+| `created_at` | INTEGER | TIMESTAMPTZ | Solve timestamp |
+| `signature` | TEXT | TEXT | HMAC anti-tampering signature |
+| `synced_at` | INTEGER | — | Local sync timestamp |
 
 ```sql
--- SQLite
+-- Local schema
 CREATE TABLE solves (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES sessions(id),
@@ -144,18 +144,18 @@ CREATE POLICY "Rate limit" ON solves FOR INSERT WITH CHECK (
 
 ### `cubes` (Bluetooth Devices)
 
-| Colonne | SQLite | Supabase | Description |
-|---------|--------|----------|-------------|
-| `id` | TEXT PK | UUID PK | ID Unique (ou MAC) |
-| `user_id` | TEXT | UUID FK | Propriétaire |
-| `name` | TEXT | TEXT | Nom donné au cube |
-| `device_type`| TEXT | TEXT | ex: 'moyu_ai', 'gan_v3' |
-| `mac_address`| TEXT | TEXT | Adresse physique |
-| `created_at` | INTEGER | TIMESTAMPTZ | Date d'ajout |
-| `synced_at`  | INTEGER | — | Local only |
+| Column | Local (IDB/SQLite) | Supabase | Description |
+|---|---|---|---|
+| `id` | TEXT PK | UUID PK | Unique ID / MAC address |
+| `user_id` | TEXT | UUID FK | Owner |
+| `name` | TEXT | TEXT | User-assigned cube name |
+| `device_type` | TEXT | TEXT | e.g. 'moyu_ai', 'gan_v3', 'qiyi' |
+| `mac_address` | TEXT | TEXT | Physical BLE address |
+| `created_at` | INTEGER | TIMESTAMPTZ | Pair timestamp |
+| `synced_at` | INTEGER | — | Local sync timestamp |
 
 ```sql
--- SQLite
+-- Local schema
 CREATE TABLE cubes (
   id TEXT PRIMARY KEY,
   user_id TEXT,
@@ -183,10 +183,10 @@ CREATE POLICY "Own data" ON cubes FOR ALL USING (auth.uid() = user_id);
 
 ---
 
-### `leaderboard` (Supabase - vue matérialisée)
+### `leaderboard` (Supabase — Materialized View)
 
 ```sql
--- Vue pour le leaderboard (calculée, pas de table)
+-- View for leaderboard rankings (computed, not a table)
 CREATE VIEW leaderboard_ao5 AS
 SELECT 
   p.username,
@@ -212,23 +212,23 @@ ORDER BY ao5;
 ```
 LOCAL → CLOUD
 ─────────────────────────────────────────────────────────
-1. Solve créé localement (synced_at = NULL)
-2. User se connecte / online
-3. Push vers Supabase avec signature HMAC
-4. Supabase valide et insère
-5. Local: synced_at = NOW()
+1. Solve recorded locally (synced_at = NULL)
+2. User online / connected
+3. Push to Supabase with HMAC signature
+4. Supabase validates signature and inserts
+5. Local: set synced_at = NOW()
 
 CLOUD → LOCAL  
 ─────────────────────────────────────────────────────────
-1. User se connecte sur nouveau device
-2. Pull tous les solves depuis Supabase
-3. Insert dans SQLite local
+1. User signs in on a new device
+2. Pull user solves from Supabase
+3. Insert into local IndexedDB
 ```
 
 ---
 
-## Setup Supabase
+## Supabase Setup
 
-1. Créer projet sur [supabase.com](https://supabase.com)
-2. SQL Editor → coller les scripts ci-dessus
-3. Copier URL + anon key dans `.env`
+1. Create a project at [supabase.com](https://supabase.com)
+2. SQL Editor → run the schema definitions above
+3. Copy URL and anonymous key into `.env` (or CI secrets)

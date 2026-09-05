@@ -1,122 +1,113 @@
-# 📜 Conditions Générales d'Utilisation — RouxFlow
+# 📜 Terms of Service — RouxFlow
 
-*Dernière mise à jour : 31 janvier 2026*
-
----
-
-## 🎯 En Bref (TL;DR)
-
-| Ce qu'on fait | Ce qu'on ne fait pas |
-|---------------|----------------------|
-| ✅ On stocke tes solves pour t'aider à progresser | ❌ On ne vend pas tes données |
-| ✅ On affiche les solves WCA sur le leaderboard public | ❌ On ne partage pas ton email |
-| ✅ On utilise les données anonymisées pour améliorer l'app | ❌ On ne traque pas ta position |
-| ✅ Tu peux supprimer ton compte à tout moment | ❌ On ne garde aucun lien vers toi après suppression |
+*Last updated: September 2026*
 
 ---
 
-## 1. 🧊 C'est quoi RouxFlow ?
+## 🎯 Summary (TL;DR)
 
-RouxFlow est une application d'entraînement pour la méthode Roux (Rubik's Cube). On se connecte à ton cube Bluetooth pour analyser tes solves.
-
----
-
-## 2. 📊 Tes Données
-
-### Ce qu'on collecte
-
-| Donnée | Pourquoi | Obligatoire ? |
-|--------|----------|---------------|
-| Email | Créer ton compte | Oui (si compte lié) |
-| Pseudonyme | Leaderboard | Oui |
-| Solves (moves, temps, scramble) | Analyse & progression | Oui |
-| Device Bluetooth | Connexion cube | Oui |
-
-### Ce qu'on NE collecte PAS
-- ❌ Position GPS
-- ❌ Contacts
-- ❌ Historique de navigation
+| What we do | What we do NOT do |
+|---|---|
+| ✅ We store your solves to help you track progress | ❌ We never sell your personal data |
+| ✅ We show public leaderboard solves | ❌ We never share or sell your email |
+| ✅ We use anonymized data to improve the app & AI | ❌ We do not track your location |
+| ✅ You can delete your account anytime | ❌ We retain no link to your identity after deletion |
 
 ---
 
-## 3. 🏆 Leaderboard & Solves Publics
+## 1. 🧊 What is RouxFlow?
 
-**Les sessions WCA sont publiques par défaut.**
-
-Pourquoi ? Le leaderboard nécessite des solves vérifiables. En participant au mode WCA, tu acceptes que :
-- Ton pseudonyme + temps apparaissent sur le leaderboard
-- D'autres utilisateurs peuvent voir et analyser tes solves
-
-> 💡 **Astuce** : Utilise le mode "Free" si tu veux t'entraîner en privé.
+RouxFlow is an open-source training platform dedicated to the **Roux method** for speedcubing. It connects to your Bluetooth smart cube to record, split, and analyze your solves.
 
 ---
 
-## 4. 🤖 Amélioration de l'App
+## 2. 📊 Your Data
 
-On utilise les **données anonymisées** (moves, temps, phases) pour :
-- Améliorer la détection des phases Roux
-- Créer des statistiques globales (ex: temps moyen FB)
-- Entraîner nos algorithmes d'analyse
+### What we collect
 
-**Ces données sont totalement anonymes** — impossible de remonter jusqu'à toi.
+| Data | Purpose | Required? |
+|---|---|---|
+| Email | Account creation & login | Yes (if using email login) |
+| Display Name | Profile & Leaderboard | Yes |
+| Solves (moves, times, scrambles) | Phase breakdown & training analytics | Yes |
+| Bluetooth Device Info | Smart cube protocol communication | Yes |
 
----
-
-## 5. 🗑️ Suppression de Compte
-
-Tu peux supprimer ton compte à tout moment. Voici ce qui se passe :
-
-| Donnée | Action |
-|--------|--------|
-| Email, nom, infos perso | **Supprimées définitivement** |
-| Tes solves | **Anonymisés** (user_id = null) |
-
-Tes solves restent dans notre base de façon 100% anonyme pour les stats globales. C'est légal car sans lien vers toi, ce ne sont plus des données personnelles (RGPD).
+### What we do NOT collect
+- ❌ GPS or location data
+- ❌ Contact lists
+- ❌ Browsing history
 
 ---
 
-## 6. 🔐 Sécurité
+## 3. 🏆 Leaderboard & Public Solves
 
-- Mots de passe hashés (bcrypt)
-- Connexions chiffrées (HTTPS)
-- Pas de stockage de données bancaires
-
----
-
-## 7. 🍪 Cookies
-
-On utilise uniquement des cookies **techniques** :
-- Session de connexion
-- Préférences d'affichage
-
-Pas de cookies publicitaires. Pas de tracking.
+Leaderboards and public sessions require verifiable solves:
+- Your display name and solve times may appear on the public leaderboard.
+- Other users can view and learn from your public solve reconstructions.
 
 ---
 
-## 8. ⚖️ Tes Droits (RGPD)
+## 4. 🤖 App & Algorithm Improvement
 
-Tu as le droit de :
-- ✅ **Accéder** à tes données (export JSON)
-- ✅ **Rectifier** tes infos (profil)
-- ✅ **Supprimer** ton compte
-- ✅ **Porter** tes données (export)
+We use **anonymized data** (move sequences, split times, rotation metrics) to:
+- Improve Roux phase and block detection algorithms.
+- Compute global speedcubing benchmarks (e.g., average First Block move count).
+- Train future Roux AI solvers and reconstruction engines.
 
-Contact : [ton-email@rouxflow.com]
-
----
-
-## 9. 📝 Modifications
-
-On peut modifier ces CGU. Si c'est important, on te préviendra par email.
+**This training data is completely anonymized** and cannot be traced back to you.
 
 ---
 
-## 10. 📧 Contact
+## 5. 🗑️ Account Deletion
 
-Questions ? Problèmes ? 
+You can request account deletion at any time:
 
-→ **[ton-email@rouxflow.com]**
+| Data | Action |
+|---|---|
+| Email, name, credentials | **Permanently deleted** |
+| Recorded solves | **Anonymized** (disassociated from user identity) |
+
+Anonymized solve metrics remain in our dataset for community statistics and AI training. Because they are disconnected from your identity, they no longer constitute personal data under GDPR and privacy regulations.
 
 ---
 
-*En utilisant RouxFlow, tu acceptes ces conditions. Simple, non ?* 🧊
+## 6. 🔐 Security
+
+- Passwords hashed using industry-standard hashing (bcrypt via Supabase)
+- Encrypted connections (HTTPS / TLS)
+- No payment or banking information is ever stored
+
+---
+
+## 7. 🍪 Cookies & Storage
+
+We use only essential technical storage:
+- Authentication sessions
+- Local solve caching (IndexedDB via WASM)
+- User interface preferences
+
+No tracking cookies, no marketing pixels, no third-party ad networks.
+
+---
+
+## 8. ⚖️ Your Rights (GDPR)
+
+You have the right to:
+- ✅ **Access** your data (export)
+- ✅ **Rectify** your information (profile settings)
+- ✅ **Delete** your account
+- ✅ **Port** your data
+
+---
+
+## 9. 📧 Contact & Support
+
+Questions, feedback, or data requests?
+
+- Email: **contact@rouxflow.app**
+- GitHub: [https://github.com/DevOpsBenjamin/RouxFlow](https://github.com/DevOpsBenjamin/RouxFlow)
+- Issues & Feature Requests: [https://github.com/DevOpsBenjamin/RouxFlow/issues](https://github.com/DevOpsBenjamin/RouxFlow/issues)
+
+---
+
+*By using RouxFlow, you agree to these terms.* 🧊
