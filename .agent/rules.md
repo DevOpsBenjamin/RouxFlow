@@ -1,5 +1,5 @@
 # Gemini Rules
 
-- Ne jamais utiliser d'emojis dans les réponses.
-- Rester factuel et technique.
-- Éviter les répétitions de caractères ou de symboles.
+- Never use excessive emojis in responses.
+- Remain factual, technical, and precise.
+- Avoid unnecessary character or symbol repetitions.

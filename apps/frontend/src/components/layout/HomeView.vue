@@ -297,20 +297,33 @@ const features = [
     </div>
 
     <!-- Community & Feedback Banner -->
-    <div class="bg-gradient-to-r from-indigo-500/10 via-slate-900/40 to-cyan-500/10 border border-white/5 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-      <div class="space-y-0.5">
-        <p class="text-sm font-semibold text-white">Using RouxFlow? We'd love your feedback!</p>
-        <p class="text-xs text-slate-400">Found a bug or want support for a new cube? Open an issue on GitHub.</p>
-      </div>
-      <div class="flex items-center gap-2">
-        <a
-          href="https://github.com/DevOpsBenjamin/RouxFlow/issues"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
-        >
-          💬 Feedback & Bug Report
-        </a>
+    <div class="bg-gradient-to-r from-amber-500/10 via-slate-900/50 to-indigo-500/10 border border-amber-500/20 rounded-2xl p-5 space-y-3">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <span class="text-amber-400">📢</span>
+            <p class="text-sm font-bold text-white">Project Status: Paused ATM — Are you a real user?</p>
+          </div>
+          <p class="text-xs text-slate-300 max-w-2xl leading-relaxed">
+            I see lots of connections on Cloudflare! If you are a real cuber using RouxFlow (and not a web scraper or bot), please let me know on GitHub or by email at <a href="mailto:contact@rouxflow.app" class="text-indigo-400 underline font-medium">contact@rouxflow.app</a>. If real people are using it, I'll happily reprioritize development during my free time!
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
+          <a
+            href="https://github.com/DevOpsBenjamin/RouxFlow/issues"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition-colors shadow-md shadow-indigo-600/20 flex items-center gap-1.5"
+          >
+            💬 GitHub Issues
+          </a>
+          <a
+            href="mailto:contact@rouxflow.app"
+            class="px-3.5 py-2 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-xs font-medium rounded-xl transition-colors flex items-center gap-1.5"
+          >
+            ✉️ Contact Email
+          </a>
+        </div>
       </div>
     </div>
 

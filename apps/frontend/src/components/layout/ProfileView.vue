@@ -117,6 +117,12 @@ function goBack() {
           </svg>
           GitHub Repository
         </a>
+        <a
+          href="mailto:contact@rouxflow.app"
+          class="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-xs font-semibold rounded-xl transition-all flex items-center gap-2"
+        >
+          ✉️ contact@rouxflow.app
+        </a>
       </div>
     </div>
 
