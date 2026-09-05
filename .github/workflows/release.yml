@@ -46,6 +46,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          HMAC_SECRET: ${{ secrets.HMAC_SECRET }}
 
       - name: Install Wrangler
         run: pnpm add -g wrangler
