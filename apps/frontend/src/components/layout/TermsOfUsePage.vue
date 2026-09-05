@@ -117,7 +117,9 @@ function goBack() {
         <section class="space-y-3">
           <h2 class="text-xl font-bold text-white">10. Contact</h2>
           <p>
-            For questions about these Terms of Use, please reach out through the project's GitHub repository.
+            For questions about these Terms of Use, please reach out via email at
+            <a href="mailto:contact@rouxflow.app" class="text-indigo-400 hover:underline">contact@rouxflow.app</a>
+            or through the project's <a href="https://github.com/DevOpsBenjamin/RouxFlow" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">GitHub repository</a>.
           </p>
         </section>
 

@@ -1,0 +1,19 @@
+name: "✨ Feature Request / Cube Support"
+description: "Suggest an idea or request support for a new smart cube."
+title: "[Feature Request]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: feature-description
+    attributes:
+      label: "Feature Description"
+      placeholder: "Describe the feature or smart cube model you'd like supported."
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Problem or Use Case"
+      placeholder: "Why is this feature useful for Roux training?"
+    validations:
+      required: false

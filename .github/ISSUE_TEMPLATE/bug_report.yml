@@ -1,0 +1,44 @@
+name: "🐛 Bug Report"
+description: "Report a bug or problem in RouxFlow."
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please provide details about the bug you experienced.
+  - type: input
+    id: cube-browser
+    attributes:
+      label: "Device & Browser"
+      placeholder: "e.g., Chrome 124 on macOS / Edge on Windows / Chrome on Android"
+    validations:
+      required: true
+  - type: input
+    id: cube-model
+    attributes:
+      label: "Smart Cube Model (if applicable)"
+      placeholder: "e.g., QiYi Smart Cube, Moyu AI 3x3"
+    validations:
+      required: false
+  - type: textarea
+    id: description
+    attributes:
+      label: "Describe the bug"
+      placeholder: "A clear description of what happened."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Steps to reproduce"
+      placeholder: "1. Connect cube\n2. Start timer\n3. Do M2 move..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Expected behavior"
+      placeholder: "What should have happened."
+    validations:
+      required: false

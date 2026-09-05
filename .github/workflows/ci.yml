@@ -16,6 +16,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify PR source branch for main
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: |
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "::error::Only the 'dev' branch is allowed to merge into 'main' (received '${{ github.head_ref }}')."
+            exit 1
+          fi
+
       - name: Install pnpm
         uses: pnpm/action-setup@v3
         with:

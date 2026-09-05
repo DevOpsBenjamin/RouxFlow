@@ -1,0 +1,29 @@
+name: "👋 I'm a real user! (Feedback & Check-in)"
+description: "Let the maintainer know you are actively using RouxFlow and what you'd like to see next."
+title: "[User Check-in]: "
+labels: ["community", "feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for using RouxFlow! The project is currently paused, but active user interest helps reprioritize it.
+  - type: input
+    id: cube-model
+    attributes:
+      label: "What smart cube model are you using?"
+      placeholder: "e.g., Moyu AI, QiYi Smart Cube, GAN 356 i3, GoCube..."
+    validations:
+      required: false
+  - type: textarea
+    id: feedback
+    attributes:
+      label: "How are you using RouxFlow & what would you like improved?"
+      placeholder: "Tell us about your Roux training routine, your current average, and what features or bug fixes matter most to you."
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: "Any other comments or questions?"
+    validations:
+      required: false
